@@ -12,8 +12,8 @@ from assemblyline.common.charset import safe_str
 from assemblyline.common.context import Context
 from assemblyline.al.common import forge
 from assemblyline.al.common.result import Result, ResultSection, SCORE, TAG_TYPE, TAG_WEIGHT, TEXT_FORMAT
-from assemblyline.al.service.cuckoo.clsids import clsids
-from assemblyline.al.service.cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
+from al_services.alsvc_cuckoo.clsids import clsids
+from al_services.alsvc_cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
 
 CLASSIFICATION = forge.get_classification()
 

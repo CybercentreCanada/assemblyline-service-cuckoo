@@ -14,7 +14,7 @@ from assemblyline.common.identify import tag_to_extension
 from assemblyline.al.common.result import Result, ResultSection
 from assemblyline.common.exceptions import RecoverableError, NonRecoverableError
 from assemblyline.al.service.base import ServiceBase
-from assemblyline.al.service.cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
+from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -216,8 +216,8 @@ class Cuckoo(ServiceBase):
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
         global generate_al_result, CuckooVmManager, CuckooContainerManager
-        from assemblyline.al.service.cuckoo.cuckooresult import generate_al_result
-        from assemblyline.al.service.cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
+        from al_services.alsvc_cuckoo.cuckooresult import generate_al_result
+        from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
 
     def start(self):
         self.vmm = CuckooVmManager(self.cfg)

@@ -1,1 +1,1 @@
-from assemblyline.al.service.cuckoo.cuckoo import Cuckoo
+from al_services.alsvc_cuckoo.cuckoo import Cuckoo
