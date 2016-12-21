@@ -1,0 +1,18 @@
+cuckoo:
+  image: cuckoo/cuckoobox:latest
+  links:
+    - inetsim
+  volumes:
+    - /home/user/cuckoo-docker/composed/vmdisks:/var/lib/libvirt/images:ro
+    - /home/user/vmprep/DockerCuckoobox:/opt/vm_meta:ro
+  privileged: true
+  cap_add:
+    - ALL
+  command: DockerCuckoobox_meta.json
+  dns: localhost
+
+inetsim:
+  image: cuckoo/inetsim:latest
+  cap_add:
+    - NET_ADMIN
+  dns: localhost

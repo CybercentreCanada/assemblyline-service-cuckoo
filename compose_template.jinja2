@@ -1,0 +1,19 @@
+cuckoo:
+  image: {{ cuckoo_image }}
+  links:
+    - inetsim
+  mem_limit: 4096m
+  volumes:
+    - {{ vm_disk_store }}:/var/lib/libvirt/images:ro
+    - {{ vm_meta_store }}:/opt/vm_meta:ro
+  privileged: true
+  cap_add:
+    - ALL
+  command: {{ vm_meta_file }}
+  dns: localhost
+inetsim:
+  image: {{ inetsim_image }}
+  mem_limit: 512m
+  cap_add:
+    - NET_ADMIN
+  dns: localhost

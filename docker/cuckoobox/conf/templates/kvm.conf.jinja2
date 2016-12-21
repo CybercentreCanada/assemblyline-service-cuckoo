@@ -1,0 +1,15 @@
+[kvm]
+machines = {{ machine_names }}
+
+interface = {{ interface }}
+
+{% for machine in machines %}
+[{{ machine.name }}]
+label = {{ machine.label }}
+platform = {{ machine.platform }}
+ip = {{ machine.ip }}
+tags = {{ machine.tags }}
+volatility_profile = {{ machine.guest_profile }}
+
+{% endfor %}
+
