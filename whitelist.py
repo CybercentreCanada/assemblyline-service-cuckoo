@@ -20,6 +20,9 @@ WHITELIST_DOMAINS = {
     'Microsoft IPv4To6': '.*\.?teredo.ipv6.microsoft.com',
     'TCP Local': '.*\.local',
     'Windows': '.*\.windows.com',
+    'Ubuntu Update': 'changelogs.ubuntu.com',
+    'Ubuntu Netmon': 'daisy.ubuntu.com',
+    'Ubuntu NTP': 'ntp.ubuntu.com'
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses

@@ -5,6 +5,7 @@ Usage: docker run --privileged <this_container> -v <host_vm_store>:/var/lib/libv
 "
 
 VM_META=$1
+RAM_VOLUME=$2
 VM_IMAGES_PATH=/var/lib/libvirt/images
 CONF_PATH=/opt/sandbox/conf
 LOG=/opt/sandbox/startup.log
@@ -69,7 +70,7 @@ usermod -a -G kvm libvirt-qemu
 echo "Creating ramdisk" >> $LOG
 # Create the tmpfs directory for the snapshot
 TMPFS_DIR=/opt/tmpfs
-echo "tmpfs  $TMPFS_DIR  tmpfs   nodev,nosuid,noexec,nodiratime,size=2048M  0   0" >> /etc/fstab
+echo "tmpfs  $TMPFS_DIR  tmpfs   nodev,nosuid,noexec,nodiratime,size=${RAM_VOLUME}  0   0" >> /etc/fstab
 mkdir $TMPFS_DIR && chown sandbox: $TMPFS_DIR
 mount $TMPFS_DIR
 
