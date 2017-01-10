@@ -144,7 +144,7 @@ class Cuckoo(ServiceBase):
         "inetsim_image": "cuckoo/inetsim",
         "inetsim_tag": "latest",
         "vm_meta": "cuckoo.config",
-        "REMOTE_DISK_ROOT": "support/vm/disks/cuckoo/",
+        "REMOTE_DISK_ROOT": "var/support/vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "3072M",
