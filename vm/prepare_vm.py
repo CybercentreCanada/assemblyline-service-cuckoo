@@ -42,7 +42,7 @@ TEMPLATE_ENVIRONMENT = jinja2.Environment(
     autoescape=False,
     loader=jinja2.FileSystemLoader(TEMPLATE_BASE),
     trim_blocks=False)
-BOOTSTRAP_TEMPLATE_FILE = 'bootstrap_template.jinja2'
+BOOTSTRAP_TEMPLATE_FILE = 'bootstrap_%s_template.jinja2'
 META_TEMPLATE_FILE = 'meta_template.jinja2'
 
 
@@ -135,7 +135,7 @@ def _purge_domain(domain):
 
 
 def prepare_vm(domain, snapshot_name, snapshot_base, ip, gateway, netmask, network,
-               fakenet, hostname, dns_ip, platform, tags, force, guest_profile):
+               fakenet, hostname, dns_ip, platform, tags, force, guest_profile, template):
     log.info("VMPREP initiated for snapshot: %s -- domain: %s", snapshot_name, domain)
     log.info("VM Data: ip:%s, gateway:%s, netmask:%s, hostname:%s, dns:%s, platform:%s, tags:%s",
              ip, gateway, netmask, hostname, dns_ip, platform, tags)
@@ -176,12 +176,17 @@ def prepare_vm(domain, snapshot_name, snapshot_base, ip, gateway, netmask, netwo
         "hostname": hostname,
         "dns_ip": dns_ip,
     }
-    bootstrap_data = _render(BOOTSTRAP_TEMPLATE_FILE, bootstrap_context)
+    if template == "linux":
+        extension = "sh"
+    else:
+        extension = "bat"
+
+    bootstrap_data = _render(BOOTSTRAP_TEMPLATE_FILE % template, bootstrap_context)
     log.debug("Bootstrap data: \n%s", bootstrap_data)
-    bootstrap_fd, bootstrap_filename = tempfile.mkstemp(suffix=".bootstrap.bat")
+    bootstrap_fd, bootstrap_filename = tempfile.mkstemp(suffix=".bootstrap")
     os.write(bootstrap_fd, bootstrap_data)
     os.close(bootstrap_fd)
-    _upload_file(bootstrap_filename, snapshot_disk, disk_driver, "bootstrap.bat")
+    _upload_file(bootstrap_filename, snapshot_disk, disk_driver, "bootstrap.%s" % extension)
 
     # Create the snapshot disk's xml file from the base disk's xml, then use it to define a new domain.
     disk_name = domain_root.find("./name")
@@ -258,7 +263,7 @@ def prepare_vm(domain, snapshot_name, snapshot_base, ip, gateway, netmask, netwo
     # Tar up the directory..
     prev_dir = os.curdir
     os.chdir(SCRIPT_DIR)
-    _run_cmd("tar -zcvf %s.tar.gz %s" % (snapshot_base, snapshot_name))
+    _run_cmd("tar -zcvf %s.tar.gz %s" % (snapshot_name, snapshot_name))
     os.chdir(prev_dir)
 
     log.info("Successfully prepared domain %s for sandbox.." % snapshot_name)
@@ -302,8 +307,10 @@ if __name__ == "__main__":
                         dest='base', required=True)
     parser.add_argument('--guest_profile', action='store', help="Volatility guest profile, i.e. Win7SP1x86",
                         dest='guest_profile', required=True)
+    parser.add_argument('--template', action='store', help="Bootstrap template, either win7 or linux (or unsupported win10)",
+                        dest='template', required=True)
 
     args = parser.parse_args()
 
     prepare_vm(args.domain, args.name, args.base, args.ip, args.gateway, args.netmask, args.network, args.fakenet,
-               args.hostname, args.dns, args.platform, args.tags, args.force, args.guest_profile)
+               args.hostname, args.dns, args.platform, args.tags, args.force, args.guest_profile, args.template)

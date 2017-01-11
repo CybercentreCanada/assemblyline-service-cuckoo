@@ -40,6 +40,8 @@ class CuckooContainerManager(object):
         self.inetsim_image = cfg['inetsim_image']
         self.inetsim_tag = cfg['inetsim_tag']
         self.vm_meta = os.path.split(cfg['vm_meta'])[1]
+        self.ramdisk_size = cfg['ramdisk_size']
+        self.ram_limit = cfg['ram_limit']
         self.cuckoo_image_uri = "%s/%s:%s" % (self.registry_host, self.cuckoo_image, self.cuckoo_tag)
         self.inetsim_image_uri = "%s/%s:%s" % (self.registry_host, self.inetsim_image, self.inetsim_tag)
         self.vmm = vmm
@@ -55,6 +57,8 @@ class CuckooContainerManager(object):
             'vm_disk_store': self.image_mount,
             'vm_meta_store': self.meta_mount,
             'vm_meta_file': self.vm_meta,
+            'ram_volume': self.ramdisk_size,
+            'ram_limit': self.ram_limit
         }
         self.tag_map = self.parse_vm_meta(self.vmm.vm_meta)
 

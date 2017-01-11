@@ -61,6 +61,7 @@ SUPPORTED_EXTENSIONS = [
     "eml",
     "js",
     "wsf",
+    "elf"
 ]
 
 
@@ -127,9 +128,9 @@ class CuckooTask(dict):
 # noinspection PyBroadException
 # noinspection PyGlobalUndefined
 class Cuckoo(ServiceBase):
-    SERVICE_ACCEPTS = "(document/.*|executable/windows/.*|java/.*|code/.*|archive/(zip|rar)|unknown)"
+    SERVICE_ACCEPTS = "(document/.*|executable/.*|java/.*|code/.*|archive/(zip|rar)|unknown|android/apk)"
     SERVICE_ENABLED = True
-    SERVICE_REVISION = ServiceBase.parse_revision('$Id: 6847a7e5de65c13bcb28650d5ed40eefe8f7ead2 $')
+    SERVICE_REVISION = ServiceBase.parse_revision('$Id: c872e3774a3c03dd1129ff832c1741c877683196 $')
     SERVICE_STAGE = "CORE"
     SERVICE_TIMEOUT = 800
     SERVICE_CATEGORY = "Dynamic Analysis"
@@ -143,11 +144,12 @@ class Cuckoo(ServiceBase):
         "inetsim_image": "cuckoo/inetsim",
         "inetsim_tag": "latest",
         "vm_meta": "cuckoo.config",
-        "REMOTE_DISK_ROOT": "support/vm/disks/cuckoo/",
+        "REMOTE_DISK_ROOT": "var/support/vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
-        "LOCAL_VM_META_ROOT": "var/cuckoo/"
+        "LOCAL_VM_META_ROOT": "var/cuckoo/",
+        "ramdisk_size": "3072M",
+        "ram_limit": "4096m"
     }
-    # "vm_meta": "Win7SP1x86/DockerCuckoobox/DockerCuckoobox_meta.json"
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
         {
@@ -181,10 +183,22 @@ class Cuckoo(ServiceBase):
             "value": "",
         },
         {
-            "default": "",
-            "name": "extra",
-            "type": "str",
-            "value": "",
+            "default": False,
+            "name": "pull_memory",
+            "type": "bool",
+            "value": False,
+        },
+        {
+            "default": False,
+            "name": "dump_memory",
+            "type": "bool",
+            "value": False,
+        },
+        {
+            "default": False,
+            "name": "no_monitor",
+            "type": "bool",
+            "value": False,
         },
     ]
 
@@ -218,6 +232,7 @@ class Cuckoo(ServiceBase):
         global generate_al_result, CuckooVmManager, CuckooContainerManager
         from al_services.alsvc_cuckoo.cuckooresult import generate_al_result
         from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
+
 
     def start(self):
         self.vmm = CuckooVmManager(self.cfg)
@@ -257,9 +272,7 @@ class Cuckoo(ServiceBase):
         else:
             pick = vm_list.most_common(1)[0][0]
 
-        if len(vm_list) == 0:
-            return None     # Let Cuckoo choose a VM for us.
-        return vm_list.most_common(1)[0][0]
+        return pick
 
     def execute(self, request):
         if request.task.depth > 3:
@@ -304,7 +317,8 @@ class Cuckoo(ServiceBase):
                 file_ext = '.' + submitted_ext
         else:
             # This is unknown without an extension that we accept/recognize.. no scan!
-            self.log.debug("Cuckoo is exiting because the file type could not be identified.")
+            self.log.debug("Cuckoo is exiting because the file type could not be identified. %s %s" %
+                           (tag_extension, self.task.tag))
             return
 
         # Rename based on the found extension.
@@ -335,17 +349,23 @@ class Cuckoo(ServiceBase):
             task_options.append('arguments={}'.format(arguments))
 
         # Parse extra options (these aren't user selectable because they are dangerous/slow)
-        extra = request.get_param('extra', None)
-        if extra:
-            extra_options = extra.split(',')
-            if 'pull_memory' in extra_options and request.task.depth == 0:
-                pull_memdump = True
-            if 'dump_memory' in extra_options and request.task.depth == 0:
-                # Full system dump and volatility scan
-                full_memdump = True
-                kwargs['memory'] = True
+        if request.get_param('pull_memory', False) and request.task.depth == 0:
+            pull_memdump = True
+
+        if request.get_param('dump_memory', False) and request.task.depth == 0:
+            # Full system dump and volatility scan
+            full_memdump = True
+            kwargs['memory'] = True
+
+        if request.get_param('no_monitor', False):
+            task_options.append("free=yes")
 
         select_machine = self.find_machine(self.task.tag)
+        if select_machine is None:
+            # No matching VM and no default
+            self.log.debug("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)
+            request.set_save_result(False)
+            return
 
         kwargs['timeout'] = analysis_timeout
         kwargs['options'] = ','.join(task_options)

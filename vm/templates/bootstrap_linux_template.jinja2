@@ -1,0 +1,19 @@
+cat << EOF > /tmp/interfaces
+auto lo eth0
+
+iface lo inet loopback
+
+iface eth0 inet static
+address {{ ip }}
+netmask {{ netmask }}
+gateway {{ gateway }}
+dns-nameservers {{ dns_ip }}
+dns-search inetsim
+EOF
+
+sudo mv /tmp/interfaces /etc/network/interfaces
+
+sudo hostname {{ hostname }}
+sudo rm /bootstrap.sh
+sudo sync
+sudo shutdown -h now
