@@ -17,3 +17,10 @@ inetsim:
   cap_add:
     - NET_ADMIN
   dns: localhost
+router:
+  image: {{ router_image }}
+  mem_limit: 512m
+  cap_add:
+    - NET_ADMIN
+  network:
+    - host

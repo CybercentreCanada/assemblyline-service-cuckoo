@@ -307,7 +307,8 @@ if __name__ == "__main__":
                         dest='base', required=True)
     parser.add_argument('--guest_profile', action='store', help="Volatility guest profile, i.e. Win7SP1x86",
                         dest='guest_profile', required=True)
-    parser.add_argument('--template', action='store', help="Bootstrap template, either win7 or linux (or unsupported win10)",
+    parser.add_argument('--template', action='store',
+                        help="Bootstrap template, either win7 or linux (or unsupported win10)",
                         dest='template', required=True)
 
     args = parser.parse_args()

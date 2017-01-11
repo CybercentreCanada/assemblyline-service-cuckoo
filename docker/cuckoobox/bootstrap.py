@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import time
 import uuid
+import struct
 
 from argparse import ArgumentParser
 from jinja2 import Environment, FileSystemLoader
@@ -107,7 +108,7 @@ def get_vnet_ip(name):
 
 
 def setup_network(net_ip, net_mask, net_name='cuckoo', net_with_prefixlen=None, network_type=HOSTONLY_NETWORK,
-                  xml=None, fake_net_virtual_ip=None, fake_net_ip=None, iface_name="virbr0"):
+                  xml=None, fake_net_virtual_ip=None, fake_net_ip=None):
 
     # Make sure the default network is dead:
     run_cmd("virsh net-destroy default",raise_on_error=False)
@@ -145,13 +146,17 @@ def setup_network(net_ip, net_mask, net_name='cuckoo', net_with_prefixlen=None, 
         # all gateway traffic to some network appliance (inetsim, etc.)
 
         # Add the dummy network
-        dummy_iface_mac=run_cmd("hexdump -vn3 -e '/3 \"52:54:00\"' -e '/1 \":%02x\"' -e '\"\n\"' /dev/random").strip()
+        dummy_iface_mac = "52:54:00:" + ":".join(["%02x"]*3) % struct.unpack("B"*3, os.urandom(3))
         dummy_iface_name = "virbr10-dummy"
         iface_name = "virbr10"
+        router_name = "virbr20"
+        router_mac = "52:54:00:" + ":".join(["%02x"] * 3) % struct.unpack("B" * 3, os.urandom(3))
 
         ctx = {
             'dummy_iface_name': dummy_iface_name,
             'dummy_iface_mac': dummy_iface_mac,
+            'router_iface_mac': router_mac,
+            'router_iface_name': router_name,
             'virt_bridge_name': iface_name,
             'virt_bridge_ip': net_ip,
             'virt_bridge_netmask': net_mask,
@@ -171,9 +176,9 @@ def setup_network(net_ip, net_mask, net_name='cuckoo', net_with_prefixlen=None, 
         }
         print "iptables context: %s" % str(ctx)
         iptables = render_template(CUSTOM_NAT_RULES_TEMPLATE, context=ctx)
-        iptables_file = os.path.join(CFG_BASE,'rules.v4')
-        print "iptables rules: \n%s" %  iptables
-        with open(iptables_file,'w') as fh:
+        iptables_file = os.path.join(CFG_BASE, 'rules.v4')
+        print "iptables rules: \n%s" % iptables
+        with open(iptables_file, 'w') as fh:
             fh.write(iptables)
         # Restore our iptables rules, bring up the interfaces, and set up
         # our dummy virtual IP for inetsim so that we can do DNAT to the actual
@@ -217,7 +222,7 @@ def jank_backing_disk_chain(new, old):
         print "The disk %s has no backing disks.. is the whole vm in one file?" % new
         return
 
-    backing_disk_abspath = os.path.join(old_dir,backing_disk)
+    backing_disk_abspath = os.path.join(old_dir, backing_disk)
     if not os.path.exists(backing_disk_abspath):
         print "Unable to find the absolute path of the backing disk.. expected at %s" % backing_disk_abspath
         raise
@@ -268,7 +273,7 @@ def import_disk(domain, domain_xml, snapshot_xml, disk_location, custom_vmnet=Fa
 
     dom_ptr = lv.defineXML(dom_xml_string)
     dom_ptr.snapshotCreateXML(snap_xml_string,
-                              libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_CURRENT|
+                              libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_CURRENT |
                               libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_REDEFINE)
 
     print "Imported domain and snapshot for %s" % domain

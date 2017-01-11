@@ -11,3 +11,7 @@ iface {{ virt_bridge_name }} inet static
     address {{ virt_bridge_ip }}
     netmask {{ virt_bridge_netmask }}
 
+auto {{ router_iface_name }} dummy
+iface {{ router_iface_name }} inet manual
+    pre-up /sbin/ip link add {{ router_iface_name }} type dummy
+    up /sbin/ip link set {{ router_iface_name }} address {{ router_iface_mac }}

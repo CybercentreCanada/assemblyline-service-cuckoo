@@ -148,7 +148,8 @@ class Cuckoo(ServiceBase):
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "3072M",
-        "ram_limit": "4096m"
+        "ram_limit": "4096m",
+        "enabled_routes": "inetsim,gateway"
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -200,6 +201,13 @@ class Cuckoo(ServiceBase):
             "type": "bool",
             "value": False,
         },
+        {
+            "default": "inetsim",
+            "list": ["inetsim", "gateway"],
+            "name": "routing",
+            "type": "list",
+            "value": "inetsim",
+        }
     ]
 
     def __init__(self, cfg=None):
