@@ -147,9 +147,9 @@ class Cuckoo(ServiceBase):
         "REMOTE_DISK_ROOT": "var/support/vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
-        "ramdisk_size": "3072M",
-        "ram_limit": "4096m",
-        "enabled_routes": "inetsim,gateway"
+        "ramdisk_size": "2048M",
+        "ram_limit": "3072m",
+        "enabled_routes": ["inetsim", "gateway"]
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -234,13 +234,13 @@ class Cuckoo(ServiceBase):
         self.cuckoo_task = None
         self.al_report = None
         self.session = None
+        self.enabled_routes = None
 
-    # noinspection PyUnresolvedReferences
+        # noinspection PyUnresolvedReferences
     def import_service_deps(self):
         global generate_al_result, CuckooVmManager, CuckooContainerManager
         from al_services.alsvc_cuckoo.cuckooresult import generate_al_result
         from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
-
 
     def start(self):
         self.vmm = CuckooVmManager(self.cfg)
@@ -262,11 +262,17 @@ class Cuckoo(ServiceBase):
         self.query_pcap_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_PCAP)
         self.query_machines_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINES)
         self.query_machine_info_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINE_INFO)
+        self.enabled_routes = self.cfg.get("enabled_routes", [])
 
-    def find_machine(self, full_tag):
+    def find_machine(self, full_tag, route):
         # substring search
         vm_list = Counter()
-        for tag, vm_name in self.cm.tag_map.iteritems():
+        if route not in self.cm.tag_map or route not in self.enabled_routes:
+            self.log.debug("Invalid route selected for Cuckoo submission. Chosen: %s, permitted: %s, enabled: %s" %
+                           (route, self.enabled_routes, self.cm.tag_map.keys()))
+            return None
+
+        for tag, vm_name in self.cm.tag_map['route'].iteritems():
             if tag == "default":
                 vm_list[vm_name] += 0
                 continue
@@ -368,7 +374,8 @@ class Cuckoo(ServiceBase):
         if request.get_param('no_monitor', False):
             task_options.append("free=yes")
 
-        select_machine = self.find_machine(self.task.tag)
+        select_machine = self.find_machine(self.task.tag, request.get_param('routing', ""))
+
         if select_machine is None:
             # No matching VM and no default
             self.log.debug("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)

@@ -84,16 +84,19 @@ class CuckooContainerManager(object):
     def parse_vm_meta(self, vm_meta):
         tag_set = {}
         for vm in vm_meta:
+            if vm['route'] not in tag_set:
+                tag_set[vm['route']] = {}
             vm_tags = vm['tags'].split(",")
             for tag in vm_tags:
-                if tag in tag_set:
+                tag = tag
+                if tag in tag_set[vm['route']]:
                     raise CuckooDockerException("Tag collision between %s and %s (tag: %s)." % (
                         vm['name'],
-                        tag_set[tag],
+                        tag_set[vm['route']][tag],
                         tag
                         )
                     )
-                tag_set[tag] = vm['name']
+                tag_set[vm['route']][tag] = vm['name']
         return tag_set
 
     def _run_cmd(self, command, raise_on_error=True):

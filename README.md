@@ -10,8 +10,8 @@ virtual machines simultaneously, two options should change.
 
 | Name | Default | Description |
 |:---:|:---:|---|
-|ramdisk_size|3072M|This is the size of the ramdisk that Cuckoo will use to store VM snapshots and the running virtual machine image. If it's not large enough analysis will fail, see the Troubleshooting section for more information.|
-|ram_limit|4096m|This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.|
+|ramdisk_size|2048M|This is the size of the ramdisk that Cuckoo will use to store VM snapshots and the running virtual machine image. If it's not large enough analysis will fail, see the Troubleshooting section for more information.|
+|ram_limit|3072m|This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.|
 
 
 ## DOCKER COMPONENTS
