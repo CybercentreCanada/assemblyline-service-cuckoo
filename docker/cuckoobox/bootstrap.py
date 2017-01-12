@@ -36,7 +36,6 @@ HELP = '''
         -m|--meta: The vm metadata file (i.e. snapshot.json) this must be present in the mounted vm_meta dir
 '''
 
-VM_NETWORK = 'cuckoo'
 VM_IMAGES_PATH = '/var/lib/libvirt/images'
 CUCKOO_BASE = os.environ["CUCKOO_BASE"]
 CUCKOO_CONF_PATH = os.path.join(CUCKOO_BASE, 'conf/cuckoo.conf')
@@ -59,26 +58,8 @@ KVM_CONF_TEMPLATE = 'kvm.conf.jinja2'
 MEMORY_CONF_TEMPLATE = 'memory.conf.jinja2'
 CUSTOM_NAT_IFACES_TEMPLATE = 'custom_nat_ifaces.jinja2'
 CUSTOM_NAT_RULES_TEMPLATE = 'custom_nat_rules.jinja2'
-LIBVIRT_NETWORK_HOSTONLY_TEMPLATE = 'libvirt_network_hostonly_template.jinja2'
-
-# Networks types
-HOSTONLY_NETWORK = 'hostonly'
-NAT_NETWORK = 'nat'
-CUSTOM_NAT_NETWORK = 'custom'
 
 lv = None
-retries = 3
-while retries >= 0:
-    try:
-        lv = libvirt.open(None)
-        break
-    except:
-        time.sleep(3)
-        retries -= 1
-
-if lv is None:
-    print "Unable to acquire libvirt connection.. this is fatal!!"
-    raise
 
 
 def render_template(template_filename, context):
@@ -107,12 +88,12 @@ def get_vnet_ip(name):
     raise
 
 
-def setup_network(net_ip, net_mask, net_name='cuckoo', net_with_prefixlen=None, network_type=HOSTONLY_NETWORK,
-                  xml=None, fake_net_virtual_ip=None, fake_net_ip=None):
+def setup_network(net_ip, net_mask, net_name='cuckoo', net_with_prefixlen=None,
+                  fake_net_virtual_ip=None, fake_net_ip=None, ifname = None):
 
     # Make sure the default network is dead:
-    run_cmd("virsh net-destroy default",raise_on_error=False)
-    run_cmd("virsh net-autostart --disable default",raise_on_error=False)
+    run_cmd("virsh net-destroy default", raise_on_error=False)
+    run_cmd("virsh net-autostart --disable default", raise_on_error=False)
 
     # Bail if this network already exists
     for net in lv.listAllNetworks():
@@ -120,77 +101,52 @@ def setup_network(net_ip, net_mask, net_name='cuckoo', net_with_prefixlen=None, 
             print "Network %s already exists!" % net_name
             return
 
-    if xml is not None:
-        lv.networkCreateXML(xml)
-        return
+    # For the custom network, we're going to create a persistent dummy interface,
+    # then create a virtual bridge that uses it, and some custom iptables rules to forward
+    # all gateway traffic to some network appliance (inetsim, etc.)
 
-    # Create the network using templates
-    if network_type == 'hostonly':
-        template = render_template(LIBVIRT_NETWORK_HOSTONLY_TEMPLATE,
-                                   context={'network_name': net_name,
-                                            'network_uuid': uuid.uuid4(),
-                                            'network_ip': net_ip,
-                                            'network_netmask': net_mask})
-        lv.networkCreateXML(template)
-    elif network_type == 'nat':
-        print "NAT not yet implemented.."
-        raise
-    elif network_type == 'custom':
+    # Add the dummy network
+    dummy_iface_mac = "52:54:00:" + ":".join(["%02x"]*3) % struct.unpack("B"*3, os.urandom(3))
+    dummy_iface_name = "%s10-dummy" % ifname
+    iface_name = "%s10" % ifname
 
-        if fake_net_ip is None:
-            print "Need the IP of the fakenet appliance (i.e. inetsim) use th --fake-net-ip argument!"
-            raise
+    ctx = {
+        'dummy_iface_name': dummy_iface_name,
+        'dummy_iface_mac': dummy_iface_mac,
+        'virt_bridge_name': iface_name,
+        'virt_bridge_ip': net_ip,
+        'virt_bridge_netmask': net_mask,
+    }
+    print "interfaces context: \n%s" % str(ctx)
+    interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context=ctx)
+    print "interfaces: %s" % interfaces
+    interfaces_file = os.path.join(CFG_BASE,'interfaces')
+    with open(interfaces_file,'w') as fh:
+        fh.write(interfaces)
+    run_cmd("cp %s /etc/network/interfaces" % interfaces_file)
+    ctx = {
+        'virt_bridge_name': iface_name,
+        'virt_bridge_cidr': net_with_prefixlen,
+        'virt_inetsim_addr': fake_net_virtual_ip,
+        'inetsim_addr': fake_net_ip,
+    }
+    print "iptables context: %s" % str(ctx)
+    iptables = render_template(CUSTOM_NAT_RULES_TEMPLATE, context=ctx)
+    iptables_file = os.path.join(CFG_BASE, 'rules.v4')
+    print "iptables rules: \n%s" % iptables
+    with open(iptables_file, 'w') as fh:
+        fh.write(iptables)
+    # Restore our iptables rules, bring up the interfaces, and set up
+    # our dummy virtual IP for inetsim so that we can do DNAT to the actual
+    # inetsim box.
+    run_cmd("iptables-restore %s" % iptables_file)
+    run_cmd("ifup %s" % dummy_iface_name)
+    run_cmd("ifup %s" % iface_name)
+    run_cmd("ip addr add %s dev %s" % (fake_net_virtual_ip, iface_name))
 
-        # For the custom network, we're going to create a persistent dummy interface,
-        # then create a virtual bridge that uses it, and some custom iptables rules to forward
-        # all gateway traffic to some network appliance (inetsim, etc.)
-
-        # Add the dummy network
-        dummy_iface_mac = "52:54:00:" + ":".join(["%02x"]*3) % struct.unpack("B"*3, os.urandom(3))
-        dummy_iface_name = "virbr10-dummy"
-        iface_name = "virbr10"
-        router_name = "virbr20"
-        router_mac = "52:54:00:" + ":".join(["%02x"] * 3) % struct.unpack("B" * 3, os.urandom(3))
-
-        ctx = {
-            'dummy_iface_name': dummy_iface_name,
-            'dummy_iface_mac': dummy_iface_mac,
-            'router_iface_mac': router_mac,
-            'router_iface_name': router_name,
-            'virt_bridge_name': iface_name,
-            'virt_bridge_ip': net_ip,
-            'virt_bridge_netmask': net_mask,
-        }
-        print "interfaces context: \n%s" % str(ctx)
-        interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context=ctx)
-        print "interfaces: %s" % interfaces
-        interfaces_file = os.path.join(CFG_BASE,'interfaces')
-        with open(interfaces_file,'w') as fh:
-            fh.write(interfaces)
-        run_cmd("cp %s /etc/network/interfaces" % interfaces_file)
-        ctx = {
-            'virt_bridge_name': iface_name,
-            'virt_bridge_cidr': net_with_prefixlen,
-            'virt_inetsim_addr': fake_net_virtual_ip,
-            'inetsim_addr': fake_net_ip,
-        }
-        print "iptables context: %s" % str(ctx)
-        iptables = render_template(CUSTOM_NAT_RULES_TEMPLATE, context=ctx)
-        iptables_file = os.path.join(CFG_BASE, 'rules.v4')
-        print "iptables rules: \n%s" % iptables
-        with open(iptables_file, 'w') as fh:
-            fh.write(iptables)
-        # Restore our iptables rules, bring up the interfaces, and set up
-        # our dummy virtual IP for inetsim so that we can do DNAT to the actual
-        # inetsim box.
-        run_cmd("iptables-restore %s" % iptables_file)
-        run_cmd("ifup %s" % dummy_iface_name)
-        run_cmd("ifup %s" % iface_name)
-        run_cmd("ip addr add %s dev %s" % (fake_net_virtual_ip, iface_name))
-
-        # Force all external traffic through the inetsim box, which redirects everything to itself..
-        run_cmd("route del default")
-        run_cmd("route add default gw %s" % fake_net_ip)
+    # Force all external traffic through the inetsim box, which redirects everything to itself..
+    run_cmd("route del default")
+    run_cmd("route add default gw %s" % fake_net_ip)
 
     return iface_name
 
@@ -232,7 +188,7 @@ def jank_backing_disk_chain(new, old):
     print "Rebased snapshot %s on ramdisk to reference backing disk %s" % (new, backing_disk_abspath)
 
 
-def import_disk(domain, domain_xml, snapshot_xml, disk_location, custom_vmnet=False):
+def import_disk(domain, domain_xml, snapshot_xml, disk_location, custom_vmnet=None):
     # Since we changed the location on disk, we'll need to modify the xml accordingly
     dom_xml_path = os.path.join(VM_META_BASE, domain, domain_xml)
     snap_xml_path = os.path.join(VM_META_BASE, domain, snapshot_xml)
@@ -252,7 +208,7 @@ def import_disk(domain, domain_xml, snapshot_xml, disk_location, custom_vmnet=Fa
     disk_src_node.attrib['file'] = disk_location
     snapshot_disk_src_node.attrib['file'] = disk_location
 
-    if custom_vmnet:
+    if custom_vmnet is not None:
         # We created a custom bridged network; need to modify the xml accordingly..
         net_root = dom_root.xpath("//interface[@type='network']")[0]
         snap_net_root = snap_root.xpath("//interface[@type='network']")[0]
@@ -261,12 +217,12 @@ def import_disk(domain, domain_xml, snapshot_xml, disk_location, custom_vmnet=Fa
         net_root.attrib['type'] = 'bridge'
         net_src = net_root.xpath("./source")[0]
         net_src.clear()
-        net_src.attrib['bridge'] = 'virbr10'
+        net_src.attrib['bridge'] = custom_vmnet
 
         snap_net_root.attrib['type'] = 'bridge'
         snap_net_src = snap_net_root.xpath("./source")[0]
         snap_net_src.clear()
-        snap_net_src.attrib['bridge'] = 'virbr10'
+        snap_net_src.attrib['bridge'] = custom_vmnet
 
     dom_xml_string = lxml.etree.tostring(dom_root)
     snap_xml_string = lxml.etree.tostring(snap_root)
@@ -279,17 +235,24 @@ def import_disk(domain, domain_xml, snapshot_xml, disk_location, custom_vmnet=Fa
     print "Imported domain and snapshot for %s" % domain
 
 if __name__ == "__main__":
+    # Acquire libvirt
+    for i in xrange(3):
+        try:
+            lv = libvirt.open(None)
+            break
+        except:
+            time.sleep(3)
+
+    if lv is None:
+        print "Unable to acquire libvirt connection.. this is fatal!!"
+        raise
 
     # Arguments
     parser = ArgumentParser(usage=HELP, version=VERSION)
     parser.add_argument('-m', '--meta', action='store',
                         help="Specify the vm metadata file name for the snapshot (i.e. snapshot.json)", dest='meta')
-    parser.add_argument('-f', '--fake-net-ip', action='store', help="Network appliance (i.e. inetsim) ip address",
-                        dest='fake_net_ip', required=False, default=None)
     parser.add_argument('-r', '--ramdisk', action='store', help="Location of ramdisk for vm storage", dest="ramdisk",
                         required=True)
-    parser.add_argument('-n', '--network-type', action='store', help="Choose the network type (hostonly, nat, custom)",
-                        dest='network_type')
     args = parser.parse_args()
 
     conf_file = os.path.join(VM_META_BASE, args.meta)
@@ -345,9 +308,7 @@ if __name__ == "__main__":
             print "The vm network %s isn't in a private address range.." % vm_network.exploded
             exit(1)
 
-        custom_net = args.network_type == "custom"
-
-        import_disk(kvm['name'], kvm['xml'], kvm['snapshot_xml'], dest_path, custom_vmnet=custom_net)
+        import_disk(kvm['name'], kvm['xml'], kvm['snapshot_xml'], dest_path, custom_vmnet=kvm.get('route', None))
         machines.append(
             {
                 'name': kvm['name'],
@@ -355,6 +316,7 @@ if __name__ == "__main__":
                 'platform': kvm['platform'],
                 'ip': kvm['ip'],
                 'tags': kvm['tags'],
+                'interface': "%s10" % kvm['route'],
                 'volatility_profile': kvm.get('guest_profile', "")
             }
         )
@@ -369,8 +331,7 @@ if __name__ == "__main__":
     vnet_mask = str(network.netmask.exploded)
 
     iface_name = setup_network(result_server, vnet_mask, net_with_prefixlen=vm_network.with_prefixlen,
-                               net_name=VM_NETWORK, network_type=args.network_type, fake_net_virtual_ip=fakenet_vip,
-                               fake_net_ip=args.fake_net_ip)
+                               fake_net_virtual_ip=fakenet_vip, fake_net_ip=args.fake_net_ip)
 
     print "Creating cuckoo configuration in %s" % CUCKOO_CONF_PATH
 

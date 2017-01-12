@@ -149,7 +149,8 @@ class Cuckoo(ServiceBase):
         "enabled_routes": {
             "inetsim": {
                 "image": "cuckoo/inetsim:latest",
-                "network": "bridge"
+                "network": "bridge",
+                "default": True
             },
             "gateway": {
                 "image": "cuckoo/gateway:latest",

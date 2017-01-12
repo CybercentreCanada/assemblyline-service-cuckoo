@@ -84,10 +84,11 @@ echo 'auth_tcp = "none"' >> /etc/libvirt/libvirtd.conf
 echo "Config file: $CFG_PATH" >> $LOG
 echo "Running bootstrap.py" >> $LOG
 
-INETSIM_IP=`getent hosts inetsim | awk '{print $1}'`
+# No longer used:
+# INETSIM_IP=`getent hosts inetsim | awk '{print $1}'`
 echo "Metadata file: $VM_META" >> $LOG
 # Run startup.py for cuckoo-specific bootstrapping
-python /opt/sandbox/bootstrap.py --ramdisk $TMPFS_DIR --fake-net-ip $INETSIM_IP --network-type custom --meta $VM_META >> $LOG 2>&1
+python /opt/sandbox/bootstrap.py --ramdisk $TMPFS_DIR --meta $VM_META >> $LOG 2>&1
 
 if [[ $? -eq 1 ]]; then
     cat $LOG

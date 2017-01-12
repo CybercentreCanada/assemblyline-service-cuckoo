@@ -45,6 +45,15 @@ is configured on all workers, the following commands will only need to be run on
     cd ../inetsim
     sudo docker build -t localhost:5000/cuckoo/inetsim .
     sudo docker push localhost:5000/cuckoo/inetsim
+    cd ../gateway
+    sudo docker build -t localhost:5000/cuckoo/gateway .
+    sudo docker push localhost:5000/cuckoo/gateway
+
+### Additional Routes
+
+By default Cuckoo ships with two routes for network traffic. The internet simulator "inetsim", and "gateway," a direct 
+connection to the internet via the ASSEMBLYLINE worker's gateway. Additional docker containers, in support of a VPN for 
+example, can be added. Make sure to update the enabled_routes variable in Cuckoo's service configuration.
 
 ## EPHEMERAL VM
 

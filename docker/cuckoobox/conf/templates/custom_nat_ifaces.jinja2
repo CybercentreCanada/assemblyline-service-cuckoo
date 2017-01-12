@@ -1,17 +1,15 @@
-auto {{ dummy_iface_name }} dummy
-iface {{ dummy_iface_name }} inet manual
-    pre-up /sbin/ip link add {{ dummy_iface_name }} type dummy
-    up /sbin/ip link set {{ dummy_iface_name }} address {{ dummy_iface_mac }}
+{% for bridge in bridges %}
+auto {{ bridge.dummy_iface_name }} dummy
+iface {{ bridge.dummy_iface_name }} inet manual
+    pre-up /sbin/ip link add {{ bridge.dummy_iface_name }} type dummy
+    up /sbin/ip link set {{ bridge.dummy_iface_name }} address {{ bridge.dummy_iface_mac }}
 
-auto {{ virt_bridge_name }}
-iface {{ virt_bridge_name }} inet static
-    bridge_ports {{ dummy_iface_name }}
+auto {{ bridge.virt_bridge_name }}
+iface {{ bridge.virt_bridge_name }} inet static
+    bridge_ports {{ bridge.dummy_iface_name }}
     bridge_stp on
     bridge_fd 2
-    address {{ virt_bridge_ip }}
-    netmask {{ virt_bridge_netmask }}
+    address {{ bridge.virt_bridge_ip }}
+    netmask {{ bridge.virt_bridge_netmask }}
 
-auto {{ router_iface_name }} dummy
-iface {{ router_iface_name }} inet manual
-    pre-up /sbin/ip link add {{ router_iface_name }} type dummy
-    up /sbin/ip link set {{ router_iface_name }} address {{ router_iface_mac }}
+{% endfor %}
