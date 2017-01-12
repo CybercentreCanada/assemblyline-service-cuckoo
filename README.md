@@ -178,11 +178,12 @@ they will share an inetsim docker container.
 
 Once you've prepared all the virtual machine, there should be a number of .tar.gz files containing virtual machine
 metadata. The prepare_cuckoo.py overwrites the current cuckoo configuration, so it's recommended to keep these files
-handy in case you want to deploy new virtual machines in future. By default ASSEMBLYLINE expects a metadata file in 
-/opt/al/var/support/vm/disks/cuckoo/cuckoo.config adjust this directory as needed for your installation.
+handy in case you want to deploy new virtual machines in future. The prepare_cuckoo.py script will automatically
+retrieve Cuckoo service configurations including metadata paths and enabled routes. If you change these configurations 
+you will also need to run prepare_cuckoo.py again.
 
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo -u al ./prepare_cuckoo.py /opt/al/var/support/vm/disks/cuckoo/cuckoo.config *.tar.gz
+    sudo -u al ./prepare_cuckoo.py *.tar.gz
 
 ## DEBUGGING
 

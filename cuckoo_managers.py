@@ -34,31 +34,28 @@ class CuckooContainerManager(object):
         self.stop_on_exit = stop_on_exit
         self.container = None
         self.container_info = None
-        self.registry_host = config.installation.docker.private_registry
-        self.cuckoo_image = cfg['cuckoo_image']
-        self.cuckoo_tag = cfg['cuckoo_tag']
-        self.inetsim_image = cfg['inetsim_image']
-        self.inetsim_tag = cfg['inetsim_tag']
+        registry_host = config.installation.docker.private_registry
         self.vm_meta = os.path.split(cfg['vm_meta'])[1]
-        self.ramdisk_size = cfg['ramdisk_size']
-        self.ram_limit = cfg['ram_limit']
-        self.cuckoo_image_uri = "%s/%s:%s" % (self.registry_host, self.cuckoo_image, self.cuckoo_tag)
-        self.inetsim_image_uri = "%s/%s:%s" % (self.registry_host, self.inetsim_image, self.inetsim_tag)
         self.vmm = vmm
-        self.image_mount = self.vmm.local_vm_root
-        self.meta_mount = self.vmm.local_meta_root
         self.project_id = str(uuid.uuid4()).replace('-', '')
-        self.cuckoo_container_name = "%s_cuckoo" % self.project_id
-        self.inetsim_container_name = "%s_inetsim" % self.project_id
+        self.container_names = ["%s_cuckoo" % self.project_id]
+
+        routes = {}
+        for name, route in cfg.enabled_routes.iteritems():
+            routes[name] = {
+                "network": route['network'],
+                "image": "%s/%s" % (registry_host, route['image'])
+            }
+            self.container_names.append("%s_%s_1" % (self.project_id, name))
 
         cuckoo_context = {
-            'cuckoo_image': self.cuckoo_image_uri,
-            'inetsim_image': self.inetsim_image_uri,
-            'vm_disk_store': self.image_mount,
-            'vm_meta_store': self.meta_mount,
+            'cuckoo_image': "%s/%s" % (registry_host, cfg['cuckoo_image']),
+            'vm_disk_store': self.vmm.local_vm_root,
+            'vm_meta_store': self.vmm.local_meta_root,
             'vm_meta_file': self.vm_meta,
-            'ram_volume': self.ramdisk_size,
-            'ram_limit': self.ram_limit
+            'ram_volume': cfg['ramdisk_size'],
+            'ram_limit': cfg['ram_limit'],
+            'routes': routes
         }
         self.tag_map = self.parse_vm_meta(self.vmm.vm_meta)
 
@@ -73,8 +70,7 @@ class CuckooContainerManager(object):
             with open(self.compose_path, 'w') as fh:
                 fh.write(compose_str)
 
-        self.cuckoo_ip = None
-        self.inetsim_ip = None
+        self.container_ips = []
         self.shutdown_cmd = "docker-compose -f %s -p %s down" % (self.compose_path, self.project_id)
         self.shutdown_operation = {
             'type': 'shell',
@@ -123,10 +119,8 @@ class CuckooContainerManager(object):
         self._run_cmd(compose_str, raise_on_error=False)
 
         # Grab the ip address of our containers
-        cuckoo_info = self.inspect(self.cuckoo_container_name + '_1')
-        inetsim_info = self.inspect(self.cuckoo_container_name + '_1')
-        self.cuckoo_ip = cuckoo_info["NetworkSettings"]["IPAddress"]
-        self.inetsim_ip = inetsim_info["NetworkSettings"]["IPAddress"]
+        info = map(self.inspect, self.cuckoo_container_names)
+        self.container_ips = map(lambda x: x["NetworkSettings"]["IPAddress"], info)
 
     def inspect(self, image_name):
         inspect_cmd = "docker inspect %s" % image_name

@@ -11,16 +11,13 @@ cuckoo:
     - ALL
   command: {{ vm_meta_file }} {{ ram_volume }}
   dns: localhost
-inetsim:
-  image: {{ inetsim_image }}
+{% for route in routes,uterutens*( %}
+{{ route.name }}:
+  image: {{ route.image }}
   mem_limit: 512m
   cap_add:
     - NET_ADMIN
   dns: localhost
-router:
-  image: {{ router_image }}
-  mem_limit: 512m
-  cap_add:
-    - NET_ADMIN
   network:
-    - host
+    - {{ route.network }}
+{% endfor %}

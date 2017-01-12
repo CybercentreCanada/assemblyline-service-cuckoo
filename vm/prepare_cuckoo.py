@@ -2,22 +2,13 @@
 import json
 import os
 import sys
-import subprocess
-import shlex
-import argparse
 import tarfile
+
+from assemblyline.al.common import forge
+from assemblyline.al.common.importing import service_by_name
 
 
 class CuckooPrepException(Exception): pass
-
-
-def _run_cmd(command, raise_on_error=True):
-    arg_list = shlex.split(command)
-    proc = subprocess.Popen(arg_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
-    if stderr and raise_on_error:
-        raise CuckooPrepException(stderr)
-    return stdout
 
 
 def mod_json_meta(json_file, prepend):
@@ -37,7 +28,7 @@ def trymkdir(path):
         os.makedirs(path)
 
 
-def install_vm_meta(directory, tarball, inetsim, gateway):
+def install_vm_meta(directory, tarball, prefixes):
     vm_name = os.path.basename(tarball).split(".", 1)[0]
 
     tar = tarfile.open(tarball)
@@ -52,12 +43,6 @@ def install_vm_meta(directory, tarball, inetsim, gateway):
 
     json_file = json.load(json_file)
     trymkdir(os.path.join(directory, json_file['base']))
-
-    prefixes = []
-    if inetsim:
-        prefixes.append("inetsim")
-    if gateway:
-        prefixes.append("gateway")
 
     for prefix in prefixes:
         new_vm_name, xml_name, snap_name, new_json_file = mod_json_meta(json_file, prefix)
@@ -80,30 +65,32 @@ def install_vm_meta(directory, tarball, inetsim, gateway):
 
 
 def main():
-    parser = argparse.ArgumentParser(usage="Combine multiple VM configs into a Cuckoo config.", version="1")
-
-    parser.add_argument('--inetsim', action='store_const', help="Enable Inetsim routing.",
-                        dest='inetsim', default=False, const=True)
-    parser.add_argument('--gateway', action='store_const', help="Enable direct gateway routing.",
-                        dest='gateway', default=False, const=True)
-    parser.add_argument('config', help="Path to the Cuckoo config.")
-    parser.add_argument('machines', help="One or more prepared VM tarballs.", nargs="*")
-
-    args = parser.parse_args()
-
-    out_config = args.config
-    out_directory = os.path.dirname(out_config)
-    vm_list = args.machines
-
-    if not args.inetsim and not args.gateway:
-        print "Error, please choose one routing option"
+    if len(sys.argv) == 1:
+        print "Usage: %s <One or more prepared VM tarballs>"
         sys.exit(7)
+
+    try:
+        svc_class = service_by_name("Cuckoo")
+    except:
+        print 'Could not load service "%s".\nValid options:\n%s' % (service_name,
+                                                            [s['name'] for s in forge.get_datastore().list_services()])
+        sys.exit(7)
+
+    cfg = forge.get_datastore().get_service(svc_class.SERVICE_NAME).get("config", {})
+    config = forge.get_config()
+
+    local_meta_root = os.path.join(config.system.root, cfg['LOCAL_VM_META_ROOT'])
+    vm_meta_path = os.path.join(local_meta_root, cfg['vm_meta'])
+
+    out_config = vm_meta_path
+    out_directory = os.path.dirname(out_config)
+    vm_list = sys.argv[1:]
 
     cuckoo_config = []
     for vm in vm_list:
-        for js in install_vm_meta(out_directory, vm, args.inetsim, args.gateway):
+        for js in install_vm_meta(out_directory, vm, cfg['enabled_routes'].keys()):
             cuckoo_config.append(js)
-    print cuckoo_config
+
     with open(out_config, "w") as fh:
         json.dump(
             cuckoo_config,
@@ -113,7 +100,7 @@ def main():
             separators=(',', ': ')
         )
 
-    print "Done!"
+    print "Wrote %i Definitions!" % len(cuckoo_config)
 
 if __name__ == "__main__":
     main()

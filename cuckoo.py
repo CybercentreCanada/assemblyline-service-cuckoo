@@ -139,17 +139,23 @@ class Cuckoo(ServiceBase):
     SERVICE_SAFE_START = True
 
     SERVICE_DEFAULT_CONFIG = {
-        "cuckoo_image": "cuckoo/cuckoobox",
-        "cuckoo_tag": "latest",
-        "inetsim_image": "cuckoo/inetsim",
-        "inetsim_tag": "latest",
+        "cuckoo_image": "cuckoo/cuckoobox:latest",
         "vm_meta": "cuckoo.config",
         "REMOTE_DISK_ROOT": "var/support/vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "2048M",
         "ram_limit": "3072m",
-        "enabled_routes": ["inetsim", "gateway"]
+        "enabled_routes": {
+            "inetsim": {
+                "image": "cuckoo/inetsim:latest",
+                "network": "bridge"
+            },
+            "gateway": {
+                "image": "cuckoo/gateway:latest",
+                "network": "host"
+            }
+        }
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -262,14 +268,14 @@ class Cuckoo(ServiceBase):
         self.query_pcap_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_PCAP)
         self.query_machines_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINES)
         self.query_machine_info_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINE_INFO)
-        self.enabled_routes = self.cfg.get("enabled_routes", [])
+        self.enabled_routes = self.cfg.get("enabled_routes", {})
 
     def find_machine(self, full_tag, route):
         # substring search
         vm_list = Counter()
         if route not in self.cm.tag_map or route not in self.enabled_routes:
             self.log.debug("Invalid route selected for Cuckoo submission. Chosen: %s, permitted: %s, enabled: %s" %
-                           (route, self.enabled_routes, self.cm.tag_map.keys()))
+                           (route, self.enabled_routes.keys(), self.cm.tag_map.keys()))
             return None
 
         for tag, vm_name in self.cm.tag_map['route'].iteritems():
