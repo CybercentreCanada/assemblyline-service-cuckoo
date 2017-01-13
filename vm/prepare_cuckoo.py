@@ -79,7 +79,7 @@ def main():
     cfg = forge.get_datastore().get_service(svc_class.SERVICE_NAME).get("config", {})
     config = forge.get_config()
 
-    local_meta_root = os.path.join(config.system.root, cfg['LOCAL_VM_META_ROOT'])
+    local_meta_root = os.path.join(config.system.root, cfg['REMOTE_DISK_ROOT'])
     vm_meta_path = os.path.join(local_meta_root, cfg['vm_meta'])
 
     out_config = vm_meta_path

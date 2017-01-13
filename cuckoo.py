@@ -151,13 +151,14 @@ class Cuckoo(ServiceBase):
                 "image": "cuckoo/inetsim:latest",
                 "network": "bridge",
                 "default": True
-            },
-            "gateway": {
-                "image": "cuckoo/gateway:latest",
-                "network": "host"
             }
         }
     }
+    # ,
+    #        "gateway": {
+    #            "image": "cuckoo/gateway:latest",
+    #            "network": "host"
+    #        }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
         {
@@ -258,7 +259,7 @@ class Cuckoo(ServiceBase):
         self.log.debug("VMM and CM started!")
         # Start the container
         self.cm.start_container()
-        self.cuckoo_server_ip = self.cm.cuckoo_ip
+        self.cuckoo_server_ip = self.cm.container_ips[0]
 
         self.file_name = None
         self.base_url = "http://%s:%s" % (self.cuckoo_server_ip, CUCKOO_API_PORT)
@@ -279,7 +280,7 @@ class Cuckoo(ServiceBase):
                            (route, self.enabled_routes.keys(), self.cm.tag_map.keys()))
             return None
 
-        for tag, vm_name in self.cm.tag_map['route'].iteritems():
+        for tag, vm_name in self.cm.tag_map[route].iteritems():
             if tag == "default":
                 vm_list[vm_name] += 0
                 continue

@@ -192,7 +192,7 @@ retrieve Cuckoo service configurations including metadata paths and enabled rout
 you will also need to run prepare_cuckoo.py again.
 
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo -u al ./prepare_cuckoo.py *.tar.gz
+    sudo -u al PYTHONPATH=$PYTHONPATH ./prepare_cuckoo.py *.tar.gz
 
 ## DEBUGGING
 

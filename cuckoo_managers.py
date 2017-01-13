@@ -38,10 +38,10 @@ class CuckooContainerManager(object):
         self.vm_meta = os.path.split(cfg['vm_meta'])[1]
         self.vmm = vmm
         self.project_id = str(uuid.uuid4()).replace('-', '')
-        self.container_names = ["%s_cuckoo" % self.project_id]
+        self.container_names = ["%s_cuckoo_1" % self.project_id]
 
         routes = {}
-        for name, route in cfg.enabled_routes.iteritems():
+        for name, route in cfg['enabled_routes'].iteritems():
             routes[name] = {
                 "network": route['network'],
                 "image": "%s/%s" % (registry_host, route['image'])
@@ -119,7 +119,7 @@ class CuckooContainerManager(object):
         self._run_cmd(compose_str, raise_on_error=False)
 
         # Grab the ip address of our containers
-        info = map(self.inspect, self.cuckoo_container_names)
+        info = map(self.inspect, self.container_names)
         self.container_ips = map(lambda x: x["NetworkSettings"]["IPAddress"], info)
 
     def inspect(self, image_name):
