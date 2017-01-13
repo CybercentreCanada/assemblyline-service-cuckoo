@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import ipaddress
 import argparse
 import guestfs
 import jinja2
@@ -312,6 +313,23 @@ if __name__ == "__main__":
                         dest='template', required=True)
 
     args = parser.parse_args()
+
+    # Validate configs
+    vm_ip = ipaddress.ip_address(unicode(args.ip))
+    vm_gateway = ipaddress.ip_address(unicode(args.gateway))
+    net_string = "%s/%s" % (args.network, args.netmask)
+    vm_network = ipaddress.ip_network(unicode(net_string))
+
+    # this check should be in prepare_vm.py
+    if vm_ip not in vm_network:
+        print "The vm ip %s is not within the network %s!" % (vm_ip.exploded, vm_network.exploded)
+        exit(7)
+    elif vm_gateway not in vm_network:
+        print "The vm gateway ip %s is not within the network %s!" % (vm_gateway.exploded, vm_network.exploded)
+        exit(7)
+    elif not vm_network.is_private:
+        print "The vm network %s isn't in a private address range.." % vm_network.exploded
+        exit(7)
 
     prepare_vm(args.domain, args.name, args.base, args.ip, args.gateway, args.netmask, args.network, args.fakenet,
                args.hostname, args.dns, args.platform, args.tags, args.force, args.guest_profile, args.template)

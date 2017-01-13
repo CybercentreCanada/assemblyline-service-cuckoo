@@ -12,6 +12,9 @@ import subprocess
 import time
 import uuid
 import struct
+import binascii
+import fcntl
+import socket
 
 from argparse import ArgumentParser
 from jinja2 import Environment, FileSystemLoader
@@ -57,7 +60,7 @@ CUCKOO_CONF_TEMPLATE = 'cuckoo.conf.jinja2'
 KVM_CONF_TEMPLATE = 'kvm.conf.jinja2'
 MEMORY_CONF_TEMPLATE = 'memory.conf.jinja2'
 CUSTOM_NAT_IFACES_TEMPLATE = 'custom_nat_ifaces.jinja2'
-CUSTOM_NAT_RULES_TEMPLATE = 'custom_nat_rules.jinja2'
+CUSTOM_NAT_RULES_TEMPLATE = 'custom_multinat_rules.jinja2'
 
 lv = None
 
@@ -88,65 +91,56 @@ def get_vnet_ip(name):
     raise
 
 
-def setup_network(net_ip, net_mask, net_name='cuckoo', net_with_prefixlen=None,
-                  fake_net_virtual_ip=None, fake_net_ip=None, ifname = None):
-
+def setup_network(networks):
     # Make sure the default network is dead:
     run_cmd("virsh net-destroy default", raise_on_error=False)
     run_cmd("virsh net-autostart --disable default", raise_on_error=False)
+    run_cmd("syscall -w net.ipv4.ip_forward=1", raise_on_error=False)
 
-    # Bail if this network already exists
-    for net in lv.listAllNetworks():
-        if net.name() == net_name:
-            print "Network %s already exists!" % net_name
-            return
+    contexts = []
+    for vm_name, [vm_ip, vm_gateway, vm_netmask, vm_vrouteip, vm_routeip] in networks:
+        if_name = "%s10" % binascii.b2a_hex(os.urandom(4))
 
-    # For the custom network, we're going to create a persistent dummy interface,
-    # then create a virtual bridge that uses it, and some custom iptables rules to forward
-    # all gateway traffic to some network appliance (inetsim, etc.)
+        # Add the dummy network
+        dummy_iface_mac = "52:54:00:" + ":".join(["%02x"] * 3) % struct.unpack("B" * 3, os.urandom(3))
+        dummy_iface_name = "%s-dmy" % if_name
 
-    # Add the dummy network
-    dummy_iface_mac = "52:54:00:" + ":".join(["%02x"]*3) % struct.unpack("B"*3, os.urandom(3))
-    dummy_iface_name = "%s10-dummy" % ifname
-    iface_name = "%s10" % ifname
+        ctx = {
+            'dummy_iface_name': dummy_iface_name,
+            'dummy_iface_mac': dummy_iface_mac,
+            'virt_bridge_name': if_name,
+            'virt_bridge_ip': vm_ip,
+            'virt_bridge_netmask': vm_netmask,
+            'virt_bridge_cidr': "%s/%s" % (vm_gateway, vm_netmask),
+            'virt_route_addr': vm_vrouteip,
+            'route_addr': vm_routeip,
+        }
+        contexts.append(ctx)
 
-    ctx = {
-        'dummy_iface_name': dummy_iface_name,
-        'dummy_iface_mac': dummy_iface_mac,
-        'virt_bridge_name': iface_name,
-        'virt_bridge_ip': net_ip,
-        'virt_bridge_netmask': net_mask,
-    }
-    print "interfaces context: \n%s" % str(ctx)
-    interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context=ctx)
-    print "interfaces: %s" % interfaces
-    interfaces_file = os.path.join(CFG_BASE,'interfaces')
-    with open(interfaces_file,'w') as fh:
+    interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context={"contexts": contexts})
+
+    interfaces_file = os.path.join(CFG_BASE, 'interfaces')
+    with open(interfaces_file, 'w') as fh:
         fh.write(interfaces)
     run_cmd("cp %s /etc/network/interfaces" % interfaces_file)
-    ctx = {
-        'virt_bridge_name': iface_name,
-        'virt_bridge_cidr': net_with_prefixlen,
-        'virt_inetsim_addr': fake_net_virtual_ip,
-        'inetsim_addr': fake_net_ip,
-    }
-    print "iptables context: %s" % str(ctx)
-    iptables = render_template(CUSTOM_NAT_RULES_TEMPLATE, context=ctx)
+
+    iptables = render_template(CUSTOM_NAT_RULES_TEMPLATE, context={"contexts": contexts})
     iptables_file = os.path.join(CFG_BASE, 'rules.v4')
-    print "iptables rules: \n%s" % iptables
+
     with open(iptables_file, 'w') as fh:
         fh.write(iptables)
+
     # Restore our iptables rules, bring up the interfaces, and set up
     # our dummy virtual IP for inetsim so that we can do DNAT to the actual
     # inetsim box.
     run_cmd("iptables-restore %s" % iptables_file)
-    run_cmd("ifup %s" % dummy_iface_name)
-    run_cmd("ifup %s" % iface_name)
-    run_cmd("ip addr add %s dev %s" % (fake_net_virtual_ip, iface_name))
+    [run_cmd("ifup %s" % ctx.dummy_iface_name) for ctx in contexts]
+    [run_cmd("ifup %s" % ctx.iface_name) for ctx in contexts]
+    [run_cmd("ip addr add %s dev %s" % (ctx.virt_inetsim_addr, ctx.virt_bridge_name)) for ctx in contexts]
 
-    # Force all external traffic through the inetsim box, which redirects everything to itself..
+
     run_cmd("route del default")
-    run_cmd("route add default gw %s" % fake_net_ip)
+    [run_cmd("route add default gw %s %s" % (ctx.vm_routeip, ctx.virt_bridge_name)) for ctx in contexts]
 
     return iface_name
 
@@ -262,10 +256,14 @@ if __name__ == "__main__":
         data = fh.read()
     conf = json.loads(data)
 
-    result_server = None
-    fakenet_vip = None
-    network = None
+    # Find eth0 ip
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    SIOCGIFADDR = 0x8915
+    eth0_ip = socket.inet_ntoa(fcntl.ioctl(s.fileno(), SIOCGIFADDR, struct.pack("256s", "eth0")))
+
     machines = []
+    networks = {}
+    route_ips = {}
 
     for kvm in conf:
         print "Reading disk xml: %s, snapshot xml: %s" % (kvm['xml'], kvm['snapshot_xml'])
@@ -283,30 +281,6 @@ if __name__ == "__main__":
         vm_gateway = ipaddress.ip_address(unicode(kvm['gateway']))
         net_string = "%s/%s" % (kvm['network'], kvm['netmask'])
         vm_network = ipaddress.ip_network(unicode(net_string))
-        if network is None:
-            network = vm_network
-        elif network != vm_network:
-            print "Error, too many gateways"
-            exit(1)
-        if result_server is None:
-            result_server = vm_gateway
-        elif result_server != vm_gateway:
-            print "Error, too many gateways"
-            exit(1)
-        if fakenet_vip is None:
-            fakenet_vip = kvm["fakenet"]
-        elif fakenet_vip != kvm["fakenet"]:
-            print "Error, too many fakenet IP addresses."
-            exit(1)
-        if vm_ip not in vm_network:
-            print "The vm ip %s is not within the network %s!" % (vm_ip.exploded, vm_network.exploded)
-            exit(1)
-        elif vm_gateway not in vm_network:
-            print "The vm gateway ip %s is not within the network %s!" % (vm_gateway.exploded, vm_network.exploded)
-            exit(1)
-        elif not vm_network.is_private:
-            print "The vm network %s isn't in a private address range.." % vm_network.exploded
-            exit(1)
 
         import_disk(kvm['name'], kvm['xml'], kvm['snapshot_xml'], dest_path, custom_vmnet=kvm.get('route', None))
         machines.append(
@@ -321,6 +295,8 @@ if __name__ == "__main__":
             }
         )
 
+        networks[kvm['name']] = [kvm['ip'], kvm['gateway'], kvm['netmask'], kvm["fakenet"], route_ips[kvm['route']]]
+
         # If we have a memory baseline, use it.
         vm_baseline = os.path.join(CFG_BASE, "%s.json" % kvm['name'])
         if os.path.exists(vm_baseline):
@@ -328,17 +304,14 @@ if __name__ == "__main__":
             run_cmd('cp %s %s' % (vm_baseline, BASELINE_JSON_DIR))
             run_cmd('chown -R sandbox:www-data %s' % CUCKOO_BASE)
 
-    vnet_mask = str(network.netmask.exploded)
-
-    iface_name = setup_network(result_server, vnet_mask, net_with_prefixlen=vm_network.with_prefixlen,
-                               fake_net_virtual_ip=fakenet_vip, fake_net_ip=args.fake_net_ip)
+    iface_name = setup_network(networks)
 
     print "Creating cuckoo configuration in %s" % CUCKOO_CONF_PATH
 
     new_conf = render_template(CUCKOO_CONF_TEMPLATE,
                                context={
                                    'machinery': 'kvm',
-                                   'resultserver': result_server,
+                                   'resultserver': eth0_ip,
                                    'route': 'none',
                                    'internet': 'none',
                                    'rt_table': '',

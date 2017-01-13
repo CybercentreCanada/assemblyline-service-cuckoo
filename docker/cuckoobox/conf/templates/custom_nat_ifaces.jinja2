@@ -1,15 +1,15 @@
-{% for bridge in bridges %}
-auto {{ bridge.dummy_iface_name }} dummy
-iface {{ bridge.dummy_iface_name }} inet manual
-    pre-up /sbin/ip link add {{ bridge.dummy_iface_name }} type dummy
-    up /sbin/ip link set {{ bridge.dummy_iface_name }} address {{ bridge.dummy_iface_mac }}
+{% for context in contexts %}
+auto {{ context.dummy_iface_name }} dummy
+iface {{ context.dummy_iface_name }} inet manual
+    pre-up /sbin/ip link add {{ context.dummy_iface_name }} type dummy
+    up /sbin/ip link set {{ context.dummy_iface_name }} address {{ bridge.dummy_iface_mac }}
 
-auto {{ bridge.virt_bridge_name }}
-iface {{ bridge.virt_bridge_name }} inet static
-    bridge_ports {{ bridge.dummy_iface_name }}
+auto {{ context.virt_bridge_name }}
+iface {{ context.virt_bridge_name }} inet static
+    bridge_ports {{ context.dummy_iface_name }}
     bridge_stp on
     bridge_fd 2
-    address {{ bridge.virt_bridge_ip }}
-    netmask {{ bridge.virt_bridge_netmask }}
+    address {{ context.virt_bridge_ip }}
+    netmask {{ context.virt_bridge_netmask }}
 
 {% endfor %}
