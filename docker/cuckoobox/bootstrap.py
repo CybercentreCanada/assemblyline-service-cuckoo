@@ -10,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import time
+import re
 import uuid
 import struct
 import binascii
@@ -95,12 +96,10 @@ def setup_network(networks):
     # Make sure the default network is dead:
     run_cmd("virsh net-destroy default", raise_on_error=False)
     run_cmd("virsh net-autostart --disable default", raise_on_error=False)
-    run_cmd("syscall -w net.ipv4.ip_forward=1", raise_on_error=False)
+    run_cmd("/sbin/sysctl -w net.ipv4.ip_forward=1", raise_on_error=False)
 
     contexts = []
-    for vm_name, [vm_ip, vm_gateway, vm_netmask, vm_vrouteip, vm_routeip] in networks:
-        if_name = "%s10" % binascii.b2a_hex(os.urandom(4))
-
+    for vm_name, [vm_ip, vm_gateway, vm_netmask, vm_vrouteip, vm_routeip, if_name] in networks.iteritems():
         # Add the dummy network
         dummy_iface_mac = "52:54:00:" + ":".join(["%02x"] * 3) % struct.unpack("B" * 3, os.urandom(3))
         dummy_iface_name = "%s-dmy" % if_name
@@ -109,11 +108,12 @@ def setup_network(networks):
             'dummy_iface_name': dummy_iface_name,
             'dummy_iface_mac': dummy_iface_mac,
             'virt_bridge_name': if_name,
-            'virt_bridge_ip': vm_ip,
+            'virt_bridge_ip': vm_gateway,
             'virt_bridge_netmask': vm_netmask,
             'virt_bridge_cidr': "%s/%s" % (vm_gateway, vm_netmask),
             'virt_route_addr': vm_vrouteip,
             'route_addr': vm_routeip,
+            'vm_ip': vm_ip
         }
         contexts.append(ctx)
 
@@ -134,15 +134,12 @@ def setup_network(networks):
     # our dummy virtual IP for inetsim so that we can do DNAT to the actual
     # inetsim box.
     run_cmd("iptables-restore %s" % iptables_file)
-    [run_cmd("ifup %s" % ctx.dummy_iface_name) for ctx in contexts]
-    [run_cmd("ifup %s" % ctx.iface_name) for ctx in contexts]
-    [run_cmd("ip addr add %s dev %s" % (ctx.virt_inetsim_addr, ctx.virt_bridge_name)) for ctx in contexts]
-
+    [run_cmd("ifup %s" % ctx['dummy_iface_name']) for ctx in contexts]
+    [run_cmd("ifup %s" % ctx['virt_bridge_name']) for ctx in contexts]
+    [run_cmd("ip addr add %s dev %s" % (ctx['virt_bridge_ip'], ctx['virt_bridge_name'])) for ctx in contexts]
 
     run_cmd("route del default")
-    [run_cmd("route add default gw %s %s" % (ctx.vm_routeip, ctx.virt_bridge_name)) for ctx in contexts]
-
-    return iface_name
+    [run_cmd("route add default gw %s %s" % (ctx['route_addr'], ctx['virt_bridge_name'])) for ctx in contexts]
 
 
 def copy_vm_disk(src, dst):
@@ -257,9 +254,7 @@ if __name__ == "__main__":
     conf = json.loads(data)
 
     # Find eth0 ip
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    SIOCGIFADDR = 0x8915
-    eth0_ip = socket.inet_ntoa(fcntl.ioctl(s.fileno(), SIOCGIFADDR, struct.pack("256s", "eth0")))
+    eth0_ip = re.search("inet (.*?)/[0-9]+ scope", run_cmd("ip addr show dev eth0")).group(1)
 
     machines = []
     networks = {}
@@ -281,8 +276,9 @@ if __name__ == "__main__":
         vm_gateway = ipaddress.ip_address(unicode(kvm['gateway']))
         net_string = "%s/%s" % (kvm['network'], kvm['netmask'])
         vm_network = ipaddress.ip_network(unicode(net_string))
+        if_name = "%s10" % binascii.b2a_hex(os.urandom(4))
 
-        import_disk(kvm['name'], kvm['xml'], kvm['snapshot_xml'], dest_path, custom_vmnet=kvm.get('route', None))
+        import_disk(kvm['name'], kvm['xml'], kvm['snapshot_xml'], dest_path, custom_vmnet=if_name)
         machines.append(
             {
                 'name': kvm['name'],
@@ -290,12 +286,17 @@ if __name__ == "__main__":
                 'platform': kvm['platform'],
                 'ip': kvm['ip'],
                 'tags': kvm['tags'],
-                'interface': "%s10" % kvm['route'],
+                'interface': "%s10" % if_name,
                 'volatility_profile': kvm.get('guest_profile', "")
             }
         )
 
-        networks[kvm['name']] = [kvm['ip'], kvm['gateway'], kvm['netmask'], kvm["fakenet"], route_ips[kvm['route']]]
+        networks[kvm['name']] = [kvm['ip'],
+                                 kvm['gateway'],
+                                 kvm['netmask'],
+                                 kvm["fakenet"],
+                                 socket.gethostbyname(kvm['route']),
+                                 if_name]
 
         # If we have a memory baseline, use it.
         vm_baseline = os.path.join(CFG_BASE, "%s.json" % kvm['name'])
@@ -304,7 +305,7 @@ if __name__ == "__main__":
             run_cmd('cp %s %s' % (vm_baseline, BASELINE_JSON_DIR))
             run_cmd('chown -R sandbox:www-data %s' % CUCKOO_BASE)
 
-    iface_name = setup_network(networks)
+    setup_network(networks)
 
     print "Creating cuckoo configuration in %s" % CUCKOO_CONF_PATH
 
@@ -326,7 +327,6 @@ if __name__ == "__main__":
     machine_names = [machine.get('name') for machine in machines]
 
     kvm_conf = render_template(KVM_CONF_TEMPLATE, context={'machine_names': ",".join(machine_names),
-                                                           'interface': iface_name,
                                                            'machines': machines})
     with open(KVM_CONF_PATH, 'w') as fh:
         fh.write(kvm_conf)

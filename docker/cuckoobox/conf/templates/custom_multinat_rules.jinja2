@@ -19,8 +19,7 @@ COMMIT
 {% for context in contexts %}
 -A POSTROUTING -s {{ context.virt_bridge_cidr }} -d 224.0.0.0/24 -j RETURN
 -A POSTROUTING -s {{ context.virt_bridge_cidr }} -d 255.255.255.255/32 -j RETURN
--A PREROUTING -i {{ context.virt_bridge_name }} -d {{ context.virt_inetsim_addr }} -j DNAT --to-destination {{ context.inetsim_addr }}
-#-A PREROUTING -i {{ context.virt_bridge_name }} ! -d {{ context.virt_bridge_cidr }} -j DNAT --to-destination {{ context.inetsim_addr }}
+-A PREROUTING -i {{ context.virt_bridge_name }} -d {{ context.virt_bridge_ip }} -j DNAT --to-destination {{ context.virt_bridge_ip }}
 {% endfor %}
 # Masquerade connections to the inetim appliance
 -A POSTROUTING -o eth0 -j MASQUERADE
@@ -44,9 +43,8 @@ COMMIT
 -A INPUT -j REJECT --reject-with icmp-port-unreachable
 # Allow established traffic to the private subnet.
 -A FORWARD -d {{ context.virt_bridge_cidr }} -o {{ context.virt_bridge_name }} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
--A FORWARD -d {{ context.inetsim_addr }} -j ACCEPT
+-A FORWARD -d {{ context.virt_bridge_ip }} -j ACCEPT
 -A FORWARD -i {{ context.virt_bridge_name }} -o {{ context.virt_bridge_name }} -j ACCEPT
--A FORWARD -i {{ context.virt_bridge_name }} -d  -j REJECT --reject-with icmp-port-unreachable
 -A FORWARD -i {{ context.virt_bridge_name }} -j ACCEPT
 -A FORWARD -i {{ context.virt_bridge_name }} -j REJECT --reject-with icmp-port-unreachable
 -A FORWARD -o {{ context.virt_bridge_name }} -j REJECT --reject-with icmp-port-unreachable

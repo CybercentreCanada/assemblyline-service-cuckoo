@@ -53,7 +53,6 @@ COMMIT
 -A FORWARD -i {{ virt_bridge_name }} -o {{ virt_bridge_name }} -j ACCEPT
 # Meh, currently we allow ALL traffic out from the virtual network, since there's a corresponding rule to
 # route EVERYTHING to the inetsim box..
--A FORWARD -i {{ virt_bridge_name }} -d  -j REJECT --reject-with icmp-port-unreachable
 -A FORWARD -i {{ virt_bridge_name }} -j ACCEPT
 # Reject everything else.
 -A FORWARD -i {{ virt_bridge_name }} -j REJECT --reject-with icmp-port-unreachable

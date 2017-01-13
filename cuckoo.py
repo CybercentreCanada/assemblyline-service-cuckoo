@@ -256,6 +256,7 @@ class Cuckoo(ServiceBase):
                                          os.path.join(os.path.dirname(os.path.realpath(__file__))),
                                          self.vmm)
         self._register_cleanup_op(self.cm.shutdown_operation)
+        self.log.debug = self.log.warn
         self.log.debug("VMM and CM started!")
         # Start the container
         self.cm.start_container()
@@ -382,7 +383,13 @@ class Cuckoo(ServiceBase):
         if request.get_param('no_monitor', False):
             task_options.append("free=yes")
 
-        select_machine = self.find_machine(self.task.tag, request.get_param('routing', ""))
+        routing = request.get_param('routing', None)
+        if routing is None:
+            for name, route in self.enabled_routes.iteritems():
+                if route.get("default", "False") is True:
+                    routing = name
+
+        select_machine = self.find_machine(self.task.tag, routing)
 
         if select_machine is None:
             # No matching VM and no default

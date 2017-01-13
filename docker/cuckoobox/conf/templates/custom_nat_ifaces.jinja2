@@ -2,7 +2,7 @@
 auto {{ context.dummy_iface_name }} dummy
 iface {{ context.dummy_iface_name }} inet manual
     pre-up /sbin/ip link add {{ context.dummy_iface_name }} type dummy
-    up /sbin/ip link set {{ context.dummy_iface_name }} address {{ bridge.dummy_iface_mac }}
+    up /sbin/ip link set {{ context.dummy_iface_name }} address {{ context.dummy_iface_mac }}
 
 auto {{ context.virt_bridge_name }}
 iface {{ context.virt_bridge_name }} inet static
