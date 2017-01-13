@@ -286,7 +286,7 @@ if __name__ == "__main__":
                 'platform': kvm['platform'],
                 'ip': kvm['ip'],
                 'tags': kvm['tags'],
-                'interface': "%s10" % if_name,
+                'interface': if_name,
                 'volatility_profile': kvm.get('guest_profile', "")
             }
         )
