@@ -11,18 +11,6 @@ from assemblyline.al.common import forge
 
 config = forge.get_config()
 
-
-def setup_templates(template_basedir):
-    global TEMPLATE_BASE, TEMPLATE_ENVIRONMENT, COMPOSE_TEMPLATE_FILE, CFG_ROOT
-    TEMPLATE_BASE = template_basedir
-    TEMPLATE_ENVIRONMENT = jinja2.Environment(
-        autoescape=False,
-        loader=jinja2.FileSystemLoader(TEMPLATE_BASE),
-        trim_blocks=False)
-    COMPOSE_TEMPLATE_FILE = 'compose_template.jinja2'
-    CFG_ROOT = 'cuckoo'
-
-
 class CuckooDockerException(Exception):
     pass
 
@@ -30,7 +18,6 @@ class CuckooDockerException(Exception):
 class CuckooContainerManager(object):
     def __init__(self, cfg, template_basedir, vmm, stop_on_exit=True):
         self.log = logging.getLogger('assemblyline.al.service.cuckoo.cm')
-        setup_templates(template_basedir)
         self.stop_on_exit = stop_on_exit
         self.container = None
         self.container_info = None
@@ -40,38 +27,19 @@ class CuckooContainerManager(object):
         self.project_id = str(uuid.uuid4()).replace('-', '')
         self.container_names = ["%s_cuckoo_1" % self.project_id]
 
-        routes = {}
-        for name, route in cfg['enabled_routes'].iteritems():
-            routes[name] = {
-                "network": route['network'],
-                "image": "%s/%s" % (registry_host, route['image'])
-            }
-            self.container_names.append("%s_%s_1" % (self.project_id, name))
-
-        cuckoo_context = {
+        self.cuckoo_context = {
             'cuckoo_image': "%s/%s" % (registry_host, cfg['cuckoo_image']),
             'vm_disk_store': self.vmm.local_vm_root,
             'vm_meta_store': self.vmm.local_meta_root,
             'vm_meta_file': self.vm_meta,
             'ram_volume': cfg['ramdisk_size'],
             'ram_limit': cfg['ram_limit'],
-            'routes': routes
+            'routes': cfg['enabled_routes'],
+            'cuckoo_name': self.container_names
         }
         self.tag_map = self.parse_vm_meta(self.vmm.vm_meta)
-
-        compose_str = TEMPLATE_ENVIRONMENT.get_template(COMPOSE_TEMPLATE_FILE).render(cuckoo_context)
-
-        self.cfg_root = join(config.system.root, cfg['LOCAL_VM_META_ROOT'], self.project_id)
-        if not os.path.exists(self.cfg_root):
-            os.makedirs(self.cfg_root)
-
-        self.compose_path = join(self.cfg_root, 'docker-compose.yml')
-        if not os.path.exists(self.compose_path):
-            with open(self.compose_path, 'w') as fh:
-                fh.write(compose_str)
-
         self.container_ips = []
-        self.shutdown_cmd = "docker-compose -f %s -p %s down" % (self.compose_path, self.project_id)
+        self.shutdown_cmd = "docker rm --force %s" % self.container_names[0]
         self.shutdown_operation = {
             'type': 'shell',
             'args': shlex.split(self.shutdown_cmd)
@@ -111,11 +79,16 @@ class CuckooContainerManager(object):
 
     def start_container(self):
 
-        # Pull the containers
-        pull_str = "docker-compose -f %s pull" % self.compose_path
-        self._run_cmd(pull_str, raise_on_error=False)
+        # Pull the image
+        self._run_cmd("docker pull %s" % self.cuckoo_context['cuckoo_image'], raise_on_error=False)
 
-        compose_str = "docker-compose -f %s -p %s up -d --force-recreate" % (self.compose_path, self.project_id)
+        # Run the image
+        compose_str = "docker run --privileged  --cap-add=ALL" \
+                      "--name %(cuckoo_name)s" \
+                      "--memory %(ram_limit)s" \
+                      "--volumes %(vm_meta_store)s:/opt/vm_meta:ro" \
+                      "--volumes %(vm_disk_store)s:/var/lib/libvirt/images:ro" \
+                      "%(cuckoo_image)s %(vm_meta_file)s %(ram_volume)s" % self.cuckoo_context
         self._run_cmd(compose_str, raise_on_error=False)
 
         # Grab the ip address of our containers

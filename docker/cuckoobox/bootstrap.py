@@ -61,7 +61,7 @@ CUCKOO_CONF_TEMPLATE = 'cuckoo.conf.jinja2'
 KVM_CONF_TEMPLATE = 'kvm.conf.jinja2'
 MEMORY_CONF_TEMPLATE = 'memory.conf.jinja2'
 CUSTOM_NAT_IFACES_TEMPLATE = 'custom_nat_ifaces.jinja2'
-CUSTOM_NAT_RULES_TEMPLATE = 'custom_multinat_rules.jinja2'
+CUSTOM_NAT_RULES_TEMPLATE = 'custom_nat_rules.jinja2'
 
 lv = None
 
@@ -92,54 +92,55 @@ def get_vnet_ip(name):
     raise
 
 
-def setup_network(networks):
+def setup_network(eth0_ip, networks):
     # Make sure the default network is dead:
     run_cmd("virsh net-destroy default", raise_on_error=False)
     run_cmd("virsh net-autostart --disable default", raise_on_error=False)
     run_cmd("/sbin/sysctl -w net.ipv4.ip_forward=1", raise_on_error=False)
-
+    create_inetsim = False
     contexts = []
-    for vm_name, [vm_ip, vm_gateway, vm_netmask, vm_vrouteip, vm_routeip, if_name] in networks.iteritems():
-        # Add the dummy network
-        dummy_iface_mac = "52:54:00:" + ":".join(["%02x"] * 3) % struct.unpack("B" * 3, os.urandom(3))
-        dummy_iface_name = "%s-dmy" % if_name
-
+    for vm_name, [vm_ip, vm_gateway, vm_netmask, vm_vrouteip, route_opt, if_name] in networks.iteritems():
         ctx = {
-            'dummy_iface_name': dummy_iface_name,
-            'dummy_iface_mac': dummy_iface_mac,
             'virt_bridge_name': if_name,
             'virt_bridge_ip': vm_gateway,
             'virt_bridge_netmask': vm_netmask,
             'virt_bridge_cidr': "%s/%s" % (vm_gateway, vm_netmask),
             'virt_route_addr': vm_vrouteip,
-            'route_addr': vm_routeip,
-            'vm_ip': vm_ip
+            'vm_ip': vm_ip,
+            'route_opt': route_opt
         }
+        if route_opt == "inetsim":
+            create_inetsim = True
         contexts.append(ctx)
 
-    interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context={"contexts": contexts})
+    ctx = {"contexts": contexts}
+    inetsim = []
+    if create_inetsim:
+        inetsim.append({
+            "iface_name": "inetsim0",
+            "ip": "10.244.243.1",
+            "netmask": "255.255.255.0"
+        })
+    ctx["inetsim"] = inetsim
+
+    interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context=ctx)
 
     interfaces_file = os.path.join(CFG_BASE, 'interfaces')
     with open(interfaces_file, 'w') as fh:
         fh.write(interfaces)
     run_cmd("cp %s /etc/network/interfaces" % interfaces_file)
 
-    iptables = render_template(CUSTOM_NAT_RULES_TEMPLATE, context={"contexts": contexts})
+    iptables = render_template(CUSTOM_NAT_RULES_TEMPLATE, context=ctx)
     iptables_file = os.path.join(CFG_BASE, 'rules.v4')
 
     with open(iptables_file, 'w') as fh:
         fh.write(iptables)
 
-    # Restore our iptables rules, bring up the interfaces, and set up
-    # our dummy virtual IP for inetsim so that we can do DNAT to the actual
-    # inetsim box.
     run_cmd("iptables-restore %s" % iptables_file)
-    [run_cmd("ifup %s" % ctx['dummy_iface_name']) for ctx in contexts]
     [run_cmd("ifup %s" % ctx['virt_bridge_name']) for ctx in contexts]
     [run_cmd("ip addr add %s dev %s" % (ctx['virt_bridge_ip'], ctx['virt_bridge_name'])) for ctx in contexts]
-
-    run_cmd("route del default")
-    [run_cmd("route add default gw %s %s" % (ctx['route_addr'], ctx['virt_bridge_name'])) for ctx in contexts]
+    if create_inetsim:
+        run_cmd("ifup inetsim0")
 
 
 def copy_vm_disk(src, dst):
@@ -295,7 +296,7 @@ if __name__ == "__main__":
                                  kvm['gateway'],
                                  kvm['netmask'],
                                  kvm["fakenet"],
-                                 socket.gethostbyname(kvm['route']),
+                                 kvm['route'],
                                  if_name]
 
         # If we have a memory baseline, use it.
@@ -305,7 +306,7 @@ if __name__ == "__main__":
             run_cmd('cp %s %s' % (vm_baseline, BASELINE_JSON_DIR))
             run_cmd('chown -R sandbox:www-data %s' % CUCKOO_BASE)
 
-    setup_network(networks)
+    setup_network(eth0_ip, networks)
 
     print "Creating cuckoo configuration in %s" % CUCKOO_CONF_PATH
 
