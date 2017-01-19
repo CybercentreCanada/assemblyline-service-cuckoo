@@ -1,9 +1,20 @@
-# CUCKOO DEPLOYMENT INSTRUCTIONS
+# CUCKOO SERVICE
+
+## OVERVIEW
+
+This service provides the ability to perform live dynamic analysis on submitted files via the Open Source project 
+[Cuckoo Sandbox](https://cuckoosandbox.org). Cuckoo Sandbox supports instrumenting Windows, Linux, Macintosh, and 
+Android virtual machines; and can also launch files that may cause unintended execution, like PDF's. The Cuckoo 
+Sandbox monitors execution, filesystem, and network activity that occurs when a file is opened. This service summarizes 
+these results for the ASSEMBLYLINE UI and provides a links to the full result set. Files that are unpacked and saved to 
+disk are fed back into ASSEMBLYLINE.
+
+## DEPLOYMENT INSTRUCTIONS
 
 Prior to provisioning a Cuckoo service, please read and understand this document. Failure to do so may result in a 
 large volume of error messages in your hostagent log file. 
 
-## Configurations
+### CONFIGURATIONS
 
 The Cuckoo service provides a number of sane default configurations. However, if the user plans on running multiple 
 virtual machines simultaneously, two options should change.
@@ -14,9 +25,9 @@ virtual machines simultaneously, two options should change.
 |ram_limit|4096m|This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.|
 
 
-## DOCKER COMPONENTS
+### DOCKER COMPONENTS
 
-### Registry
+#### Registry
 
 Refer to the following website for registry deployment options.
 
@@ -30,7 +41,7 @@ Make sure to configure this registry in ASSEMBLYLINE.
 
     installation -> docker -> private_registry = 'localhost:5000'
 
-### Build Docker Images
+#### Build Docker Images
 
 The following commands assume a local registry. Change localhost as needed for a remote registry. If a remote registry 
 is configured on all workers, the following commands will only need to be run once.
@@ -46,9 +57,9 @@ is configured on all workers, the following commands will only need to be run on
     sudo docker build -t localhost:5000/cuckoo/inetsim .
     sudo docker push localhost:5000/cuckoo/inetsim
 
-## EPHEMERAL VM
+### EPHEMERAL VIRTUAL MACHINE
 
-### Build Base Virtual Machine
+#### Build Base Virtual Machine
 
 This step will very slightly depending on whatever operating system you choose. These are examples for Windows 7 and 
 Ubuntu. Cuckoo expects all virtual machine data and metadata to exist under /opt/al/var/support/vm/disks/cuckoo/ 
@@ -58,7 +69,7 @@ Before continuing, make sure the following libraries are installed:
 
     sudo apt-get install libguestfs-tools python-guestfs
 
-#### Ubuntu 14.04
+##### Ubuntu 14.04
 
     sudo -u al mkdir -p /opt/al/var/support/vm/disks/cuckoo/Ubuntu1404/
     sudo -u al qemu-img create -f qcow2 /opt/al/var/support/vm/disks/cuckoo/Ubuntu1404/Ub14disk.qcow2 20G
@@ -94,7 +105,7 @@ Verify that there is a "current" snapshot with the following command, it should 
 
 Then continue from the "Prepare the snapshot for Cuckoo" section.
 
-#### Windows 7
+##### Windows 7
 
     sudo -u al mkdir -p /opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/
     sudo -u al qemu-img create -f qcow2 /opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/Win7disk.qcow2 20G
@@ -129,15 +140,15 @@ Verify that there is a "current" snapshot with the following command, it should 
 
     sudo virsh snapshot-current Win7SP1x86
 
-#### Windows 10
+##### Windows 10
 
 Windows 10 is not *Officially* supported.
 
-#### Android
+##### Android
 
 Android is not *Officially* supported.
 
-### Prepare the snapshot for Cuckoo
+#### Prepare the snapshot for Cuckoo
 
 The prepare_vm command line will also differ depending on OS, and IP space. A sample for Windows 7 is provided 
 below. 
@@ -174,7 +185,7 @@ they will share an inetsim docker container.
 * template
   * The prepare_vm template, valid values are "win7", "win10", or "linux"
 
-### Deploy all snapshots to Cuckoo
+#### Deploy all snapshots to Cuckoo
 
 Once you've prepared all the virtual machine, there should be a number of .tar.gz files containing virtual machine
 metadata. The prepare_cuckoo.py overwrites the current cuckoo configuration, so it's recommended to keep these files
@@ -184,7 +195,7 @@ handy in case you want to deploy new virtual machines in future. By default ASSE
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
     sudo -u al ./prepare_cuckoo.py /opt/al/var/support/vm/disks/cuckoo/cuckoo.config *.tar.gz
 
-## DEBUGGING
+### DEBUGGING
 
 If you need to enter a running cuckoobox docker container while ASSEMBLYLINE is running, use the following command.
 
