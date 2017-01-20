@@ -1,9 +1,11 @@
 # CUCKOO SERVICE
+This Assemblyline service provides the ability to perform live dynamic analysis on submitted files via the Open Source project [Cuckoo Sandbox](https://cuckoosandbox.org).
 
-## OVERVIEW
+**NOTE**: This service **requires extensive additional installation** before being functional. It is **not** preinstalled during a default installation.
 
-This service provides the ability to perform live dynamic analysis on submitted files via the Open Source project 
-[Cuckoo Sandbox](https://cuckoosandbox.org). Cuckoo Sandbox supports instrumenting Windows, Linux, Macintosh, and 
+## CUCKOO OVERVIEW
+
+Cuckoo Sandbox supports instrumenting Windows, Linux, Macintosh, and
 Android virtual machines; and can also launch files that may cause unintended execution, like PDF's. The Cuckoo 
 Sandbox monitors execution, filesystem, and network activity that occurs when a file is opened. This service summarizes 
 these results for the ASSEMBLYLINE UI and provides a links to the full result set. Files that are unpacked and saved to 
