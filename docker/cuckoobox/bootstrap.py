@@ -108,7 +108,6 @@ def setup_network(eth0_ip, networks):
             'virt_bridge_name': if_name,
             'virt_bridge_ip': vm_gateway,
             'virt_bridge_netmask': vm_netmask,
-            'virt_bridge_cidr': "%s/%s" % (vm_gateway, vm_netmask),
             'virt_route_addr': vm_vrouteip,
             'vm_ip': vm_ip,
             'route_opt': route_opt,
@@ -144,11 +143,17 @@ def setup_network(eth0_ip, networks):
     with open(iptables_file, 'w') as fh:
         fh.write(iptables)
 
-    run_cmd("iptables-restore %s" % iptables_file)
-    [run_cmd("ifup %s" % ctx['virt_bridge_name']) for ctx in contexts]
+    print "a"
     [run_cmd("ifup %s_dmy" % ctx['virt_bridge_name']) for ctx in contexts]
+    print "b"
+    [run_cmd("ifup %s" % ctx['virt_bridge_name']) for ctx in contexts]
+    print "c"
     [run_cmd("ifup %s:0" % ctx['virt_bridge_name']) for ctx in contexts if ctx.get('fake_ip_stub', None) is not None]
+    print "d"
     [run_cmd("ip addr add %s dev %s" % (ctx['virt_bridge_ip'], ctx['virt_bridge_name'])) for ctx in contexts]
+    print "e"
+    run_cmd("iptables-restore %s" % iptables_file)
+    print "f"
     if create_inetsim:
         run_cmd("ifup inetsim0")
 

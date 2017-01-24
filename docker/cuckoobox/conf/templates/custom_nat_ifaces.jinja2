@@ -14,9 +14,6 @@ iface {{ context.virt_bridge_name }} inet static
 {% if context.fake_ip_stub %}
 auto {{ context.virt_bridge_name }}:0
 iface {{ context.virt_bridge_name }}:0 inet static
-    bridge_ports {{ context.virt_bridge_name }}_dmy
-    bridge_stp on
-    bridge_fd 2
     address {{ context.fake_ip_stub }}
     netmask {{ context.virt_bridge_netmask }}
 {% endif %}

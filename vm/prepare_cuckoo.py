@@ -3,6 +3,8 @@ import json
 import os
 import sys
 import tarfile
+import lxml.etree
+import uuid
 
 from assemblyline.al.common import forge
 from assemblyline.al.common.importing import service_by_name
@@ -26,6 +28,13 @@ def mod_json_meta(json_file, prepend):
 def trymkdir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
+
+def mod_xml_meta(xml_file, path, new_value):
+    dom_root = lxml.etree.fromstring(xml_file)
+    node = dom_root.find(path)
+    node.text = new_value
+    return lxml.etree.tostring(dom_root)
 
 
 def install_vm_meta(directory, tarball, prefixes):
@@ -53,14 +62,17 @@ def install_vm_meta(directory, tarball, prefixes):
         with open(json_name, "w") as fh:
             json.dump(new_json_file, fh)
 
+        guid = str(uuid.uuid4())
         with open(xml_name, "w") as fh:
             xml_file = tar.extractfile(tar.getmember(os.path.join(vm_name, json_file['xml']))).read()
-            xml_file = xml_file.replace(">%s<" % vm_name, ">%s<" % new_vm_name)
+            xml_file = mod_xml_meta(xml_file, "./name", new_vm_name)
+            xml_file = mod_xml_meta(xml_file, "./uuid", guid)
             fh.write(xml_file)
 
         with open(snap_name, "w") as fh:
             xml_file = tar.extractfile(tar.getmember(os.path.join(vm_name, json_file['snapshot_xml']))).read()
-            xml_file = xml_file.replace(">%s<" % vm_name, ">%s<" % new_vm_name)
+            xml_file = mod_xml_meta(xml_file, "domain/name", new_vm_name)
+            xml_file = mod_xml_meta(xml_file, "domain/uuid", guid)
             fh.write(xml_file)
 
         yield new_json_file
