@@ -46,7 +46,7 @@ def install_vm_meta(directory, tarball, prefixes):
 
     for prefix in prefixes:
         new_vm_name, xml_name, snap_name, new_json_file = mod_json_meta(json_file, prefix)
-        trymkdir(os.path.join(directory, vm_name))
+        trymkdir(os.path.join(directory, new_vm_name))
         json_name = os.path.join(directory, new_vm_name, "%s_meta.json" % new_vm_name)
         xml_name = os.path.join(directory, new_vm_name, xml_name)
         snap_name = os.path.join(directory, new_vm_name, snap_name)
@@ -92,7 +92,7 @@ def main():
 
     cuckoo_config = []
     for vm in vm_list:
-        for js in install_vm_meta(out_directory, vm, cfg['enabled_routes'].keys()):
+        for js in install_vm_meta(out_directory, vm, cfg['enabled_routes']):
             cuckoo_config.append(js)
 
     with open(out_config, "w") as fh:
