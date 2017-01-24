@@ -49,6 +49,7 @@ export CUCKOO_BASE=/opt/sandbox/cuckoo
 mv /usr/sbin/libvirtd /usr/bin/libvirtd
 ln -s  /usr/bin/libvirtd /usr/sbin/libvirtd
 
+sleep 2
 /usr/sbin/virtlogd -d
 sleep 2
 /usr/sbin/libvirtd -d
@@ -97,8 +98,9 @@ fi
 # Need our IP for the inetsim config file
 export INETSIM_IP=`ifconfig inetsim0 | grep "inet addr" | cut -d ":" -f 2 | cut -d ' ' -f 1`
 if [[ ! -z $INETSIM_IP ]]; then
-    sed -e "s/{{ interface_address }}/$INETSIM_IP/" conf/inetsim.conf.template > /etc/inetsim/inetsim.conf
+    sed -e "s/{{ interface_address }}/$INETSIM_IP/" $CONF_PATH/inetsim.conf.template > /etc/inetsim/inetsim.conf
     cat << EOF >> $SUPERVISORD_CONF
+
 [program:inetsim]
 directory=/etc/inetsim
 command=/bin/bash ${CONF_PATH}/run.sh

@@ -92,6 +92,10 @@ def get_vnet_ip(name):
     raise
 
 
+def gen_mac_addr():
+    return "52:54:00:%s" % ":".join(map(binascii.b2a_hex, list(os.urandom(3))))
+
+
 def setup_network(eth0_ip, networks):
     # Make sure the default network is dead:
     run_cmd("virsh net-destroy default", raise_on_error=False)
@@ -107,10 +111,12 @@ def setup_network(eth0_ip, networks):
             'virt_bridge_cidr': "%s/%s" % (vm_gateway, vm_netmask),
             'virt_route_addr': vm_vrouteip,
             'vm_ip': vm_ip,
-            'route_opt': route_opt
+            'route_opt': route_opt,
+            'mac': gen_mac_addr()
         }
         if route_opt == "inetsim":
             create_inetsim = True
+            ctx['fake_ip_stub'] = vm_vrouteip
         contexts.append(ctx)
 
     ctx = {"contexts": contexts}
@@ -119,10 +125,12 @@ def setup_network(eth0_ip, networks):
         inetsim.append({
             "iface_name": "inetsim0",
             "ip": "10.244.243.1",
-            "netmask": "255.255.255.0"
+            "netmask": "255.255.255.0",
+            "mac": gen_mac_addr()
         })
     ctx["inetsim"] = inetsim
-
+    ctx['eth_ip'] = eth0_ip
+    print json.dumps(ctx, indent=4, sort_keys=True)
     interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context=ctx)
 
     interfaces_file = os.path.join(CFG_BASE, 'interfaces')
@@ -138,6 +146,8 @@ def setup_network(eth0_ip, networks):
 
     run_cmd("iptables-restore %s" % iptables_file)
     [run_cmd("ifup %s" % ctx['virt_bridge_name']) for ctx in contexts]
+    [run_cmd("ifup %s_dmy" % ctx['virt_bridge_name']) for ctx in contexts]
+    [run_cmd("ifup %s:0" % ctx['virt_bridge_name']) for ctx in contexts if ctx.get('fake_ip_stub', None) is not None]
     [run_cmd("ip addr add %s dev %s" % (ctx['virt_bridge_ip'], ctx['virt_bridge_name'])) for ctx in contexts]
     if create_inetsim:
         run_cmd("ifup inetsim0")

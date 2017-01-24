@@ -35,7 +35,7 @@ class CuckooContainerManager(object):
             'ram_volume': cfg['ramdisk_size'],
             'ram_limit': cfg['ram_limit'],
             'routes': cfg['enabled_routes'],
-            'cuckoo_name': self.container_names
+            'cuckoo_name': self.container_names[0]
         }
         self.tag_map = self.parse_vm_meta(self.vmm.vm_meta)
         self.container_ips = []
@@ -83,11 +83,11 @@ class CuckooContainerManager(object):
         self._run_cmd("docker pull %s" % self.cuckoo_context['cuckoo_image'], raise_on_error=False)
 
         # Run the image
-        compose_str = "docker run --privileged  --cap-add=ALL" \
-                      "--name %(cuckoo_name)s" \
-                      "--memory %(ram_limit)s" \
-                      "--volumes %(vm_meta_store)s:/opt/vm_meta:ro" \
-                      "--volumes %(vm_disk_store)s:/var/lib/libvirt/images:ro" \
+        compose_str = "docker run --privileged -d --cap-add=ALL " \
+                      "--name %(cuckoo_name)s " \
+                      "--memory %(ram_limit)s " \
+                      "--volume %(vm_meta_store)s:/opt/vm_meta:ro " \
+                      "--volume %(vm_disk_store)s:/var/lib/libvirt/images:ro " \
                       "%(cuckoo_image)s %(vm_meta_file)s %(ram_volume)s" % self.cuckoo_context
         self._run_cmd(compose_str, raise_on_error=False)
 
@@ -108,12 +108,12 @@ class CuckooContainerManager(object):
         if self.stop_on_exit and self.project_id is not None:
             self._run_cmd(self.shutdown_cmd, raise_on_error=False)
 
-        if join("var/cuckoo", self.project_id) in self.cfg_root and os.path.exists(self.cfg_root):
-            # Delete our configuration
-            try:
-                shutil.rmtree(self.cfg_root)
-            except:
-                self.log.warning("Unable to delete our configuration directory: %s" % self.cfg_root)
+        # if join("var/cuckoo", self.project_id) in self.cfg_root and os.path.exists(self.cfg_root):
+        #    # Delete our configuration
+        #    try:
+        #        shutil.rmtree(self.cfg_root)
+        #    except:
+        #        self.log.warning("Unable to delete our configuration directory: %s" % self.cfg_root)
 
 
 class CuckooVmManager(object):

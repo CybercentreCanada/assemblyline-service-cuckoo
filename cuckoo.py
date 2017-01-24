@@ -146,7 +146,7 @@ class Cuckoo(ServiceBase):
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "2048M",
         "ram_limit": "3072m",
-        "enabled_routes": ["inetsim","gateway"]
+        "enabled_routes": ["inetsim", "gateway"]
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -261,6 +261,7 @@ class Cuckoo(ServiceBase):
         self.query_machines_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINES)
         self.query_machine_info_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINE_INFO)
         self.enabled_routes = self.cfg.get("enabled_routes", [])
+        self.log.debug("Cuckoo started!")
 
     def find_machine(self, full_tag, route):
         # substring search
@@ -291,7 +292,6 @@ class Cuckoo(ServiceBase):
             self.log.debug("Cuckoo is exiting because it currently does not execute on great great grand children.")
             request.set_save_result(False)
             return
-
         self.session = requests.Session()
         self.task = request.task
         request.result = Result()
@@ -570,7 +570,7 @@ class Cuckoo(ServiceBase):
         return None
 
     @retry(wait_fixed=2000)
-    def cuckoo_submit_file(self, file_content, select_machine=None):
+    def cuckoo_submit_file(self, file_content):
         self.log.debug("Submitting file: %s to server %s" % (self.cuckoo_task.file, self.submit_url))
         files = {"file": (self.cuckoo_task.file, file_content)}
 
