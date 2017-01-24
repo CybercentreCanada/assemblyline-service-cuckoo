@@ -23,6 +23,8 @@ COMMIT
 -A PREROUTING -i {{ ctx.virt_bridge_name }} -d {{ eth_ip }} -p tcp -m tcp --dport 2042 -j RETURN
 {%  if ctx.route_opt == "inetsim" %}
 -A PREROUTING -i {{ ctx.virt_bridge_name }} -j DNAT --to-destination {{ ins.ip }}
+{% else %}
+-A PREROUTING -i {{ ctx.virt_bridge_name }} ! -d {{ eth_ip }}/24 -j SNAT --from {{ eth_ip }}
 {% endif %}
 {% endfor %}
 {% endfor %}
