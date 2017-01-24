@@ -287,12 +287,6 @@ if __name__ == "__main__":
                         default="snapshot", dest='name', required=False)
     parser.add_argument('--dns', action='store', help="DNS IP", default="8.8.8.8",
                         dest='dns', required=False)
-    parser.add_argument('--ip', action='store', help="Guest IP",
-                        dest='ip', required=True)
-    parser.add_argument('--gateway', action='store', help="Gateway IP",
-                        dest='gateway', required=True)
-    parser.add_argument('--netmask', action='store', help="Netmask",
-                        dest='netmask', required=True)
     parser.add_argument('--hostname', action='store', help="Guest hostname",
                         dest='hostname', required=True)
     parser.add_argument('--tags', action='store', help="Comma-separated list of tags describing the vm",
@@ -300,10 +294,6 @@ if __name__ == "__main__":
     parser.add_argument('--force', action='store_true',
                         help="Force creation of the new domain (will delete existing domain)",
                         dest='force', required=False)
-    parser.add_argument('--fakenet', action='store', help="Fake network address",
-                        dest='fakenet', required=True)
-    parser.add_argument('--network', action='store', help="Network address (i.e. 192.168.100.0)",
-                        dest='network', required=True)
     parser.add_argument('--base', action='store', help="VM Base (lowest layer) i.e. Win7SP1x86",
                         dest='base', required=True)
     parser.add_argument('--guest_profile', action='store', help="Volatility guest profile, i.e. Win7SP1x86",
@@ -311,25 +301,24 @@ if __name__ == "__main__":
     parser.add_argument('--template', action='store',
                         help="Bootstrap template, either win7 or linux (or unsupported win10)",
                         dest='template', required=True)
+    parser.add_argument('--ordinal', action='store',
+                        help="A unique number between 1 and 32000",
+                        dest='ordinal', required=True)
 
     args = parser.parse_args()
 
-    # Validate configs
-    vm_ip = ipaddress.ip_address(unicode(args.ip))
-    vm_gateway = ipaddress.ip_address(unicode(args.gateway))
-    net_string = "%s/%s" % (args.network, args.netmask)
-    vm_network = ipaddress.ip_network(unicode(net_string))
-
-    # this check should be in prepare_vm.py
-    if vm_ip not in vm_network:
-        print "The vm ip %s is not within the network %s!" % (vm_ip.exploded, vm_network.exploded)
-        exit(7)
-    elif vm_gateway not in vm_network:
-        print "The vm gateway ip %s is not within the network %s!" % (vm_gateway.exploded, vm_network.exploded)
-        exit(7)
-    elif not vm_network.is_private:
-        print "The vm network %s isn't in a private address range.." % vm_network.exploded
+    # Validate ordinal
+    args.ordinal = int(args.ordinal)
+    if 1 > args.ordinal or 32000 < args.ordinal:
+        print "Ordinal out of range"
         exit(7)
 
-    prepare_vm(args.domain, args.name, args.base, args.ip, args.gateway, args.netmask, args.network, args.fakenet,
+    ip_net = "10.%i.%i." % (args.ordinal / 256, args.ordinal % 256)
+
+    vm_ip = ip_net+"100"
+    vm_gateway = ip_net+"1"
+    vm_fakenet = ip_net+"10"
+    vm_network = ip_net+"0/255.255.255.0"
+
+    prepare_vm(args.domain, args.name, args.base, vm_ip, vm_gateway, "255.255.255.0", vm_network, vm_fakenet,
                args.hostname, args.dns, args.platform, args.tags, args.force, args.guest_profile, args.template)
