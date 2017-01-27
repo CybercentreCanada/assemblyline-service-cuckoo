@@ -135,7 +135,7 @@ def _purge_domain(domain):
     log.info("Domain %s has been purged", domain)
 
 
-def prepare_vm(domain, snapshot_name, snapshot_base, ip, gateway, netmask, network,
+def prepare_vm(route, domain, snapshot_name, snapshot_base, ip, gateway, netmask, network,
                fakenet, hostname, dns_ip, platform, tags, force, guest_profile, template):
     log.info("VMPREP initiated for snapshot: %s -- domain: %s", snapshot_name, domain)
     log.info("VM Data: ip:%s, gateway:%s, netmask:%s, hostname:%s, dns:%s, platform:%s, tags:%s",
@@ -235,7 +235,8 @@ def prepare_vm(domain, snapshot_name, snapshot_base, ip, gateway, netmask, netwo
         "gateway": gateway,
         "tags": tags,
         "platform": platform,
-        "guest_profile": guest_profile
+        "guest_profile": guest_profile,
+        "route": route
     }
     metadata = _render(META_TEMPLATE_FILE, metadata_context)
     log.info("Metadata template: %s", metadata)
@@ -285,8 +286,6 @@ if __name__ == "__main__":
                         dest='platform', required=True)
     parser.add_argument('--name', action='store', help="Output snapshot name",
                         default="snapshot", dest='name', required=False)
-    parser.add_argument('--dns', action='store', help="DNS IP", default="8.8.8.8",
-                        dest='dns', required=False)
     parser.add_argument('--hostname', action='store', help="Guest hostname",
                         dest='hostname', required=True)
     parser.add_argument('--tags', action='store', help="Comma-separated list of tags describing the vm",
@@ -304,6 +303,9 @@ if __name__ == "__main__":
     parser.add_argument('--ordinal', action='store',
                         help="A unique number between 1 and 32000",
                         dest='ordinal', required=True)
+    parser.add_argument('--route', action='store',
+                        help="One of the following values: inetsim, gateway",
+                        dest='route', required=True)
 
     args = parser.parse_args()
 
@@ -313,12 +315,19 @@ if __name__ == "__main__":
         print "Ordinal out of range"
         exit(7)
 
-    ip_net = "10.%i.%i." % (args.ordinal / 256, args.ordinal % 256)
+    # Validate route
+    if args.route not in ['gateway', 'inetsim']:
+        print "Invalid route"
+        exit(7)
 
-    vm_ip = ip_net+"100"
-    vm_gateway = ip_net+"1"
-    vm_fakenet = ip_net+"10"
-    vm_network = ip_net+"0/255.255.255.0"
+    ip_net = "10.%i.%i.%%i" % (args.ordinal / 256, args.ordinal % 256)
 
-    prepare_vm(args.domain, args.name, args.base, vm_ip, vm_gateway, "255.255.255.0", vm_network, vm_fakenet,
-               args.hostname, args.dns, args.platform, args.tags, args.force, args.guest_profile, args.template)
+    vm_ip = ip_net % 100
+    vm_gateway = ip_net % 1
+    vm_fakenet = ip_net % 10
+    netmask = "255.255.255.0"
+    vm_network = ip_net % 0
+    dns = "8.8.8.8"
+
+    prepare_vm(args.route, args.domain, args.name, args.base, vm_ip, vm_gateway, netmask, vm_network, vm_fakenet,
+               args.hostname, dns, args.platform, args.tags, args.force, args.guest_profile, args.template)

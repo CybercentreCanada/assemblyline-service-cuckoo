@@ -11,11 +11,7 @@ import shutil
 import subprocess
 import time
 import re
-import uuid
-import struct
 import binascii
-import fcntl
-import socket
 
 from argparse import ArgumentParser
 from jinja2 import Environment, FileSystemLoader
@@ -97,12 +93,16 @@ def gen_mac_addr():
 
 
 def setup_network(eth0_ip, networks):
+    # Find real DNS server
+    resolve = open("/etc/resolv.conf").read()
+    dns_ip = re.search("nameserver[\t ]*([0-9.]+)", resolve).group(1)
     # Make sure the default network is dead:
     run_cmd("virsh net-destroy default", raise_on_error=False)
     run_cmd("virsh net-autostart --disable default", raise_on_error=False)
     run_cmd("/sbin/sysctl -w net.ipv4.ip_forward=1", raise_on_error=False)
     create_inetsim = False
     contexts = []
+    counter = 1
     for vm_name, [vm_ip, vm_gateway, vm_netmask, vm_vrouteip, route_opt, if_name] in networks.iteritems():
         ctx = {
             'virt_bridge_name': if_name,
@@ -111,8 +111,10 @@ def setup_network(eth0_ip, networks):
             'virt_route_addr': vm_vrouteip,
             'vm_ip': vm_ip,
             'route_opt': route_opt,
-            'mac': gen_mac_addr()
+            'mac': gen_mac_addr(),
+            'mark': counter
         }
+        counter += 1
         if route_opt == "inetsim":
             create_inetsim = True
             ctx['fake_ip_stub'] = vm_vrouteip
@@ -129,6 +131,7 @@ def setup_network(eth0_ip, networks):
         })
     ctx["inetsim"] = inetsim
     ctx['eth_ip'] = eth0_ip
+    ctx['dns_ip'] = dns_ip
     print json.dumps(ctx, indent=4, sort_keys=True)
     interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context=ctx)
 
@@ -143,19 +146,22 @@ def setup_network(eth0_ip, networks):
     with open(iptables_file, 'w') as fh:
         fh.write(iptables)
 
-    print "a"
-    [run_cmd("ifup %s_dmy" % ctx['virt_bridge_name']) for ctx in contexts]
-    print "b"
-    [run_cmd("ifup %s" % ctx['virt_bridge_name']) for ctx in contexts]
-    print "c"
-    [run_cmd("ifup %s:0" % ctx['virt_bridge_name']) for ctx in contexts if ctx.get('fake_ip_stub', None) is not None]
-    print "d"
-    [run_cmd("ip addr add %s dev %s" % (ctx['virt_bridge_ip'], ctx['virt_bridge_name'])) for ctx in contexts]
-    print "e"
-    run_cmd("iptables-restore %s" % iptables_file)
-    print "f"
     if create_inetsim:
         run_cmd("ifup inetsim0")
+
+    gateway_ip = re.search("default via ([0-9.]+) dev eth0", run_cmd("ip route")).group(1)
+    for ctx in contexts:
+        run_cmd("ip rule add fwmark %i table %i" % (ctx['mark'], ctx['mark']))
+        if ctx['route_opt'] == 'inetsim':
+            run_cmd("ip route add table %i default dev inetsim0 via %s" % (ctx['mark'], inetsim[0]['ip']))
+        else:
+            run_cmd("ip route add table %i default dev eth0 via %s" % (ctx['mark'], gateway_ip))
+
+    [run_cmd("ifup %s_dmy" % ctx['virt_bridge_name']) for ctx in contexts]
+    [run_cmd("ifup %s" % ctx['virt_bridge_name']) for ctx in contexts]
+    [run_cmd("ifup %s:0" % ctx['virt_bridge_name']) for ctx in contexts if ctx.get('fake_ip_stub', None) is not None]
+    [run_cmd("ip addr add %s dev %s" % (ctx['virt_bridge_ip'], ctx['virt_bridge_name'])) for ctx in contexts]
+    run_cmd("iptables-restore %s" % iptables_file)
 
 
 def copy_vm_disk(src, dst):

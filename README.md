@@ -152,10 +152,9 @@ The prepare_vm command line will also differ depending on OS, and IP space. A sa
 below. 
     
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo ./prepare_vm.py --domain Win7SP1x86 --platform windows --ip 192.168.100.100 --gateway 192.168.100.1    \
-        --netmask 255.255.255.0 --hostname PREPTEST --tags "pe32,default" --dns 192.168.100.10                  \
-        --force --network 192.168.100.0 --fakenet 192.168.100.10 --base Win7SP1x86 --name cuckoo_Win7SP1x86     \
-        --guest_profile Win7SP1x86 --template win7
+    sudo -u al PYTHONPATH=$PYTHONPATH ./prepare_vm.py --domain Win7SP1x86 --platform windows \
+        --hostname PREPTEST --tags "pe32,default" --dns 192.168.100.10 --force --base Win7SP1x86 
+        --name inetsim_Win7SP1x86  --guest_profile Win7SP1x86 --template win7 --ordinal 10 --route inetsim
     
 The parameters for prepare_vm.py are:
 * domain

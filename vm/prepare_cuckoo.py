@@ -21,7 +21,6 @@ def mod_json_meta(json_file, prepend):
     json_file['name'] = vm_name
     json_file['snapshot_xml'] = out_snap_name
     json_file['xml'] = out_xml_name
-    json_file['route'] = prepend
     return vm_name, out_xml_name, out_snap_name, json_file
 
 
@@ -88,7 +87,7 @@ def main():
     try:
         svc_class = service_by_name("Cuckoo")
     except:
-        print 'Could not load service "%s".\nValid options:\n%s' % (service_name,
+        print 'Could not load service "%s".\nValid options:\n%s' % ("Cuckoo",
                                                             [s['name'] for s in forge.get_datastore().list_services()])
         sys.exit(7)
 
@@ -104,7 +103,7 @@ def main():
 
     cuckoo_config = []
     for vm in vm_list:
-        for js in install_vm_meta(out_directory, vm, cfg['enabled_routes']):
+        for js in install_vm_meta(out_directory, vm, ['']):
             cuckoo_config.append(js)
 
     with open(out_config, "w") as fh:

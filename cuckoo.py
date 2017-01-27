@@ -216,7 +216,6 @@ class Cuckoo(ServiceBase):
         self.vm_xml = None
         self.vm_snapshot_xml = None
         self.vm_meta = None
-        self.cuckoo_server_ip = None
         self.file_name = None
         self.base_url = None
         self.submit_url = None
@@ -244,22 +243,21 @@ class Cuckoo(ServiceBase):
         self.cm = CuckooContainerManager(self.cfg,
                                          os.path.join(os.path.dirname(os.path.realpath(__file__))),
                                          self.vmm)
-        self._register_cleanup_op(self.cm.shutdown_operation)
+
+        map(self._register_cleanup_op, self.cm.shutdown_operations)
         self.log.debug = self.log.warn
         self.log.debug("VMM and CM started!")
         # Start the container
         self.cm.start_container()
-        self.cuckoo_server_ip = self.cm.container_ips[0]
-
         self.file_name = None
-        self.base_url = "http://%s:%s" % (self.cuckoo_server_ip, CUCKOO_API_PORT)
-        self.submit_url = "%s/%s" % (self.base_url, CUCKOO_API_SUBMIT)
-        self.query_task_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_TASK)
-        self.delete_task_url = "%s/%s" % (self.base_url, CUCKOO_API_DELETE_TASK)
-        self.query_report_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_REPORT)
-        self.query_pcap_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_PCAP)
-        self.query_machines_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINES)
-        self.query_machine_info_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINE_INFO)
+        base_url = "http://%s:%s" % (self.cm.cuckoo_contexts[0]['cuckoo_ip'], CUCKOO_API_PORT)
+        self.submit_url = "%s/%s" % (base_url, CUCKOO_API_SUBMIT)
+        self.query_task_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_TASK)
+        self.delete_task_url = "%s/%s" % (base_url, CUCKOO_API_DELETE_TASK)
+        self.query_report_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_REPORT)
+        self.query_pcap_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_PCAP)
+        self.query_machines_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINES)
+        self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
         self.enabled_routes = self.cfg.get("enabled_routes", [])
         self.log.debug("Cuckoo started!")
 

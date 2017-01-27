@@ -44,6 +44,9 @@ echo "export LIBVIRT_DEFAULT_URI=qemu:///system" >> /home/sandbox/.bashrc
 export CONTAINER_IP=`ifconfig eth0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`
 export CUCKOO_BASE=/opt/sandbox/cuckoo
 
+# Disable slow ntpdate updating
+rm /etc/network/if-up.d/ntpdate
+
 # Seems like there are issues running things in the container from /usr/sbin
 # Moving libvirt and tcpdump for now..
 mv /usr/sbin/libvirtd /usr/bin/libvirtd
