@@ -16,7 +16,7 @@ class CuckooDockerException(Exception):
 
 
 class CuckooContainerManager(object):
-    def __init__(self, cfg, template_basedir, vmm, stop_on_exit=True):
+    def __init__(self, cfg, vmm, stop_on_exit=True):
         self.log = logging.getLogger('assemblyline.al.service.cuckoo.cm')
         self.stop_on_exit = stop_on_exit
         self.container = None
@@ -38,7 +38,6 @@ class CuckooContainerManager(object):
             'vm_meta_file': self.vm_meta,
             'ram_volume': cfg['ramdisk_size'],
             'ram_limit': cfg['ram_limit'],
-            'routes': cfg['enabled_routes'],
             'cuckoo_name': cn,
             'cuckoo_ip': None,
         })

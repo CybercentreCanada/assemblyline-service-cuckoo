@@ -15,6 +15,8 @@ from assemblyline.al.common.result import Result, ResultSection
 from assemblyline.common.exceptions import RecoverableError, NonRecoverableError
 from assemblyline.al.service.base import ServiceBase
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
+from assemblyline.al.common import forge
+
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -145,8 +147,7 @@ class Cuckoo(ServiceBase):
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "2048M",
-        "ram_limit": "3072m",
-        "enabled_routes": ["inetsim", "gateway"]
+        "ram_limit": "3072m"
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -241,11 +242,9 @@ class Cuckoo(ServiceBase):
     def start(self):
         self.vmm = CuckooVmManager(self.cfg)
         self.cm = CuckooContainerManager(self.cfg,
-                                         os.path.join(os.path.dirname(os.path.realpath(__file__))),
                                          self.vmm)
 
         map(self._register_cleanup_op, self.cm.shutdown_operations)
-        self.log.debug = self.log.warn
         self.log.debug("VMM and CM started!")
         # Start the container
         self.cm.start_container()
@@ -258,7 +257,16 @@ class Cuckoo(ServiceBase):
         self.query_pcap_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_PCAP)
         self.query_machines_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINES)
         self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
-        self.enabled_routes = self.cfg.get("enabled_routes", [])
+
+        for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
+            if param['name'] == "routing":
+                self.enabled_routes = param['list']
+                if self.enabled_routes[0] != param['default']:
+                    self.enabled_routes.remove(param['default'])
+                    self.enabled_routes.insert(0, param['default'])
+
+        if self.enabled_routes is None:
+            raise ValueError("No routing submission_parameter.")
         self.log.debug("Cuckoo started!")
 
     def find_machine(self, full_tag, route):

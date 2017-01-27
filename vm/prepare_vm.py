@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from assemblyline.al.common import forge
 
 # VM Preparation -- a poor man's vmcloak ;)
 #
@@ -316,8 +317,17 @@ if __name__ == "__main__":
         exit(7)
 
     # Validate route
-    if args.route not in ['gateway', 'inetsim']:
-        print "Invalid route"
+    enabled_routes = None
+
+    for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
+        if param['name'] == "routing":
+            enabled_routes = param['list']
+
+    if enabled_routes is None:
+        raise ValueError("No routing submission_parameter.")
+
+    if args.route not in enabled_routes:
+        print "Invalid route, must be one of %s", ", ".join(enabled_routes)
         exit(7)
 
     ip_net = "10.%i.%i.%%i" % (args.ordinal / 256, args.ordinal % 256)

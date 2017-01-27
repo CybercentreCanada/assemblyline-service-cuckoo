@@ -63,25 +63,6 @@ COMMIT
 -A INPUT -s {{ ins.ip }} -j ACCEPT
 {%- endfor %}
 {%- for ctx in contexts %}
-# -A INPUT -i {{ ctx.virt_bridge_name }} ! -s {{ ctx.virt_bridge_ip }} -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 0.0.0.0/8 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 10.0.0.0/8 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 100.64.0.0/10 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 127.0.0.0/8 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 169.254.0.0/16 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 172.16.0.0/12 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 192.0.0.0/24 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 192.0.2.0/24 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 192.88.99.0/24 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 192.168.0.0/16 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 198.18.0.0/15 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 198.51.100.0/24 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 203.0.113.0/24 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 224.0.0.0/4 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 240.0.0.0/4 -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -d 255.255.255.255/32  -j DROP
-# -A INPUT -i {{ ctx.virt_bridge_name }} -j ACCEPT
-# Allow traffic between virtual machines.
 -A FORWARD -i {{ ctx.virt_bridge_name }} -o {{ ctx.virt_bridge_name }} -j ACCEPT
 -A FORWARD -d {{ ctx.virt_route_addr }} -o {{ ctx.virt_bridge_name }} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 -A FORWARD -i {{ ctx.virt_bridge_name }} -j ACCEPT
