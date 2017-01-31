@@ -36,7 +36,7 @@ Make sure to configure this registry in ASSEMBLYLINE.
 The following commands assume a local registry. Change localhost as needed for a remote registry. If a remote registry 
 is configured on all workers, the following commands will only need to be run once.
 
-    cd //opt/al/pkg/al_services/alsvc_cuckoo/docker/kvm
+    cd /opt/al/pkg/al_services/alsvc_cuckoo/docker/kvm
     sudo docker build -t cuckoo/kvm .
     cd ../cuckoobox
     sudo apt-get install python-dev libffi-dev libfuzzy-dev
@@ -82,7 +82,27 @@ Once the operating system has been installed, perform the following setup.
 * Copy `data/strace.stp` onto the virtual machine
 * Run `sudo stap -k 4 -r $(uname -r) strace.stp -m stap_ -v`
 * Place stap_.ko into /root/.cuckoo/
-* Disable all Ubuntu services including NTP, update notifier, etc. These will produce extraneous network communications 
+* Uninstall the following packages which cause extraneous network noise:
+  * software-center
+  * update-notifier
+  * oneconf
+  * update-manager
+  * update-manager-core
+  * ubuntu-release-upgrader-core
+  * whoopsie
+  * ntpdate
+  * cups-daemon
+  * avahi-autoipd
+  * avahi-daemon
+  * avahi-utils
+  * account-plugin-salut
+  * libnss-mdns
+  * telepathy-salut
+* Delete `/etc/network/if-up.d/ntpdate`
+* Add `net.ipv6.conf.all.disable_ipv6 = 1` to /etc/sysctl.conf
+* Edit `/etc/init/procps.conf`, changing the "start on" line to `start on runlevel [0123456]`
+  
+  all Ubuntu services including NTP, update notifier, etc. These will produce extraneous network communications 
 in the ASSEMBLYLINE output.
 
 When done, shutdown the virtual machine. Remove the CD drive configuration from the virtual machine. The virtual 
