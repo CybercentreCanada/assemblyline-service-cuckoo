@@ -101,9 +101,6 @@ Once the operating system has been installed, perform the following setup.
 * Delete `/etc/network/if-up.d/ntpdate`
 * Add `net.ipv6.conf.all.disable_ipv6 = 1` to /etc/sysctl.conf
 * Edit `/etc/init/procps.conf`, changing the "start on" line to `start on runlevel [0123456]`
-  
-  all Ubuntu services including NTP, update notifier, etc. These will produce extraneous network communications 
-in the ASSEMBLYLINE output.
 
 When done, shutdown the virtual machine. Remove the CD drive configuration from the virtual machine. The virtual 
 machine will fail if it contains any references to the install medium.
