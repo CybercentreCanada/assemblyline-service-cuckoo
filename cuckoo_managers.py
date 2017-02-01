@@ -11,89 +11,61 @@ from assemblyline.al.common import forge
 
 config = forge.get_config()
 
-
-def setup_templates(template_basedir):
-    global TEMPLATE_BASE, TEMPLATE_ENVIRONMENT, COMPOSE_TEMPLATE_FILE, CFG_ROOT
-    TEMPLATE_BASE = template_basedir
-    TEMPLATE_ENVIRONMENT = jinja2.Environment(
-        autoescape=False,
-        loader=jinja2.FileSystemLoader(TEMPLATE_BASE),
-        trim_blocks=False)
-    COMPOSE_TEMPLATE_FILE = 'compose_template.jinja2'
-    CFG_ROOT = 'cuckoo'
-
-
 class CuckooDockerException(Exception):
     pass
 
 
 class CuckooContainerManager(object):
-    def __init__(self, cfg, template_basedir, vmm, stop_on_exit=True):
+    def __init__(self, cfg, vmm, stop_on_exit=True):
         self.log = logging.getLogger('assemblyline.al.service.cuckoo.cm')
-        setup_templates(template_basedir)
         self.stop_on_exit = stop_on_exit
         self.container = None
         self.container_info = None
-        self.registry_host = config.installation.docker.private_registry
-        self.cuckoo_image = cfg['cuckoo_image']
-        self.cuckoo_tag = cfg['cuckoo_tag']
-        self.inetsim_image = cfg['inetsim_image']
-        self.inetsim_tag = cfg['inetsim_tag']
+        registry_host = config.installation.docker.private_registry
         self.vm_meta = os.path.split(cfg['vm_meta'])[1]
-        self.ramdisk_size = cfg['ramdisk_size']
-        self.ram_limit = cfg['ram_limit']
-        self.cuckoo_image_uri = "%s/%s:%s" % (self.registry_host, self.cuckoo_image, self.cuckoo_tag)
-        self.inetsim_image_uri = "%s/%s:%s" % (self.registry_host, self.inetsim_image, self.inetsim_tag)
         self.vmm = vmm
-        self.image_mount = self.vmm.local_vm_root
-        self.meta_mount = self.vmm.local_meta_root
         self.project_id = str(uuid.uuid4()).replace('-', '')
-        self.cuckoo_container_name = "%s_cuckoo" % self.project_id
-        self.inetsim_container_name = "%s_inetsim" % self.project_id
 
-        cuckoo_context = {
-            'cuckoo_image': self.cuckoo_image_uri,
-            'inetsim_image': self.inetsim_image_uri,
-            'vm_disk_store': self.image_mount,
-            'vm_meta_store': self.meta_mount,
+        self.cuckoo_contexts = []
+        self.shutdown_cmds = []
+        self.shutdown_operations = []
+
+        cn = "%s_cuckoo_%i" % (self.project_id, 1)
+        self.cuckoo_contexts.append({
+            'cuckoo_image': "%s/%s" % (registry_host, cfg['cuckoo_image']),
+            'vm_disk_store': self.vmm.local_vm_root,
+            'vm_meta_store': self.vmm.local_meta_root,
             'vm_meta_file': self.vm_meta,
-            'ram_volume': self.ramdisk_size,
-            'ram_limit': self.ram_limit
-        }
-        self.tag_map = self.parse_vm_meta(self.vmm.vm_meta)
-
-        compose_str = TEMPLATE_ENVIRONMENT.get_template(COMPOSE_TEMPLATE_FILE).render(cuckoo_context)
-
-        self.cfg_root = join(config.system.root, cfg['LOCAL_VM_META_ROOT'], self.project_id)
-        if not os.path.exists(self.cfg_root):
-            os.makedirs(self.cfg_root)
-
-        self.compose_path = join(self.cfg_root, 'docker-compose.yml')
-        if not os.path.exists(self.compose_path):
-            with open(self.compose_path, 'w') as fh:
-                fh.write(compose_str)
-
-        self.cuckoo_ip = None
-        self.inetsim_ip = None
-        self.shutdown_cmd = "docker-compose -f %s -p %s down" % (self.compose_path, self.project_id)
-        self.shutdown_operation = {
+            'ram_volume': cfg['ramdisk_size'],
+            'ram_limit': cfg['ram_limit'],
+            'cuckoo_name': cn,
+            'cuckoo_ip': None,
+        })
+        self.shutdown_cmds.append("docker rm --force %s" % cn)
+        self.shutdown_operations.append({
             'type': 'shell',
-            'args': shlex.split(self.shutdown_cmd)
-        }
+            'args': shlex.split("docker rm --force %s" % cn)
+        })
+
+        self.tag_map = self.parse_vm_meta(self.vmm.vm_meta)
+        self.container_ips = []
 
     def parse_vm_meta(self, vm_meta):
         tag_set = {}
         for vm in vm_meta:
+            if vm['route'] not in tag_set:
+                tag_set[vm['route']] = {}
             vm_tags = vm['tags'].split(",")
             for tag in vm_tags:
-                if tag in tag_set:
+                tag = tag
+                if tag in tag_set[vm['route']]:
                     raise CuckooDockerException("Tag collision between %s and %s (tag: %s)." % (
                         vm['name'],
-                        tag_set[tag],
+                        tag_set[vm['route']][tag],
                         tag
                         )
                     )
-                tag_set[tag] = vm['name']
+                tag_set[vm['route']][tag] = vm['name']
         return tag_set
 
     def _run_cmd(self, command, raise_on_error=True):
@@ -111,19 +83,22 @@ class CuckooContainerManager(object):
         return stdout
 
     def start_container(self):
+        for ctx in self.cuckoo_contexts:
+            # Pull the image
+            self._run_cmd("docker pull %s" % ctx['cuckoo_image'], raise_on_error=False)
 
-        # Pull the containers
-        pull_str = "docker-compose -f %s pull" % self.compose_path
-        self._run_cmd(pull_str, raise_on_error=False)
+            # Run the image
+            compose_str = "docker run --privileged -d --cap-add=ALL " \
+                          "--name %(cuckoo_name)s " \
+                          "--memory %(ram_limit)s " \
+                          "--volume %(vm_meta_store)s:/opt/vm_meta:ro " \
+                          "--volume %(vm_disk_store)s:/var/lib/libvirt/images:ro " \
+                          "%(cuckoo_image)s %(vm_meta_file)s %(ram_volume)s" % ctx
+            self._run_cmd(compose_str, raise_on_error=False)
 
-        compose_str = "docker-compose -f %s -p %s up -d --force-recreate" % (self.compose_path, self.project_id)
-        self._run_cmd(compose_str, raise_on_error=False)
-
-        # Grab the ip address of our containers
-        cuckoo_info = self.inspect(self.cuckoo_container_name + '_1')
-        inetsim_info = self.inspect(self.cuckoo_container_name + '_1')
-        self.cuckoo_ip = cuckoo_info["NetworkSettings"]["IPAddress"]
-        self.inetsim_ip = inetsim_info["NetworkSettings"]["IPAddress"]
+            # Grab the ip address of our containers
+            info = self.inspect(ctx['cuckoo_name'])
+            ctx['cuckoo_ip'] = info["NetworkSettings"]["IPAddress"]
 
     def inspect(self, image_name):
         inspect_cmd = "docker inspect %s" % image_name
@@ -136,14 +111,7 @@ class CuckooContainerManager(object):
 
     def stop(self):
         if self.stop_on_exit and self.project_id is not None:
-            self._run_cmd(self.shutdown_cmd, raise_on_error=False)
-
-        if join("var/cuckoo", self.project_id) in self.cfg_root and os.path.exists(self.cfg_root):
-            # Delete our configuration
-            try:
-                shutil.rmtree(self.cfg_root)
-            except:
-                self.log.warning("Unable to delete our configuration directory: %s" % self.cfg_root)
+            map(self._run_cmd, self.shutdown_cmds)
 
 
 class CuckooVmManager(object):

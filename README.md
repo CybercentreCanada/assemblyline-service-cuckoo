@@ -18,14 +18,15 @@ large volume of error messages in your hostagent log file.
 
 ### CONFIGURATIONS
 
-The Cuckoo service provides a number of sane default configurations. However, if the user plans on running multiple 
-virtual machines simultaneously, two options should change.
+The Cuckoo service provides a number of sane default configurations. However, if the administrator plans on running
+multiple virtual machines simultaneously the ram usage options should be increased as needed. The submission parameter 
+`routing` affects whether submissions can talk to the internet or not. 
 
 | Name | Default | Description |
 |:---:|:---:|---|
-|ramdisk_size|3072M|This is the size of the ramdisk that Cuckoo will use to store VM snapshots and the running virtual machine image. If it's not large enough analysis will fail, see the Troubleshooting section for more information.|
-|ram_limit|4096m|This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.|
-
+|ramdisk_size|2048M|This is the size of the ramdisk that Cuckoo will use to store VM snapshots and the running virtual machine image. If it's not large enough analysis will fail, see the Troubleshooting section for more information.|
+|ram_limit|3072m|This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.|
+|routing| inetsim, gateway |This submission parameter indicates which routing options users can use. Inetsim is an internet simulator, and gateway routes traffic onto the internet. If either of these are disabled they will no longer be usable by users.|
 
 ### DOCKER COMPONENTS
 
@@ -48,16 +49,19 @@ Make sure to configure this registry in ASSEMBLYLINE.
 The following commands assume a local registry. Change localhost as needed for a remote registry. If a remote registry 
 is configured on all workers, the following commands will only need to be run once.
 
-    cd /opt/al/pkg/assemblyline/al/service/cuckoo/docker/kvm
+    cd /opt/al/pkg/al_services/alsvc_cuckoo/docker/kvm
     sudo docker build -t cuckoo/kvm .
     cd ../cuckoobox
     sudo apt-get install python-dev libffi-dev libfuzzy-dev
     sudo -u al bash libs.sh
     sudo docker build -t localhost:5000/cuckoo/cuckoobox .
     sudo docker push localhost:5000/cuckoo/cuckoobox
-    cd ../inetsim
-    sudo docker build -t localhost:5000/cuckoo/inetsim .
-    sudo docker push localhost:5000/cuckoo/inetsim
+
+### Routes
+
+By default Cuckoo ships with two routes for network traffic. The internet simulator "inetsim", and "gateway," a direct 
+connection to the internet via the ASSEMBLYLINE worker's gateway. Either of these can be disabled in the Cuckoo service 
+configurations.
 
 ### EPHEMERAL VIRTUAL MACHINE
 
@@ -91,6 +95,25 @@ Once the operating system has been installed, perform the following setup.
 * Copy `data/strace.stp` onto the virtual machine
 * Run `sudo stap -k 4 -r $(uname -r) strace.stp -m stap_ -v`
 * Place stap_.ko into /root/.cuckoo/
+* Uninstall the following packages which cause extraneous network noise:
+  * software-center
+  * update-notifier
+  * oneconf
+  * update-manager
+  * update-manager-core
+  * ubuntu-release-upgrader-core
+  * whoopsie
+  * ntpdate
+  * cups-daemon
+  * avahi-autoipd
+  * avahi-daemon
+  * avahi-utils
+  * account-plugin-salut
+  * libnss-mdns
+  * telepathy-salut
+* Delete `/etc/network/if-up.d/ntpdate`
+* Add `net.ipv6.conf.all.disable_ipv6 = 1` to /etc/sysctl.conf
+* Edit `/etc/init/procps.conf`, changing the "start on" line to `start on runlevel [0123456]`
 
 When done, shutdown the virtual machine. Remove the CD drive configuration from the virtual machine. The virtual 
 machine will fail if it contains any references to the install medium.
@@ -156,21 +179,17 @@ The prepare_vm command line will also differ depending on OS, and IP space. A sa
 below. 
     
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo ./prepare_vm.py --domain Win7SP1x86 --platform windows --ip 192.168.100.100 --gateway 192.168.100.1    \
-        --netmask 255.255.255.0 --hostname PREPTEST --tags "pe32,default" --dns 192.168.100.10                  \
-        --force --network 192.168.100.0 --fakenet 192.168.100.10 --base Win7SP1x86 --name cuckoo_Win7SP1x86     \
-        --guest_profile Win7SP1x86 --template win7
+    sudo -u al PYTHONPATH=$PYTHONPATH ./prepare_vm.py --domain Win7SP1x86 --platform windows \
+        --hostname PREPTEST --tags "pe32,default" --force --base Win7SP1x86  --name inetsim_Win7SP1x86 \
+        --guest_profile Win7SP1x86 --template win7 --ordinal 10 --route inetsim
     
 The parameters for prepare_vm.py are:
 * domain
   * The same as the virt-install --name argument
 * platform
   * The "Cuckoo platform." Either "windows" or "linux" 
-* ip, gateway, netmask, network, hostname, fakenet, dns
-  * When running Cuckoo with multiple virtual machines, make sure that all prepared virtual machines have the same
-gateway and network. They should have unique ip addresses. If you intend on using inetsim with a virtual machine,
-the dns server and fakenet IP are the same. The fakenet IP should be the same for all virtual machines using inetsim,
-they will share an inetsim docker container.
+* hostname
+  * A new hostname for the prepared VM 
 * tags
   * Comma separated list of tags which map to partial or full tags in common/constraints.py
   * Cuckoo will favour more specific tags
@@ -183,19 +202,29 @@ they will share an inetsim docker container.
   * Name of the new domain to create.
 * guest_profile
   * The volatility profile
-  * A list of all possible guest profiles is available on the [Volatility website.](https://github.com/volatilityfoundation/volatility/wiki/Volatility%20Usage#selecting-a-profile)
+  * A list of all possible guest profiles is available on the 
+  [Volatility website.](https://github.com/volatilityfoundation/volatility/wiki/Volatility%20Usage#selecting-a-profile)
 * template
   * The prepare_vm template, valid values are "win7", "win10", or "linux"
+* ordinal
+  * A number between 1 and 32000, each prepared virtual machine needs a unique ordinal
+  * This number is turned into an IP address, so any collision between deployed virtual machines may cause undefined 
+  errors
+* route
+  * Either gateway or inetsim
+  * If gateway is chosen, all traffic from the virtual machine will be routed over the internet
+  * If inetsim is chosen, all traffic from the virtual machine will be routed to an inetsim instance 
 
 #### Deploy all snapshots to Cuckoo
 
 Once you've prepared all the virtual machine, there should be a number of .tar.gz files containing virtual machine
 metadata. The prepare_cuckoo.py overwrites the current cuckoo configuration, so it's recommended to keep these files
-handy in case you want to deploy new virtual machines in future. By default ASSEMBLYLINE expects a metadata file in 
-/opt/al/var/support/vm/disks/cuckoo/cuckoo.config adjust this directory as needed for your installation.
+handy in case you want to deploy new virtual machines in future. The prepare_cuckoo.py script will automatically
+retrieve Cuckoo service configurations including metadata paths and enabled routes. If you change these configurations 
+you will also need to run prepare_cuckoo.py again.
 
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo -u al ./prepare_cuckoo.py /opt/al/var/support/vm/disks/cuckoo/cuckoo.config *.tar.gz
+    sudo -u al PYTHONPATH=$PYTHONPATH ./prepare_cuckoo.py *.tar.gz
 
 ### DEBUGGING
 

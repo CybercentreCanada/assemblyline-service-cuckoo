@@ -50,3 +50,4 @@ libvirt-dev
 libvirt-bin
 policykit-1
 yara
+inetsim

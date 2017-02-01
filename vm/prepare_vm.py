@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import ipaddress
 import argparse
 import guestfs
 import jinja2
@@ -13,6 +14,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from assemblyline.al.common import forge
 
 # VM Preparation -- a poor man's vmcloak ;)
 #
@@ -134,7 +136,7 @@ def _purge_domain(domain):
     log.info("Domain %s has been purged", domain)
 
 
-def prepare_vm(domain, snapshot_name, snapshot_base, ip, gateway, netmask, network,
+def prepare_vm(route, domain, snapshot_name, snapshot_base, ip, gateway, netmask, network,
                fakenet, hostname, dns_ip, platform, tags, force, guest_profile, template):
     log.info("VMPREP initiated for snapshot: %s -- domain: %s", snapshot_name, domain)
     log.info("VM Data: ip:%s, gateway:%s, netmask:%s, hostname:%s, dns:%s, platform:%s, tags:%s",
@@ -234,7 +236,8 @@ def prepare_vm(domain, snapshot_name, snapshot_base, ip, gateway, netmask, netwo
         "gateway": gateway,
         "tags": tags,
         "platform": platform,
-        "guest_profile": guest_profile
+        "guest_profile": guest_profile,
+        "route": route
     }
     metadata = _render(META_TEMPLATE_FILE, metadata_context)
     log.info("Metadata template: %s", metadata)
@@ -284,14 +287,6 @@ if __name__ == "__main__":
                         dest='platform', required=True)
     parser.add_argument('--name', action='store', help="Output snapshot name",
                         default="snapshot", dest='name', required=False)
-    parser.add_argument('--dns', action='store', help="DNS IP", default="8.8.8.8",
-                        dest='dns', required=False)
-    parser.add_argument('--ip', action='store', help="Guest IP",
-                        dest='ip', required=True)
-    parser.add_argument('--gateway', action='store', help="Gateway IP",
-                        dest='gateway', required=True)
-    parser.add_argument('--netmask', action='store', help="Netmask",
-                        dest='netmask', required=True)
     parser.add_argument('--hostname', action='store', help="Guest hostname",
                         dest='hostname', required=True)
     parser.add_argument('--tags', action='store', help="Comma-separated list of tags describing the vm",
@@ -299,18 +294,50 @@ if __name__ == "__main__":
     parser.add_argument('--force', action='store_true',
                         help="Force creation of the new domain (will delete existing domain)",
                         dest='force', required=False)
-    parser.add_argument('--fakenet', action='store', help="Fake network address",
-                        dest='fakenet', required=True)
-    parser.add_argument('--network', action='store', help="Network address (i.e. 192.168.100.0)",
-                        dest='network', required=True)
     parser.add_argument('--base', action='store', help="VM Base (lowest layer) i.e. Win7SP1x86",
                         dest='base', required=True)
     parser.add_argument('--guest_profile', action='store', help="Volatility guest profile, i.e. Win7SP1x86",
                         dest='guest_profile', required=True)
-    parser.add_argument('--template', action='store', help="Bootstrap template, either win7 or linux (or unsupported win10)",
+    parser.add_argument('--template', action='store',
+                        help="Bootstrap template, either win7 or linux (or unsupported win10)",
                         dest='template', required=True)
+    parser.add_argument('--ordinal', action='store',
+                        help="A unique number between 1 and 32000",
+                        dest='ordinal', required=True)
+    parser.add_argument('--route', action='store',
+                        help="One of the following values: inetsim, gateway",
+                        dest='route', required=True)
 
     args = parser.parse_args()
 
-    prepare_vm(args.domain, args.name, args.base, args.ip, args.gateway, args.netmask, args.network, args.fakenet,
-               args.hostname, args.dns, args.platform, args.tags, args.force, args.guest_profile, args.template)
+    # Validate ordinal
+    args.ordinal = int(args.ordinal)
+    if 1 > args.ordinal or 32000 < args.ordinal:
+        print "Ordinal out of range"
+        exit(7)
+
+    # Validate route
+    enabled_routes = None
+
+    for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
+        if param['name'] == "routing":
+            enabled_routes = param['list']
+
+    if enabled_routes is None:
+        raise ValueError("No routing submission_parameter.")
+
+    if args.route not in enabled_routes:
+        print "Invalid route, must be one of %s", ", ".join(enabled_routes)
+        exit(7)
+
+    ip_net = "10.%i.%i.%%i" % (args.ordinal / 256, args.ordinal % 256)
+
+    vm_ip = ip_net % 100
+    vm_gateway = ip_net % 1
+    vm_fakenet = ip_net % 10
+    netmask = "255.255.255.0"
+    vm_network = ip_net % 0
+    dns = "8.8.8.8"
+
+    prepare_vm(args.route, args.domain, args.name, args.base, vm_ip, vm_gateway, netmask, vm_network, vm_fakenet,
+               args.hostname, dns, args.platform, args.tags, args.force, args.guest_profile, args.template)

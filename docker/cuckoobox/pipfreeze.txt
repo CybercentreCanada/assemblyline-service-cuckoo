@@ -50,4 +50,6 @@ wakeonlan==0.2.2
 wheel==0.24.0
 wsgiref==0.1.2
 yara-python==3.4.0
+click==6.7
+future==0.16.0
 ssdeep==3.1.1

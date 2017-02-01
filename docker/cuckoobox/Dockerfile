@@ -18,8 +18,10 @@ COPY packages.txt /tmp/
 COPY requirements.txt /tmp/
 
 # Install the dependencies
-RUN apt-get update &&\
-  xargs apt-get install -y < /tmp/packages.txt &&\
+RUN echo "deb http://www.inetsim.org/debian/ binary/" > /etc/apt/sources.list.d/inetsim.list &&\
+  apt-get update &&\
+  xargs apt-get install -y --force-yes < /tmp/packages.txt &&\
+  rm /etc/apt/sources.list.d/inetsim.list &&\
   rm /tmp/packages.txt  &&\
   apt-get clean
 

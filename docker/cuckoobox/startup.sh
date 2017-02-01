@@ -44,11 +44,15 @@ echo "export LIBVIRT_DEFAULT_URI=qemu:///system" >> /home/sandbox/.bashrc
 export CONTAINER_IP=`ifconfig eth0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`
 export CUCKOO_BASE=/opt/sandbox/cuckoo
 
+# Disable slow ntpdate updating
+rm /etc/network/if-up.d/ntpdate
+
 # Seems like there are issues running things in the container from /usr/sbin
 # Moving libvirt and tcpdump for now..
 mv /usr/sbin/libvirtd /usr/bin/libvirtd
 ln -s  /usr/bin/libvirtd /usr/sbin/libvirtd
 
+sleep 2
 /usr/sbin/virtlogd -d
 sleep 2
 /usr/sbin/libvirtd -d
@@ -84,14 +88,27 @@ echo 'auth_tcp = "none"' >> /etc/libvirt/libvirtd.conf
 echo "Config file: $CFG_PATH" >> $LOG
 echo "Running bootstrap.py" >> $LOG
 
-INETSIM_IP=`getent hosts inetsim | awk '{print $1}'`
 echo "Metadata file: $VM_META" >> $LOG
 # Run startup.py for cuckoo-specific bootstrapping
-python /opt/sandbox/bootstrap.py --ramdisk $TMPFS_DIR --fake-net-ip $INETSIM_IP --network-type custom --meta $VM_META >> $LOG 2>&1
+python /opt/sandbox/bootstrap.py --ramdisk $TMPFS_DIR --meta $VM_META >> $LOG 2>&1
 
 if [[ $? -eq 1 ]]; then
     cat $LOG
     exit 127
+fi
+
+# Bootstrap.py makes the fake inetsim interface, if needed
+# Need our IP for the inetsim config file
+export INETSIM_IP=`ifconfig inetsim0 | grep "inet addr" | cut -d ":" -f 2 | cut -d ' ' -f 1`
+if [[ ! -z $INETSIM_IP ]]; then
+    sed -e "s/{{ interface_address }}/$INETSIM_IP/" $CONF_PATH/inetsim.conf.template > /etc/inetsim/inetsim.conf
+    cat << EOF >> $SUPERVISORD_CONF
+
+[program:inetsim]
+directory=/etc/inetsim
+command=/bin/bash ${CONF_PATH}/run.sh
+restart=always"
+EOF
 fi
 
 # Drop our custom libvirtd configuration

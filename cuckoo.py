@@ -15,6 +15,8 @@ from assemblyline.al.common.result import Result, ResultSection
 from assemblyline.common.exceptions import RecoverableError, NonRecoverableError
 from assemblyline.al.service.base import ServiceBase
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
+from assemblyline.al.common import forge
+
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -139,16 +141,13 @@ class Cuckoo(ServiceBase):
     SERVICE_SAFE_START = True
 
     SERVICE_DEFAULT_CONFIG = {
-        "cuckoo_image": "cuckoo/cuckoobox",
-        "cuckoo_tag": "latest",
-        "inetsim_image": "cuckoo/inetsim",
-        "inetsim_tag": "latest",
+        "cuckoo_image": "cuckoo/cuckoobox:latest",
         "vm_meta": "cuckoo.config",
         "REMOTE_DISK_ROOT": "var/support/vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
-        "ramdisk_size": "3072M",
-        "ram_limit": "4096m"
+        "ramdisk_size": "2048M",
+        "ram_limit": "3072m"
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -200,6 +199,13 @@ class Cuckoo(ServiceBase):
             "type": "bool",
             "value": False,
         },
+        {
+            "default": "inetsim",
+            "list": ["inetsim", "gateway"],
+            "name": "routing",
+            "type": "list",
+            "value": "inetsim",
+        }
     ]
 
     def __init__(self, cfg=None):
@@ -211,7 +217,6 @@ class Cuckoo(ServiceBase):
         self.vm_xml = None
         self.vm_snapshot_xml = None
         self.vm_meta = None
-        self.cuckoo_server_ip = None
         self.file_name = None
         self.base_url = None
         self.submit_url = None
@@ -226,39 +231,53 @@ class Cuckoo(ServiceBase):
         self.cuckoo_task = None
         self.al_report = None
         self.session = None
+        self.enabled_routes = None
 
-    # noinspection PyUnresolvedReferences
+        # noinspection PyUnresolvedReferences
     def import_service_deps(self):
         global generate_al_result, CuckooVmManager, CuckooContainerManager
         from al_services.alsvc_cuckoo.cuckooresult import generate_al_result
         from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
 
-
     def start(self):
         self.vmm = CuckooVmManager(self.cfg)
         self.cm = CuckooContainerManager(self.cfg,
-                                         os.path.join(os.path.dirname(os.path.realpath(__file__))),
                                          self.vmm)
-        self._register_cleanup_op(self.cm.shutdown_operation)
+
+        map(self._register_cleanup_op, self.cm.shutdown_operations)
         self.log.debug("VMM and CM started!")
         # Start the container
         self.cm.start_container()
-        self.cuckoo_server_ip = self.cm.cuckoo_ip
-
         self.file_name = None
-        self.base_url = "http://%s:%s" % (self.cuckoo_server_ip, CUCKOO_API_PORT)
-        self.submit_url = "%s/%s" % (self.base_url, CUCKOO_API_SUBMIT)
-        self.query_task_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_TASK)
-        self.delete_task_url = "%s/%s" % (self.base_url, CUCKOO_API_DELETE_TASK)
-        self.query_report_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_REPORT)
-        self.query_pcap_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_PCAP)
-        self.query_machines_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINES)
-        self.query_machine_info_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINE_INFO)
+        base_url = "http://%s:%s" % (self.cm.cuckoo_contexts[0]['cuckoo_ip'], CUCKOO_API_PORT)
+        self.submit_url = "%s/%s" % (base_url, CUCKOO_API_SUBMIT)
+        self.query_task_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_TASK)
+        self.delete_task_url = "%s/%s" % (base_url, CUCKOO_API_DELETE_TASK)
+        self.query_report_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_REPORT)
+        self.query_pcap_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_PCAP)
+        self.query_machines_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINES)
+        self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
 
-    def find_machine(self, full_tag):
+        for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
+            if param['name'] == "routing":
+                self.enabled_routes = param['list']
+                if self.enabled_routes[0] != param['default']:
+                    self.enabled_routes.remove(param['default'])
+                    self.enabled_routes.insert(0, param['default'])
+
+        if self.enabled_routes is None:
+            raise ValueError("No routing submission_parameter.")
+        self.log.debug("Cuckoo started!")
+
+    def find_machine(self, full_tag, route):
         # substring search
         vm_list = Counter()
-        for tag, vm_name in self.cm.tag_map.iteritems():
+        if route not in self.cm.tag_map or route not in self.enabled_routes:
+            self.log.debug("Invalid route selected for Cuckoo submission. Chosen: %s, permitted: %s, enabled: %s" %
+                           (route, self.enabled_routes, self.cm.tag_map.keys()))
+            return None
+
+        for tag, vm_name in self.cm.tag_map[route].iteritems():
             if tag == "default":
                 vm_list[vm_name] += 0
                 continue
@@ -279,7 +298,6 @@ class Cuckoo(ServiceBase):
             self.log.debug("Cuckoo is exiting because it currently does not execute on great great grand children.")
             request.set_save_result(False)
             return
-
         self.session = requests.Session()
         self.task = request.task
         request.result = Result()
@@ -360,7 +378,12 @@ class Cuckoo(ServiceBase):
         if request.get_param('no_monitor', False):
             task_options.append("free=yes")
 
-        select_machine = self.find_machine(self.task.tag)
+        routing = request.get_param('routing', None)
+        if routing is None:
+            routing = self.enabled_routes[0]
+
+        select_machine = self.find_machine(self.task.tag, routing)
+
         if select_machine is None:
             # No matching VM and no default
             self.log.debug("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)
@@ -553,7 +576,7 @@ class Cuckoo(ServiceBase):
         return None
 
     @retry(wait_fixed=2000)
-    def cuckoo_submit_file(self, file_content, select_machine=None):
+    def cuckoo_submit_file(self, file_content):
         self.log.debug("Submitting file: %s to server %s" % (self.cuckoo_task.file, self.submit_url))
         files = {"file": (self.cuckoo_task.file, file_content)}
 
