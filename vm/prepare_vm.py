@@ -39,13 +39,18 @@ from assemblyline.al.common import forge
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 STARTUP_WAIT = 60
-TEMPLATE_BASE = os.path.join(SCRIPT_DIR, 'templates')
-TEMPLATE_ENVIRONMENT = jinja2.Environment(
-    autoescape=False,
-    loader=jinja2.FileSystemLoader(TEMPLATE_BASE),
-    trim_blocks=False)
-BOOTSTRAP_TEMPLATE_FILE = 'bootstrap_%s_template.jinja2'
-META_TEMPLATE_FILE = 'meta_template.jinja2'
+
+
+class template_loader:
+    BOOTSTRAP_TEMPLATE_FILE = 'bootstrap_%s_template.jinja2'
+    META_TEMPLATE_FILE = 'meta_template.jinja2'
+
+    def __init__(self):
+        TEMPLATE_BASE = os.path.join(SCRIPT_DIR, 'templates')
+        self.TEMPLATE_ENVIRONMENT = jinja2.Environment(
+            autoescape=False,
+            loader=jinja2.FileSystemLoader(self.TEMPLATE_BASE),
+            trim_blocks=False)
 
 
 class VMPrepException(Exception):
