@@ -50,4 +50,12 @@ libvirt-dev
 libvirt-bin
 policykit-1
 yara
-inetsim
+perl
+adduser
+libnet-server-perl
+libnet-dns-perl
+libipc-shareable-perl
+libdigest-sha-perl
+libio-socket-ssl-perl
+openssl
+libiptables-ipv4-ipqueue-perl

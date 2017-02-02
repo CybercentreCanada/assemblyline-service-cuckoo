@@ -16,13 +16,13 @@ WORKDIR /tmp/docker/build
 
 COPY packages.txt /tmp/
 COPY requirements.txt /tmp/
+COPY libs/inetsim_1.2.6-1_all.deb /tmp/inetsim_1.2.6-1_all.deb
 
 # Install the dependencies
-RUN echo "deb http://www.inetsim.org/debian/ binary/" > /etc/apt/sources.list.d/inetsim.list &&\
-  apt-get update &&\
+RUN apt-get update &&\
   xargs apt-get install -y --force-yes < /tmp/packages.txt &&\
-  rm /etc/apt/sources.list.d/inetsim.list &&\
-  rm /tmp/packages.txt  &&\
+  dpkg -i /tmp/inetsim_1.2.6-1_all.deb &&\
+  rm /tmp/packages.txt /tmp/inetsim_1.2.6-1_all.deb &&\
   apt-get clean
 
 # Install Python requirements (using a local deps folder for now..)
