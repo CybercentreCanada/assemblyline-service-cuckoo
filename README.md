@@ -184,36 +184,36 @@ below.
         --guest_profile Win7SP1x86 --template win7 --ordinal 10 --route inetsim
     
 The parameters for prepare_vm.py are:
-* domain
-  * The same as the virt-install --name argument
-* platform
-  * The "Cuckoo platform." Either "windows" or "linux" 
-* hostname
-  * A new hostname for the prepared VM 
-* tags
-  * Comma separated list of tags which map to partial or full tags in common/constraints.py
-  * Cuckoo will favour more specific tags
-  * One VM may include the tag "default" to function as a default.
-* force
-  * Overwrite domain name if needed.
-* base
-  * Subdirectory of /opt/al/var/support/vm/disks/cuckoo/ containing the disk.
-* name
-  * Name of the new domain to create.
-* guest_profile
-  * The volatility profile
-  * A list of all possible guest profiles is available on the 
-  [Volatility website.](https://github.com/volatilityfoundation/volatility/wiki/Volatility%20Usage#selecting-a-profile)
-* template
-  * The prepare_vm template, valid values are "win7", "win10", or "linux"
-* ordinal
-  * A number between 1 and 32000, each prepared virtual machine needs a unique ordinal
-  * This number is turned into an IP address, so any collision between deployed virtual machines may cause undefined 
-  errors
-* route
-  * Either gateway or inetsim
-  * If gateway is chosen, all traffic from the virtual machine will be routed over the internet
-  * If inetsim is chosen, all traffic from the virtual machine will be routed to an inetsim instance 
+  * domain
+    * The same as the virt-install --name argument
+  * platform
+    * The "Cuckoo platform." Either "windows" or "linux" 
+  * hostname
+    * A new hostname for the prepared VM 
+  * tags
+    * Comma separated list of tags which map to partial or full tags in common/constraints.py
+    * Cuckoo will favour more specific tags
+    * One VM may include the tag "default" to function as a default.
+  * force
+    * Overwrite domain name if needed.
+  * base
+    * Subdirectory of /opt/al/var/support/vm/disks/cuckoo/ containing the disk.
+  * name
+    * Name of the new domain to create.
+  * guest_profile
+    * The volatility profile
+    * A list of all possible guest profiles is available on the 
+    [Volatility website.](https://github.com/volatilityfoundation/volatility/wiki/Volatility%20Usage#selecting-a-profile)
+  * template
+    * The prepare_vm template, valid values are "win7", "win10", or "linux"
+  * ordinal
+    * A number between 1 and 32000, each prepared virtual machine needs a unique ordinal
+    * This number is turned into an IP address, so any collision between deployed virtual machines may cause undefined 
+    errors
+  * route
+    * Either gateway or inetsim
+    * If gateway is chosen, all traffic from the virtual machine will be routed over the internet
+    * If inetsim is chosen, all traffic from the virtual machine will be routed to an inetsim instance 
 
 #### Deploy all snapshots to Cuckoo
 

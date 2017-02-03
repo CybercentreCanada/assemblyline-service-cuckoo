@@ -132,7 +132,7 @@ class CuckooTask(dict):
 class Cuckoo(ServiceBase):
     SERVICE_ACCEPTS = "(document/.*|executable/.*|java/.*|code/.*|archive/(zip|rar)|unknown|android/apk)"
     SERVICE_ENABLED = True
-    SERVICE_REVISION = ServiceBase.parse_revision('$Id: c872e3774a3c03dd1129ff832c1741c877683196 $')
+    SERVICE_REVISION = ServiceBase.parse_revision('$Id$')
     SERVICE_STAGE = "CORE"
     SERVICE_TIMEOUT = 800
     SERVICE_CATEGORY = "Dynamic Analysis"
