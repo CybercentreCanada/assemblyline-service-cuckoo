@@ -184,6 +184,7 @@ below.
         --guest_profile Win7SP1x86 --template win7 --ordinal 10 --route inetsim
     
 The parameters for prepare_vm.py are:
+
 * domain
     * The same as the virt-install --name argument
 * platform
