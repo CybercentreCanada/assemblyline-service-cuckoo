@@ -122,7 +122,7 @@ WHITELIST_DROPPED = [
 
 WHITELIST_HASHES = [
 
-    ########### FILE MD5s ############
+    # ########## FILE MD5s ############
 
     # Adobe SharedDataEvents
     'ac6f81bbb302fd4702c0b6c3440a5331',
@@ -149,7 +149,7 @@ WHITELIST_HASHES = [
     # Inetsim exe
     'be5eae9bd85769bce02d6e52a4927bcd',
 
-    ########## OTHER HASHES ###########
+    # ######### OTHER HASHES ###########
 
     # CLSIDs SHA1 for a file that doesn't open, but pops up the
     # 'how do you want to open this file' dialog:

@@ -10,7 +10,8 @@ from assemblyline.al.common import forge
 from assemblyline.al.common.importing import service_by_name
 
 
-class CuckooPrepException(Exception): pass
+class CuckooPrepException(Exception):
+    pass
 
 
 def mod_json_meta(json_file, prepend):
@@ -29,6 +30,7 @@ def trymkdir(path):
         os.makedirs(path)
 
 
+# noinspection PyUnresolvedReferences
 def mod_xml_meta(xml_file, path, new_value):
     dom_root = lxml.etree.fromstring(xml_file)
     node = dom_root.find(path)
@@ -79,6 +81,7 @@ def install_vm_meta(directory, tarball, prefixes):
     tar.close()
 
 
+# noinspection PyBroadException
 def main():
     if len(sys.argv) == 1:
         print "Usage: %s <One or more prepared VM tarballs>"
@@ -87,8 +90,8 @@ def main():
     try:
         svc_class = service_by_name("Cuckoo")
     except:
-        print 'Could not load service "%s".\nValid options:\n%s' % ("Cuckoo",
-                                                            [s['name'] for s in forge.get_datastore().list_services()])
+        print 'Could not load service "%s".\n' \
+              'Valid options:\n%s' % ("Cuckoo", [s['name'] for s in forge.get_datastore().list_services()])
         sys.exit(7)
 
     cfg = forge.get_datastore().get_service(svc_class.SERVICE_NAME).get("config", {})

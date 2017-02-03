@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-import ipaddress
 import argparse
 import guestfs
 import jinja2
@@ -54,6 +53,7 @@ class VMPrepException(Exception):
 lv = None
 retries = 3
 while retries >= 0:
+    # noinspection PyBroadException
     try:
         lv = libvirt.open(None)
         break
@@ -136,11 +136,11 @@ def _purge_domain(domain):
     log.info("Domain %s has been purged", domain)
 
 
-def prepare_vm(route, domain, snapshot_name, snapshot_base, ip, gateway, netmask, network,
+def prepare_vm(route, domain, snapshot_name, snapshot_base, ip, gateway, netmask_vm, network,
                fakenet, hostname, dns_ip, platform, tags, force, guest_profile, template):
     log.info("VMPREP initiated for snapshot: %s -- domain: %s", snapshot_name, domain)
     log.info("VM Data: ip:%s, gateway:%s, netmask:%s, hostname:%s, dns:%s, platform:%s, tags:%s",
-             ip, gateway, netmask, hostname, dns_ip, platform, tags)
+             ip, gateway, netmask_vm, hostname, dns_ip, platform, tags)
     dom = lv.lookupByName(domain)
     # Make sure the domain we're going to snapshot exists
     if not dom:
@@ -174,7 +174,7 @@ def prepare_vm(route, domain, snapshot_name, snapshot_base, ip, gateway, netmask
     bootstrap_context = {
         "ip": ip,
         "gateway": gateway,
-        "netmask": netmask,
+        "netmask": netmask_vm,
         "hostname": hostname,
         "dns_ip": dns_ip,
     }
@@ -230,7 +230,7 @@ def prepare_vm(route, domain, snapshot_name, snapshot_base, ip, gateway, netmask
         "xml": snapshot_xml_filename,
         "snapshot_xml": snapshot_snap_xml_filename,
         "ip": ip,
-        "netmask": netmask,
+        "netmask": netmask_vm,
         "network": network,
         "fakenet": fakenet,
         "gateway": gateway,
@@ -319,7 +319,7 @@ if __name__ == "__main__":
     # Validate route
     enabled_routes = None
 
-    for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
+    for param in forge.get_datastore().get_service("Cuckoo")['submission_params']:
         if param['name'] == "routing":
             enabled_routes = param['list']
 
