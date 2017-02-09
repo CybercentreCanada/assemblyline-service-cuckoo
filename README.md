@@ -90,27 +90,27 @@ Once the operating system has been installed, perform the following setup.
 * Set the user account to automatically login
 * Copy agent.py from the cuckoo repository to the main users home directory in the virtual machine
 * Set `sudo ~/agent.py` and `bash /bootstrap.sh` to run on login
-  * This step will depend on window manager, but the command `gnome-session-manager` works for gnome
+    * This step will depend on window manager, but the command `gnome-session-manager` works for gnome
 * Install the following packages on the virtual machine: systemtap, gcc, linux-headers-$(uname -r)
 * Copy `data/strace.stp` onto the virtual machine
 * Run `sudo stap -k 4 -r $(uname -r) strace.stp -m stap_ -v`
 * Place stap_.ko into /root/.cuckoo/
 * Uninstall the following packages which cause extraneous network noise:
-  * software-center
-  * update-notifier
-  * oneconf
-  * update-manager
-  * update-manager-core
-  * ubuntu-release-upgrader-core
-  * whoopsie
-  * ntpdate
-  * cups-daemon
-  * avahi-autoipd
-  * avahi-daemon
-  * avahi-utils
-  * account-plugin-salut
-  * libnss-mdns
-  * telepathy-salut
+    * software-center
+    * update-notifier
+    * oneconf
+    * update-manager
+    * update-manager-core
+    * ubuntu-release-upgrader-core
+    * whoopsie
+    * ntpdate
+    * cups-daemon
+    * avahi-autoipd
+    * avahi-daemon
+    * avahi-utils
+    * account-plugin-salut
+    * libnss-mdns
+    * telepathy-salut
 * Delete `/etc/network/if-up.d/ntpdate`
 * Add `net.ipv6.conf.all.disable_ipv6 = 1` to /etc/sysctl.conf
 * Edit `/etc/init/procps.conf`, changing the "start on" line to `start on runlevel [0123456]`
