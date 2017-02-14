@@ -48,9 +48,8 @@ class PrepareVM:
 
     def _upload_file(self, contents, guest_disk_path, guest_disk_format, dest_filename):
         self.log.info("Uploading file -- disk: %s -- path: %s", guest_disk_path, dest_filename)
-        dest_filepath, dest_filename = os.path.split(dest_filename)
-        if dest_filepath == "":
-            dest_filepath = "/"
+        dest_filepath = "/"
+        dest_filename = dest_filename
 
         g = guestfs.GuestFS(python_return_dict=True)
         g.add_drive(filename=guest_disk_path, format=guest_disk_format)
@@ -112,7 +111,7 @@ class PrepareVM:
         parser.add_argument('--platform', action='store', help="Guest OS platform (windows,linux)",
                             dest='platform', required=True)
         parser.add_argument('--name', action='store', help="Output snapshot name",
-                            default="snapshot", dest='name', required=False)
+                            default="snapshot", dest='snapshot_name', required=True)
         parser.add_argument('--hostname', action='store', help="Guest hostname",
                             dest='hostname', required=True)
         parser.add_argument('--tags', action='store', help="Comma-separated list of tags describing the vm",
@@ -175,6 +174,7 @@ class PrepareVM:
         fmt = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         sh.setFormatter(fmt)
         self.log.addHandler(sh)
+        self.SERVICE_NAME = "Cuckoo"
 
         if os.geteuid() != 0:
             self.log.error("root privileges required to run this script..")
@@ -190,14 +190,14 @@ class PrepareVM:
         last_exception = None
         for i in xrange(3):
             try:
-                lv = libvirt.open(None)
-                if lv is not None:
+                self.lv = libvirt.open(None)
+                if self.lv is not None:
                     break
             except:
                 last_exception = traceback.format_exc()
             time.sleep(3)
 
-        if lv is None:
+        if self.lv is None:
             raise self.VMPrepException("Unable to acquire libvirt connection.. this is fatal:\n%s" % last_exception)
 
     def render_bootstrap_files(self, template, context):
@@ -239,7 +239,8 @@ class PrepareVM:
                                            "destroy this domain, the corresponding snapshots and the disk image, "
                                            "re-run this script with the --force flag" % snapshot_name)
         else:
-            self.log.debug("Snapshot not in domain list %s", str(snapshot_name, self.lv.listDefinedDomains()))
+            self.log.debug("Snapshot %s not in domain list %s" % (snapshot_name, self.lv.listDefinedDomains()))
+        return dom
 
     def prepare_vm(self):
         if self.args is None:
@@ -247,7 +248,7 @@ class PrepareVM:
             exit(7)
         self.log.info("VMPREP initiated for snapshot: %s -- domain: %s", self.args.snapshot_name, self.args.domain)
         self.log.info("VM Data: ip:%s, gateway:%s, netmask:%s, hostname:%s, dns:%s, platform:%s, tags:%s",
-                      self.args.ip, self.args.gateway, self.args.netmask, self.args.hostname, self.args.dns_ip,
+                      self.args.vm_ip, self.args.vm_gateway, self.args.netmask, self.args.hostname, self.args.dns,
                       self.args.platform, self.args.tags)
 
         dom = self.validate_domain(self.args.domain, self.args.snapshot_name, self.args.force)
@@ -268,16 +269,16 @@ class PrepareVM:
 
         # Upload the bootstrap file
         bootstrap_context = {
-            "ip":       self.args.ip,
-            "gateway":  self.args.gateway,
+            "ip":       self.args.vm_ip,
+            "gateway":  self.args.vm_gateway,
             "netmask":  self.args.netmask,
             "hostname": self.args.hostname,
-            "dns_ip":   self.args.dns_ip,
+            "dns_ip":   self.args.dns,
         }
 
         timeout, file_list = self.render_bootstrap_files(self.args.template, bootstrap_context)
 
-        for fname, contents in file_list:
+        for fname, contents in file_list.iteritems():
             self._upload_file(contents, snapshot_disk, disk_driver, fname)
 
         # Create the snapshot disk's xml file from the base disk's xml, then use it to define a new domain.
@@ -301,10 +302,10 @@ class PrepareVM:
             waited += 2
             if waited >= max_wait:
                 raise self.VMPrepException("Domain %s did not shut down within timeout. "
-                                           "Bootstrapping failed." % self.snapshot_name)
+                                           "Bootstrapping failed." % self.args.snapshot_name)
 
         # Reboot the bootstrapped domain and take a snapshot
-        self.log.info("Rebooting domain %s to take snapshot.. (approximately %d seconds)", self.snapshot_name, timeout)
+        self.log.info("Rebooting domain %s to take snapshot.. (approximately %d seconds)", self.args.snapshot_name, timeout)
         time.sleep(5)
         snapshot_domain.create()
         time.sleep(timeout)
@@ -319,15 +320,15 @@ class PrepareVM:
         # Populate the snapshot metadata
         metadata_context = {
             "name":     self.args.snapshot_name,
-            "base":     self.args.snapshot_base,
+            "base":     self.args.base,
             "disk":     snapshot_disk_name,
             "xml":      snapshot_xml_filename,
             "snapshot_xml": snapshot_snap_xml_filename,
-            "ip":       self.args.ip,
+            "ip":       self.args.vm_ip,
             "netmask":  self.args.netmask,
-            "network":  self.args.network,
-            "fakenet":  self.args.fakenet,
-            "gateway":  self.args.gateway,
+            "network":  self.args.vm_network,
+            "fakenet":  self.args.vm_fakenet,
+            "gateway":  self.args.vm_gateway,
             "tags":     self.args.tags,
             "platform": self.args.platform,
             "guest_profile": self.args.guest_profile,
