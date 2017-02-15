@@ -239,6 +239,16 @@ class Cuckoo(ServiceBase):
         from al_services.alsvc_cuckoo.cuckooresult import generate_al_result
         from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
 
+    def set_urls(self):
+        base_url = "http://%s:%s" % (self.cm.cuckoo_contexts[0]['cuckoo_ip'], CUCKOO_API_PORT)
+        self.submit_url = "%s/%s" % (base_url, CUCKOO_API_SUBMIT)
+        self.query_task_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_TASK)
+        self.delete_task_url = "%s/%s" % (base_url, CUCKOO_API_DELETE_TASK)
+        self.query_report_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_REPORT)
+        self.query_pcap_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_PCAP)
+        self.query_machines_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINES)
+        self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
+
     def start(self):
         self.vmm = CuckooVmManager(self.cfg)
         self.cm = CuckooContainerManager(self.cfg,
@@ -249,14 +259,7 @@ class Cuckoo(ServiceBase):
         # Start the container
         self.cm.start_container()
         self.file_name = None
-        base_url = "http://%s:%s" % (self.cm.cuckoo_contexts[0]['cuckoo_ip'], CUCKOO_API_PORT)
-        self.submit_url = "%s/%s" % (base_url, CUCKOO_API_SUBMIT)
-        self.query_task_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_TASK)
-        self.delete_task_url = "%s/%s" % (base_url, CUCKOO_API_DELETE_TASK)
-        self.query_report_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_REPORT)
-        self.query_pcap_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_PCAP)
-        self.query_machines_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINES)
-        self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
+        self.set_urls()
 
         for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
             if param['name'] == "routing":
@@ -292,6 +295,14 @@ class Cuckoo(ServiceBase):
             pick = vm_list.most_common(1)[0][0]
 
         return pick
+
+    def trigger_cuckoo_reset(self):
+        self.log.warn("Forcing docker container reboot due to Cuckoo failure.")
+        self.cm.stop()
+        self.cm.start_container()
+        self.set_urls()
+        if not self.is_cuckoo_ready():
+            raise RecoverableError("While restarting Cuckoo, Cuckoo never came back up.")
 
     # noinspection PyTypeChecker
     def execute(self, request):
@@ -400,8 +411,11 @@ class Cuckoo(ServiceBase):
                                       **kwargs)
 
         if not self.is_cuckoo_ready():
-            self.session.close()
-            raise RecoverableError("Cuckoo was not ready to accept a new sample. Is a VM hung or disabled?")
+            try:
+                self.trigger_cuckoo_reset()
+            except RecoverableError:
+                self.session.close()
+                raise
 
         try:
             self.cuckoo_submit(file_content)
@@ -430,6 +444,7 @@ class Cuckoo(ServiceBase):
 
                 except Exception as e:
                     # This is non-recoverable unless we were stopped during processing
+                    self.trigger_cuckoo_reset()
                     if not self.should_run:
                         raise RecoverableError("Cuckoo stopped during result processing..")
                     else:
@@ -439,6 +454,9 @@ class Cuckoo(ServiceBase):
 
                 if generate_report is True:
                     self.log.debug("Generating cuckoo report tar.gz.")
+
+                    self.last_error_time = None
+
                     # Submit cuckoo analysis report archive as a supplementary file
                     tar_report = self.cuckoo_query_report(self.cuckoo_task.id, fmt='all', params={'tar': 'gz'})
                     if tar_report is not None:
@@ -468,8 +486,8 @@ class Cuckoo(ServiceBase):
                     self.download_memdump('fullmemdump')
             else:
                 # We didn't get a report back.. cuckoo has failed us
-
                 if self.should_run:
+                    self.trigger_cuckoo_reset()
                     self.log.info("Raising recoverable error for running job.")
                     raise RecoverableError("Unable to retrieve cuckoo report. The following errors were detected: %s" %
                                            safe_str(self.cuckoo_task.errors))
