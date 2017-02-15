@@ -90,27 +90,27 @@ Once the operating system has been installed, perform the following setup.
 * Set the user account to automatically login
 * Copy agent.py from the cuckoo repository to the main users home directory in the virtual machine
 * Set `sudo ~/agent.py` and `bash /bootstrap.sh` to run on login
-  * This step will depend on window manager, but the command `gnome-session-manager` works for gnome
+    * This step will depend on window manager, but the command `gnome-session-manager` works for gnome
 * Install the following packages on the virtual machine: systemtap, gcc, linux-headers-$(uname -r)
 * Copy `data/strace.stp` onto the virtual machine
 * Run `sudo stap -k 4 -r $(uname -r) strace.stp -m stap_ -v`
 * Place stap_.ko into /root/.cuckoo/
 * Uninstall the following packages which cause extraneous network noise:
-  * software-center
-  * update-notifier
-  * oneconf
-  * update-manager
-  * update-manager-core
-  * ubuntu-release-upgrader-core
-  * whoopsie
-  * ntpdate
-  * cups-daemon
-  * avahi-autoipd
-  * avahi-daemon
-  * avahi-utils
-  * account-plugin-salut
-  * libnss-mdns
-  * telepathy-salut
+    * software-center
+    * update-notifier
+    * oneconf
+    * update-manager
+    * update-manager-core
+    * ubuntu-release-upgrader-core
+    * whoopsie
+    * ntpdate
+    * cups-daemon
+    * avahi-autoipd
+    * avahi-daemon
+    * avahi-utils
+    * account-plugin-salut
+    * libnss-mdns
+    * telepathy-salut
 * Delete `/etc/network/if-up.d/ntpdate`
 * Add `net.ipv6.conf.all.disable_ipv6 = 1` to /etc/sysctl.conf
 * Edit `/etc/init/procps.conf`, changing the "start on" line to `start on runlevel [0123456]`
@@ -184,36 +184,36 @@ below.
         --guest_profile Win7SP1x86 --template win7 --ordinal 10 --route inetsim
     
 The parameters for prepare_vm.py are:
+
 * domain
-  * The same as the virt-install --name argument
+    * The same as the virt-install --name argument
 * platform
-  * The "Cuckoo platform." Either "windows" or "linux" 
+    * The "Cuckoo platform." Either "windows" or "linux" 
 * hostname
-  * A new hostname for the prepared VM 
+    * A new hostname for the prepared VM 
 * tags
-  * Comma separated list of tags which map to partial or full tags in common/constraints.py
-  * Cuckoo will favour more specific tags
-  * One VM may include the tag "default" to function as a default.
+    * Comma separated list of tags which map to partial or full tags in common/constraints.py
+    * Cuckoo will favour more specific tags
+    * One VM may include the tag "default" to function as a default.
 * force
-  * Overwrite domain name if needed.
+    * Overwrite domain name if needed.
 * base
-  * Subdirectory of /opt/al/var/support/vm/disks/cuckoo/ containing the disk.
+    * Subdirectory of /opt/al/var/support/vm/disks/cuckoo/ containing the disk.
 * name
-  * Name of the new domain to create.
+    * Name of the new domain to create.
 * guest_profile
-  * The volatility profile
-  * A list of all possible guest profiles is available on the 
-  [Volatility website.](https://github.com/volatilityfoundation/volatility/wiki/Volatility%20Usage#selecting-a-profile)
+    * The volatility profile
+    * A list of all possible guest profiles is available on the [Volatility website.](https://github.com/volatilityfoundation/volatility/wiki/Volatility%20Usage#selecting-a-profile)
 * template
-  * The prepare_vm template, valid values are "win7", "win10", or "linux"
+    * The prepare_vm template, valid values are "win7", "win10", or "linux"
 * ordinal
-  * A number between 1 and 32000, each prepared virtual machine needs a unique ordinal
-  * This number is turned into an IP address, so any collision between deployed virtual machines may cause undefined 
+    * A number between 1 and 32000, each prepared virtual machine needs a unique ordinal
+    * This number is turned into an IP address, so any collision between deployed virtual machines may cause undefined 
   errors
 * route
-  * Either gateway or inetsim
-  * If gateway is chosen, all traffic from the virtual machine will be routed over the internet
-  * If inetsim is chosen, all traffic from the virtual machine will be routed to an inetsim instance 
+    * Either gateway or inetsim
+    * If gateway is chosen, all traffic from the virtual machine will be routed over the internet
+    * If inetsim is chosen, all traffic from the virtual machine will be routed to an inetsim instance 
 
 #### Deploy all snapshots to Cuckoo
 

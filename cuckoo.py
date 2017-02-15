@@ -12,11 +12,10 @@ from collections import Counter
 from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.al.common.result import Result, ResultSection
-from assemblyline.common.exceptions import RecoverableError, NonRecoverableError
+from assemblyline.common.exceptions import RecoverableError
 from assemblyline.al.service.base import ServiceBase
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.al.common import forge
-
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -87,7 +86,8 @@ def _retry_on_conn_error(exception):
 def _retry_on_none(result):
     return result is None
 
-'''
+
+"""
     The following parameters are available for customization before sending a task to the cuckoo server:
 
     * ``file`` *(required)* - sample file (multipart encoded file content)
@@ -102,7 +102,7 @@ def _retry_on_none(result):
     * ``memory`` *(optional)* - enable the creation of a full memory dump of the analysis machine
     * ``enforce_timeout`` *(optional)* - enable to enforce the execution for the full timeout value
     * ``clock`` *(optional)* - set virtual machine clock (format %m-%d-%Y %H:%M:%S)
-'''
+"""
 
 
 class CuckooTask(dict):
@@ -233,7 +233,7 @@ class Cuckoo(ServiceBase):
         self.session = None
         self.enabled_routes = None
 
-        # noinspection PyUnresolvedReferences
+    # noinspection PyUnresolvedReferences
     def import_service_deps(self):
         global generate_al_result, CuckooVmManager, CuckooContainerManager
         from al_services.alsvc_cuckoo.cuckooresult import generate_al_result
@@ -293,6 +293,7 @@ class Cuckoo(ServiceBase):
 
         return pick
 
+    # noinspection PyTypeChecker
     def execute(self, request):
         if request.task.depth > 3:
             self.log.debug("Cuckoo is exiting because it currently does not execute on great great grand children.")
@@ -537,8 +538,8 @@ class Cuckoo(ServiceBase):
         self.log.info("Service is being stopped; removing all running containers and metadata..")
         self.cm.stop()
 
-    @retry(wait_fixed=CUCKOO_POLL_DELAY*1000,
-           stop_max_attempt_number=CUCKOO_MAX_TIMEOUT/CUCKOO_POLL_DELAY,
+    @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
+           stop_max_attempt_number=CUCKOO_MAX_TIMEOUT / CUCKOO_POLL_DELAY,
            retry_on_result=_retry_on_none)
     def cuckoo_poll_report(self):
 
@@ -697,7 +698,7 @@ class Cuckoo(ServiceBase):
         if result:
             for sandbox in result:
                 if ((sandbox["status"] == u"poweroff" or sandbox["status"] == u"saved" or sandbox["status"] is None) and
-                   sandbox["locked"] == False):
+                        not sandbox["locked"]):
                     return False
         return True
 

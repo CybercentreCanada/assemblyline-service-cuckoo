@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-import ipaddress
 import argparse
 import guestfs
 import jinja2

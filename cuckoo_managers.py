@@ -1,15 +1,14 @@
-import jinja2
 import json
 import logging
 import os
 from os.path import join
 import shlex
-import shutil
 import subprocess
 import uuid
 from assemblyline.al.common import forge
 
 config = forge.get_config()
+
 
 class CuckooDockerException(Exception):
     pass
@@ -50,7 +49,8 @@ class CuckooContainerManager(object):
         self.tag_map = self.parse_vm_meta(self.vmm.vm_meta)
         self.container_ips = []
 
-    def parse_vm_meta(self, vm_meta):
+    @staticmethod
+    def parse_vm_meta(vm_meta):
         tag_set = {}
         for vm in vm_meta:
             if vm['route'] not in tag_set:

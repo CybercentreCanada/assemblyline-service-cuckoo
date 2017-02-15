@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import os
-
 
 def install(alsi):
     alsi.install_docker()
