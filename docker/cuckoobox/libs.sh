@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 
+mkdir -p libs/cuckoo
+
+# Collect inetsim
+wget -O libs/inetsim_1.2.6-1_all.deb http://www.inetsim.org/debian/binary/inetsim_1.2.6-1_all.deb
+
 # Collect cuckoo
 echo "Cloning..."
-mkdir -p libs/cuckoo
 git clone https://github.com/cuckoosandbox/cuckoo.git libs/cuckoo/cuckoo
 git clone https://github.com/cuckoosandbox/community.git libs/cuckoo/community
 git clone https://github.com/cuckoosandbox/monitor.git libs/cuckoo/monitor
