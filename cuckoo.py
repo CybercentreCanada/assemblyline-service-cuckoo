@@ -435,8 +435,8 @@ class Cuckoo(ServiceBase):
                     self.log.debug("Generating AL Result from Cuckoo results..")
                     success = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
-                                                 self.SERVICE_CLASSIFICATION,
-                                                 file_ext)
+                                                 file_ext,
+                                                 self.SERVICE_CLASSIFICATION)
                     if success is False:
                         err_str = self.get_errors()
                         raise CuckooProcessingException("Cuckoo was unable to process this file. %s",
@@ -500,7 +500,7 @@ class Cuckoo(ServiceBase):
             self.session.close()
 
             # Send the exception off to ServiceBase
-            raise e
+            raise
 
         # Delete and exit
         if self.cuckoo_task and self.cuckoo_task.id is not None:
