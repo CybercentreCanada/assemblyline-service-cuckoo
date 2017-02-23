@@ -20,6 +20,7 @@ WHITELIST_DOMAINS = {
     'Microsoft IPv4To6': '.*\.?teredo.ipv6.microsoft.com',
     'Microsoft IPv4 Check': 'www.msftncsi.com',
     'Microsoft IPv6 Check': 'ipv6.msftncsi.com',
+    'Microsoft CRL server': 'crl.microsoft.com',
     'TCP Local': '.*\.local',
     'Unix Local': 'local',
     'Windows': '.*\.windows.com',
