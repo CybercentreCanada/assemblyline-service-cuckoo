@@ -139,7 +139,7 @@ class CuckooVmManager(object):
             self.fetch_disk(disk_base, parent, recursion-1)
 
     def download_xml(self, vm):
-        local_meta_dir = join(self.local_meta_root, vm['name'])
+        local_meta_dir = self.local_meta_root
         if not os.path.exists(local_meta_dir):
             os.makedirs(local_meta_dir)
 
@@ -152,7 +152,7 @@ class CuckooVmManager(object):
 
         self.local_vm_root = join(config.workers.virtualmachines.disk_root, cfg['LOCAL_DISK_ROOT'])
         self.local_meta_root = join(config.system.root, cfg['LOCAL_VM_META_ROOT'])
-        self.remote_root = join(config.system.root, cfg['REMOTE_DISK_ROOT'])
+        self.remote_root = cfg['REMOTE_DISK_ROOT']
         self.vm_meta_path = join(self.local_meta_root, cfg['vm_meta'])
 
         # Download Metadata
@@ -170,6 +170,7 @@ class CuckooVmManager(object):
 
     def _fetch_meta(self, fname, local_path):
         remote_path = join(self.remote_root, fname)
+        local_path = join(local_path, fname)
         try:
             self.transport.download(remote_path, local_path)
         except:

@@ -140,14 +140,14 @@ class PrepareVM:
             self.log.error("Ordinal out of range")
             exit(7)
 
-        # Validate route
-        enabled_routes = None
+        # Validate route, inetsim is built in
+        enabled_routes = ['inetsim']
 
         for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
             if param['name'] == "routing":
                 enabled_routes = param['list']
 
-        if enabled_routes is None:
+        if not isinstance(enabled_routes, list):
             self.log.error("No routing submission_parameter.")
             exit(7)
 

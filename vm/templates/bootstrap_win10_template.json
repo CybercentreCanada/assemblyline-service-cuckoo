@@ -1,6 +1,6 @@
 {
   "timeout": 120,
-  "files":[
+  "files":
     {
       "/bootstrap.bat": {
         "render": true,
@@ -13,7 +13,6 @@
         ]
       }
     }
-  ]
 }
 
 
