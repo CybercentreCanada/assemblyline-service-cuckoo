@@ -225,6 +225,9 @@ you will also need to run prepare_cuckoo.py again.
 
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
     sudo -u al PYTHONPATH=$PYTHONPATH ./prepare_cuckoo.py *.tar.gz
+    
+This is all that's needed for Assemblyline deployments on single node appliances. To deploy Assemblyline in a cluster, 
+Move all the files in /opt/al/var/support/vm/disks/cuckoo/ to the vm/disks/cuckoo folder on the support server.
 
 ### DEBUGGING
 

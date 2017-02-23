@@ -118,7 +118,7 @@ def main():
             separators=(',', ': ')
         )
 
-    print "Wrote %i Definitions!" % len(cuckoo_config)
+    print "Wrote %i Definitions to %s!" % (len(cuckoo_config), out_config)
 
 if __name__ == "__main__":
     main()
