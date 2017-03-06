@@ -296,13 +296,12 @@ class Cuckoo(ServiceBase):
 
         return pick
 
-    def trigger_cuckoo_reset(self):
+    def trigger_cuckoo_reset(self, retry_cnt=30):
         self.log.warn("Forcing docker container reboot due to Cuckoo failure.")
         self.cm.stop()
         self.cm.start_container()
         self.set_urls()
-        if not self.is_cuckoo_ready():
-            raise RecoverableError("While restarting Cuckoo, Cuckoo never came back up.")
+        return self.is_cuckoo_ready(retry_cnt)
 
     # noinspection PyTypeChecker
     def execute(self, request):
@@ -411,11 +410,10 @@ class Cuckoo(ServiceBase):
                                       **kwargs)
 
         if not self.is_cuckoo_ready():
-            try:
-                self.trigger_cuckoo_reset()
-            except RecoverableError:
+            cuckoo_up = self.trigger_cuckoo_reset()
+            if not cuckoo_up:
                 self.session.close()
-                raise
+                raise CuckooProcessingException("While restarting Cuckoo, Cuckoo never came back up.")
 
         try:
             self.cuckoo_submit(file_content)
@@ -439,12 +437,16 @@ class Cuckoo(ServiceBase):
                                                  self.SERVICE_CLASSIFICATION)
                     if success is False:
                         err_str = self.get_errors()
+                        if "Machinery error: Unable to restore snapshot" in err_str:
+                            self.trigger_cuckoo_reset(1)
+                            raise RecoverableError("Cuckoo is restarting container: %s", err_str)
+
                         raise CuckooProcessingException("Cuckoo was unable to process this file. %s",
                                                         err_str)
 
                 except Exception as e:
                     # This is non-recoverable unless we were stopped during processing
-                    self.trigger_cuckoo_reset()
+                    self.trigger_cuckoo_reset(1)
                     if not self.should_run:
                         raise RecoverableError("Cuckoo stopped during result processing..")
                     else:
@@ -487,7 +489,7 @@ class Cuckoo(ServiceBase):
             else:
                 # We didn't get a report back.. cuckoo has failed us
                 if self.should_run:
-                    self.trigger_cuckoo_reset()
+                    self.trigger_cuckoo_reset(5)
                     self.log.info("Raising recoverable error for running job.")
                     raise RecoverableError("Unable to retrieve cuckoo report. The following errors were detected: %s" %
                                            safe_str(self.cuckoo_task.errors))
@@ -720,23 +722,24 @@ class Cuckoo(ServiceBase):
                     return False
         return True
 
-    def is_cuckoo_ready(self):
+    def is_cuckoo_ready(self, retry_cnt=30):
         # In theory, we should always have a VM available since we're matched 1:1; in practice, we sometimes
         # have to wait.
         ready = False
-        waited = 0
-        max_wait = 30
+        attempts = 0
         while not ready:
             if not self.should_run:
                 return False
             try:
                 ready = self.cuckoo_query_machines()
+                if ready:
+                    return ready
             except:
                 # pass, since the api might not even be up yet
                 pass
             time.sleep(1)
-            waited += 1
-            if waited >= max_wait:
+            attempts += 1
+            if attempts >= retry_cnt:
                 return False
         return ready
 
