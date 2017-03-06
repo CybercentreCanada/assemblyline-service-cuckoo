@@ -2,52 +2,36 @@ import json
 import logging
 import os
 from os.path import join
-import shlex
 import subprocess
-import uuid
+
+from assemblyline.common.docker import DockerException, DockerManager
 from assemblyline.al.common import forge
 
 config = forge.get_config()
 
 
-class CuckooDockerException(Exception):
-    pass
+class CuckooContainerManager(DockerManager):
+    def __init__(self, cfg, vmm):
+        super(CuckooContainerManager, self).__init__('cuckoo', 'assemblyline.al.service.cuckoo.cm')
 
+        ctx = {
+            'image': cfg['cuckoo_image'],
+            'privileged': True,
+            'detatch': True,
+            'caps': ['ALL'],
+            'ram': cfg['ram_limit'],
+            'volumes': [
+                    (vmm.local_meta_root, "/opt/vm_meta", "ro"),
+                    (vmm.local_vm_root, "/var/lib/libvirt/images", "ro")
+                ],
+            'commandline': [os.path.split(cfg['vm_meta'])[1], cfg['ramdisk_size']]
+        }
+        self.name = self.add_container(ctx)
+        self.ip = None
+        self.tag_map = self.parse_vm_meta(vmm.vm_meta)
 
-class CuckooContainerManager(object):
-    def __init__(self, cfg, vmm, stop_on_exit=True):
-        self.log = logging.getLogger('assemblyline.al.service.cuckoo.cm')
-        self.stop_on_exit = stop_on_exit
-        self.container = None
-        self.container_info = None
-        registry_host = config.installation.docker.private_registry
-        self.vm_meta = os.path.split(cfg['vm_meta'])[1]
-        self.vmm = vmm
-        self.project_id = str(uuid.uuid4()).replace('-', '')
-
-        self.cuckoo_contexts = []
-        self.shutdown_cmds = []
-        self.shutdown_operations = []
-
-        cn = "%s_cuckoo_%i" % (self.project_id, 1)
-        self.cuckoo_contexts.append({
-            'cuckoo_image': "%s/%s" % (registry_host, cfg['cuckoo_image']),
-            'vm_disk_store': self.vmm.local_vm_root,
-            'vm_meta_store': self.vmm.local_meta_root,
-            'vm_meta_file': self.vm_meta,
-            'ram_volume': cfg['ramdisk_size'],
-            'ram_limit': cfg['ram_limit'],
-            'cuckoo_name': cn,
-            'cuckoo_ip': None,
-        })
-        self.shutdown_cmds.append("docker rm --force %s" % cn)
-        self.shutdown_operations.append({
-            'type': 'shell',
-            'args': shlex.split("docker rm --force %s" % cn)
-        })
-
-        self.tag_map = self.parse_vm_meta(self.vmm.vm_meta)
-        self.container_ips = []
+    def start_container(self):
+        self.ip = super(CuckooContainerManager, self).start_container(self.name)
 
     @staticmethod
     def parse_vm_meta(vm_meta):
@@ -59,7 +43,7 @@ class CuckooContainerManager(object):
             for tag in vm_tags:
                 tag = tag
                 if tag in tag_set[vm['route']]:
-                    raise CuckooDockerException("Tag collision between %s and %s (tag: %s)." % (
+                    raise DockerException("Tag collision between %s and %s (tag: %s)." % (
                         vm['name'],
                         tag_set[vm['route']][tag],
                         tag
@@ -68,56 +52,11 @@ class CuckooContainerManager(object):
                 tag_set[vm['route']][tag] = vm['name']
         return tag_set
 
-    def _run_cmd(self, command, raise_on_error=True):
-        arg_list = shlex.split(command)
-        proc = subprocess.Popen(arg_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        if stderr and raise_on_error:
-            self.log.error("Command has errors! CMD \"%s\" STDERR: \"%s\"" % (command, stderr))
-            raise CuckooDockerException(stderr)
-        elif 'docker' in command:
-            # These are useful to know if we're successfully starting/stopping containers
-            for line in stderr.splitlines():
-                if len(line) > 0:
-                    self.log.info(line.strip())
-        return stdout
-
-    def start_container(self):
-        for ctx in self.cuckoo_contexts:
-            # Pull the image
-            self._run_cmd("docker pull %s" % ctx['cuckoo_image'], raise_on_error=False)
-
-            # Run the image
-            compose_str = "docker run --privileged -d --cap-add=ALL " \
-                          "--name %(cuckoo_name)s " \
-                          "--memory %(ram_limit)s " \
-                          "--volume %(vm_meta_store)s:/opt/vm_meta:ro " \
-                          "--volume %(vm_disk_store)s:/var/lib/libvirt/images:ro " \
-                          "%(cuckoo_image)s %(vm_meta_file)s %(ram_volume)s" % ctx
-            self._run_cmd(compose_str, raise_on_error=False)
-
-            # Grab the ip address of our containers
-            info = self.inspect(ctx['cuckoo_name'])
-            ctx['cuckoo_ip'] = info["NetworkSettings"]["IPAddress"]
-
-    def inspect(self, image_name):
-        inspect_cmd = "docker inspect %s" % image_name
-        stdout = self._run_cmd(inspect_cmd)
-        try:
-            info = json.loads(stdout)
-        except:
-            raise CuckooDockerException("Unable to query image information. This is likely fatal.")
-        return info[0]
-
-    def stop(self):
-        if self.stop_on_exit and self.project_id is not None:
-            map(self._run_cmd, self.shutdown_cmds)
-
 
 class CuckooVmManager(object):
     def fetch_disk(self, disk_base, disk_url, recursion=4):
         if recursion == 0:
-            raise CuckooDockerException("Disk fetch recursing too far for %s. Cleanup your disks." % disk_url)
+            raise DockerException("Disk fetch recursing too far for %s. Cleanup your disks." % disk_url)
 
         if not os.path.exists(join(config.workers.virtualmachines.disk_root, disk_base)):
             os.makedirs(join(config.workers.virtualmachines.disk_root, disk_base))

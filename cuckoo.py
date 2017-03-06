@@ -4,6 +4,7 @@ import os
 import requests
 import tarfile
 import time
+import shlex
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -240,7 +241,7 @@ class Cuckoo(ServiceBase):
         from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
 
     def set_urls(self):
-        base_url = "http://%s:%s" % (self.cm.cuckoo_contexts[0]['cuckoo_ip'], CUCKOO_API_PORT)
+        base_url = "http://%s:%s" % (self.cm.ip, CUCKOO_API_PORT)
         self.submit_url = "%s/%s" % (base_url, CUCKOO_API_SUBMIT)
         self.query_task_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_TASK)
         self.delete_task_url = "%s/%s" % (base_url, CUCKOO_API_DELETE_TASK)
@@ -254,7 +255,11 @@ class Cuckoo(ServiceBase):
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
 
-        map(self._register_cleanup_op, self.cm.shutdown_operations)
+        self._register_cleanup_op({
+            'type': 'shell',
+            'args': shlex.split("docker rm --force %s" % self.cm.name)
+        })
+
         self.log.debug("VMM and CM started!")
         # Start the container
         self.cm.start_container()
