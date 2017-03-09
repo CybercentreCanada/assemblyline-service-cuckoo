@@ -316,7 +316,7 @@ class Cuckoo(ServiceBase):
         file_content = request.get()
         self.cuckoo_task = None
         self.al_report = None
-        self.file_name = os.path.basename(self.task.path)
+        self.file_name = os.path.basename(request.path)
 
         full_memdump = False
         pull_memdump = False
