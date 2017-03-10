@@ -34,7 +34,13 @@ def trymkdir(path):
 def mod_xml_meta(xml_file, path, new_value):
     dom_root = lxml.etree.fromstring(xml_file)
     node = dom_root.find(path)
-    node.text = new_value
+    if node is None:
+        return xml_file
+
+    if new_value is None:
+        node.getparent().remove(node)
+    else:
+        node.text = new_value
     return lxml.etree.tostring(dom_root)
 
 
@@ -68,12 +74,14 @@ def install_vm_meta(directory, tarball, prefixes):
             xml_file = tar.extractfile(tar.getmember(os.path.join(vm_name, json_file['xml']))).read()
             xml_file = mod_xml_meta(xml_file, "./name", new_vm_name)
             xml_file = mod_xml_meta(xml_file, "./uuid", guid)
+            xml_file = mod_xml_meta(xml_file, "domain/seclabel", None)
             fh.write(xml_file)
 
         with open(snap_name, "w") as fh:
             xml_file = tar.extractfile(tar.getmember(os.path.join(vm_name, json_file['snapshot_xml']))).read()
             xml_file = mod_xml_meta(xml_file, "domain/name", new_vm_name)
             xml_file = mod_xml_meta(xml_file, "domain/uuid", guid)
+            xml_file = mod_xml_meta(xml_file, "domain/seclabel", None)
             fh.write(xml_file)
 
         yield new_json_file
