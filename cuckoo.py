@@ -233,6 +233,7 @@ class Cuckoo(ServiceBase):
         self.al_report = None
         self.session = None
         self.enabled_routes = None
+        self.cuckoo_ip = None
 
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
@@ -241,7 +242,7 @@ class Cuckoo(ServiceBase):
         from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
 
     def set_urls(self):
-        base_url = "http://%s:%s" % (self.cm.ip, CUCKOO_API_PORT)
+        base_url = "http://%s:%s" % (self.cuckoo_ip, CUCKOO_API_PORT)
         self.submit_url = "%s/%s" % (base_url, CUCKOO_API_SUBMIT)
         self.query_task_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_TASK)
         self.delete_task_url = "%s/%s" % (base_url, CUCKOO_API_DELETE_TASK)
@@ -262,7 +263,7 @@ class Cuckoo(ServiceBase):
 
         self.log.debug("VMM and CM started!")
         # Start the container
-        self.cm.start_container()
+        self.cuckoo_ip = self.cm.start_container()
         self.file_name = None
         self.set_urls()
 
@@ -304,7 +305,7 @@ class Cuckoo(ServiceBase):
     def trigger_cuckoo_reset(self, retry_cnt=30):
         self.log.warn("Forcing docker container reboot due to Cuckoo failure.")
         self.cm.stop()
-        self.cm.start_container()
+        self.cuckoo_ip = self.cm.start_container()
         self.set_urls()
         return self.is_cuckoo_ready(retry_cnt)
 

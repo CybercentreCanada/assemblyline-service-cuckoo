@@ -27,11 +27,7 @@ class CuckooContainerManager(DockerManager):
             'commandline': [os.path.split(cfg['vm_meta'])[1], cfg['ramdisk_size']]
         }
         self.name = self.add_container(ctx)
-        self.ip = None
         self.tag_map = self.parse_vm_meta(vmm.vm_meta)
-
-    def start_container(self):
-        self.ip = super(CuckooContainerManager, self).start_container(self.name)
 
     @staticmethod
     def parse_vm_meta(vm_meta):
