@@ -263,7 +263,7 @@ class Cuckoo(ServiceBase):
 
         self.log.debug("VMM and CM started!")
         # Start the container
-        self.cuckoo_ip = self.cm.start_container()
+        self.cuckoo_ip = self.cm.start_container(self.cm.name)
         self.file_name = None
         self.set_urls()
 
@@ -305,7 +305,7 @@ class Cuckoo(ServiceBase):
     def trigger_cuckoo_reset(self, retry_cnt=30):
         self.log.warn("Forcing docker container reboot due to Cuckoo failure.")
         self.cm.stop()
-        self.cuckoo_ip = self.cm.start_container()
+        self.cuckoo_ip = self.cm.start_container(self.cm.name)
         self.set_urls()
         return self.is_cuckoo_ready(retry_cnt)
 
