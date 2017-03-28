@@ -339,7 +339,7 @@ Move all the files in /opt/al/var/support/vm/disks/cuckoo/ to the vm/disks/cucko
 ### DEBUGGING
 
 If you've deployed ASSEMBLYLINE in a cluster configuration and the Cuckoo service can't start up, check the logs for 
-transport errors. It is possible that there is a mismatch between the FTP root of the support host and Cuckoo's service
+transport errors. It is possible that there is a mismatch between the FTP root of the support host and Cuckoo's service 
 configurations. The REMOTE_DISK_ROOT should be relative to the support hosts FTP root directory.
 
 If you need to enter a running cuckoobox docker container while ASSEMBLYLINE is running, use the following command.
