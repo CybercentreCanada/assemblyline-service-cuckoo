@@ -1,5 +1,5 @@
 # CUCKOO SERVICE
-This Assemblyline service provides the ability to perform live dynamic analysis on submitted files via the Open Source project [Cuckoo Sandbox](https://cuckoosandbox.org).
+This ASSEMBLYLINE service provides the ability to perform live dynamic analysis on submitted files via the Open Source project [Cuckoo Sandbox](https://cuckoosandbox.org).
 
 **NOTE**: This service **requires extensive additional installation** before being functional. It is **not** preinstalled during a default installation.
 
@@ -333,10 +333,14 @@ you will also need to run prepare_cuckoo.py again.
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
     sudo -u al PYTHONPATH=$PYTHONPATH ./prepare_cuckoo.py *.tar.gz
     
-This is all that's needed for Assemblyline deployments on single node appliances. To deploy Assemblyline in a cluster, 
+This is all that's needed for ASSEMBLYLINE deployments on single node appliances. To deploy ASSEMBLYLINE in a cluster, 
 Move all the files in /opt/al/var/support/vm/disks/cuckoo/ to the vm/disks/cuckoo folder on the support server.
 
 ### DEBUGGING
+
+If you've deployed ASSEMBLYLINE in a cluster configuration and the Cuckoo service can't start up, check the logs for 
+transport errors. It is possible that there is a mismatch between the FTP root of the support host and Cuckoo's service 
+configurations. The REMOTE_DISK_ROOT should be relative to the support hosts FTP root directory.
 
 If you need to enter a running cuckoobox docker container while ASSEMBLYLINE is running, use the following command.
 
