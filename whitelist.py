@@ -26,7 +26,9 @@ WHITELIST_DOMAINS = {
     'Windows': '.*\.windows.com',
     'Ubuntu Update': 'changelogs.ubuntu.com',
     'Ubuntu Netmon': 'daisy.ubuntu.com',
-    'Ubuntu NTP': 'ntp.ubuntu.com'
+    'Ubuntu NTP': 'ntp.ubuntu.com',
+    "Windows Update": ".*\.windowsupdate.com",
+    "Comodo": ".*\.comodoca.com"
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
@@ -161,11 +163,21 @@ WHITELIST_HASHES = [
 GUID_PATTERN = r'{[A-F0-9]{8}\-([A-F0-9]{4}\-){3}[A-F0-9]{12}\}'
 
 WHITELIST_COMMON_PATTERNS = {
-    'Office Temp Files': r'\~[A-Z]{3}%s\.tmp$' % GUID_PATTERN,
+    'Office Temp Files': r'\\~[A-Z]{3}%s\.tmp$' % GUID_PATTERN,
     'Meta Font': r'[A-F0-9]{7,8}\.(w|e)mf$',
     'IE Recovery Store': r'RecoveryStore\.%s\.dat$' % GUID_PATTERN,
     'IE Recovery Files': r'%s\.dat$' % GUID_PATTERN,
     'Doc Tmp': r'(?:[a-f0-9]{2}|\~\$)[a-f0-9]{62}\.(doc|xls|ppt)x?$',
+    'CryptnetCache': r'AppData\\[^\\]+\\MicrosoftCryptnetUrlCache\\',
+    'Cab File': r'\\Temp\\Cab....\.tmp',
+    'Office File': r'\\Microsoft\\OFFICE\\DATA\\[a-z0-9]+\.dat$',
+    'Internet file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.MSO\\',
+    'Word file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.Word\\~WRS',
+    'Word Temp Files': r'\\Temp\\~$[a-f0-9]+\.doc',
+    'Office Blocks': r'\\Microsoft\\Document Building Blocks\\[0-9]{4}\\',
+    'Office ACL': r'AppData\\Roaming\\MicrosoftOffice\\.*\.acl$',
+    'Office Dictionary': r'AppData\\Roaming\\Microsoft\\UProof\\CUSTOM.DIC$',
+    'Office Form': r'AppData\\Local\\Temp\\Word...\\MSForms.exd$'
 }
 
 
