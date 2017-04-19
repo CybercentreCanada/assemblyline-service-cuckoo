@@ -102,11 +102,10 @@ You will need to save the following nginx configuration file in /etc/nginx/sites
       location /v2/ {
         auth_basic                    "Docker Registry";
         auth_basic_user_file          /etc/nginx/docker.htpasswd;
-        error_log /var/log/nginx/docker.log debug;
+        error_log                     /var/log/nginx/docker.log;
     
         proxy_buffering off;
         proxy_pass                          https://docker-registry;
-        proxy_set_header                    Host  $host;
         proxy_read_timeout                  900;
         proxy_set_header  X-Real-IP         $remote_addr; # pass on real client's IP
         proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
