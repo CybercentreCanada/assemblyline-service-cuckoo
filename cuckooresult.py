@@ -481,6 +481,14 @@ def process_network(network, al_result, classification):
     # Miscellaneous activity
     # irc = network.get("irc")
 
+    # Add missing ip hosts
+    for proto in [udp, tcp, http, https, icmp, smtp]:
+        for hst in proto.keys():
+            if hst not in hosts and re.match(r"^[0-9.]+$", hst):
+                if hst.startswith("10.") or hst.startswith("224."):
+                    continue
+                hosts.append(hst)
+
     # network['hosts'] has all unique non-local network ips.
     for host in hosts:
         add_host_flows(host, 'udp', udp.get(host), result_map)
