@@ -309,7 +309,8 @@ if __name__ == "__main__":
                 'ip': kvm['ip'],
                 'tags': kvm['tags'],
                 'interface': if_name,
-                'volatility_profile': kvm.get('guest_profile', "")
+                'volatility_profile': kvm.get('guest_profile', ""),
+                'gateway': kvm['gateway']
             }
         )
 
@@ -334,7 +335,7 @@ if __name__ == "__main__":
     new_conf = render_template(CUCKOO_CONF_TEMPLATE,
                                context={
                                    'machinery': 'kvm',
-                                   'resultserver': eth0_ip,
+                                   'resultserver': "0.0.0.0",
                                    'route': 'none',
                                    'internet': 'none',
                                    'rt_table': '',
