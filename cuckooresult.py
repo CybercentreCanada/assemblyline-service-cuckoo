@@ -56,9 +56,7 @@ def generate_al_result(api_report, al_result, file_ext, service_classification=C
 
     executed = True
     if debug:
-        failed = process_debug(debug, al_result, classification)
-        if failed is True:
-            return False
+        process_debug(debug, al_result, classification)
 
     if behavior:
         executed = process_behavior(behavior, al_result, classification)
