@@ -5,6 +5,7 @@ import requests
 import tarfile
 import time
 import shlex
+import random
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -234,6 +235,7 @@ class Cuckoo(ServiceBase):
         self.session = None
         self.enabled_routes = None
         self.cuckoo_ip = None
+        self.restart_interval = 0
 
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
@@ -264,6 +266,7 @@ class Cuckoo(ServiceBase):
         self.log.debug("VMM and CM started!")
         # Start the container
         self.cuckoo_ip = self.cm.start_container(self.cm.name)
+        self.restart_interval = random.randint(45, 55)
         self.file_name = None
         self.set_urls()
 
@@ -306,6 +309,7 @@ class Cuckoo(ServiceBase):
         self.log.warn("Forcing docker container reboot due to Cuckoo failure.")
         self.cm.stop()
         self.cuckoo_ip = self.cm.start_container(self.cm.name)
+        self.restart_interval = random.randint(45, 55)
         self.set_urls()
         return self.is_cuckoo_ready(retry_cnt)
 
@@ -415,11 +419,13 @@ class Cuckoo(ServiceBase):
         self.cuckoo_task = CuckooTask(self.file_name,
                                       **kwargs)
 
-        if not self.is_cuckoo_ready():
+        if self.restart_interval <= 0 or not self.is_cuckoo_ready():
             cuckoo_up = self.trigger_cuckoo_reset()
             if not cuckoo_up:
                 self.session.close()
-                raise CuckooProcessingException("While restarting Cuckoo, Cuckoo never came back up.")
+                raise RecoverableError("While restarting Cuckoo, Cuckoo never came back up.")
+        else:
+            self.restart_interval -= 1
 
         try:
             self.cuckoo_submit(file_content)
