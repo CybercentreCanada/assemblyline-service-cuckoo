@@ -18,6 +18,8 @@ WHITELIST_DOMAINS = {
     'Android NTP': '.*\.android.pool.ntp.org',
     'Windows Time Server': 'time\.(microsoft|windows)\.com',
     'Microsoft IPv4To6': '.*\.?teredo.ipv6.microsoft.com',
+    'Microsoft Watson': 'watson.microsoft.com',
+    'Microsoft DNS Check': 'dms.msftncsi.com',
     'Microsoft IPv4 Check': 'www.msftncsi.com',
     'Microsoft IPv6 Check': 'ipv6.msftncsi.com',
     'Microsoft CRL server': 'crl.microsoft.com',
@@ -28,7 +30,8 @@ WHITELIST_DOMAINS = {
     'Ubuntu Netmon': 'daisy.ubuntu.com',
     'Ubuntu NTP': 'ntp.ubuntu.com',
     "Windows Update": ".*\.windowsupdate.com",
-    "Comodo": ".*\.comodoca.com"
+    "Comodo": ".*\.comodoca.com",
+    "Verisign": ".*\.verisign.com"
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses

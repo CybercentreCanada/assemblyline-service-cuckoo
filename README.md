@@ -146,14 +146,12 @@ You will need to add the following lines to your seed.
 
 And you will need to re-run the Cuckoo installer.py to install the certificates and credentials on each worker.
 
-#### Build Docker Images
+#### Build Docker Image
 
 The following commands assume a local registry. Change localhost as needed for a remote registry. If a remote registry 
 is configured on all workers, the following commands will only need to be run once.
 
-    cd /opt/al/pkg/al_services/alsvc_cuckoo/docker/kvm
-    sudo docker build -t cuckoo/kvm .
-    cd ../cuckoobox
+    cd /opt/al/pkg/al_services/alsvc_cuckoo/docker/cuckoobox
     sudo apt-get install python-dev libffi-dev libfuzzy-dev
     sudo -u al bash libs.sh
     sudo docker build -t localhost:5000/cuckoo/cuckoobox .
