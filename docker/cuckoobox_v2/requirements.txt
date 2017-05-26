@@ -9,3 +9,4 @@ cuckoo==2.0.2
 supervisor==3.3.1
 superlance==1.0.0
 lxml
+distorm3

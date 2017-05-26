@@ -13,3 +13,5 @@ git clone https://github.com/volatilityfoundation/volatility.git libs/volatility
 cd libs/volatility
 git checkout 2.5
 tar -zcf ../volatility-2.5.tar.gz *
+cd ../
+rm -rf volatility

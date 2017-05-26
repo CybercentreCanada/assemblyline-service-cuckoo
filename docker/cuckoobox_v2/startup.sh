@@ -91,7 +91,7 @@ if [[ ! -z $INETSIM_IP ]]; then
 [program:inetsim]
 directory=/etc/inetsim
 command=/bin/bash ${CONF_PATH}/run.sh
-restart=always"
+restart=always
 EOF
 fi
 
