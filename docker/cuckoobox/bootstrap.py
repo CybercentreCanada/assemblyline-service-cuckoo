@@ -40,13 +40,12 @@ VM_IMAGES_PATH = '/var/lib/libvirt/images'
 CUCKOO_BASE = os.environ["CUCKOO_BASE"]
 CUCKOO_CONF_PATH = os.path.join(CUCKOO_BASE, 'conf/cuckoo.conf')
 KVM_CONF_PATH = os.path.join(CUCKOO_BASE, 'conf/kvm.conf')
-MEMORY_CONF_PATH = os.path.join(CUCKOO_BASE, 'conf/memory.conf')
 BASELINE_JSON_DIR = os.path.join(CUCKOO_BASE, 'storage/baseline/')
 LIBVIRTD_CONF_PATH = "/etc/libvirt/libvirtd.conf"
 
 # Template stuff
 VM_META_BASE = '/opt/vm_meta'
-CFG_BASE = '/opt/sandbox/conf'
+CFG_BASE = '/home/sandbox/conf'
 
 TEMPLATE_ENVIRONMENT = Environment(
     autoescape=False,
@@ -55,7 +54,6 @@ TEMPLATE_ENVIRONMENT = Environment(
 TEMPLATE_CUSTOM_NAT_IFACES = 'custom_nat_ifaces.jinja2'
 CUCKOO_CONF_TEMPLATE = 'cuckoo.conf.jinja2'
 KVM_CONF_TEMPLATE = 'kvm.conf.jinja2'
-MEMORY_CONF_TEMPLATE = 'memory.conf.jinja2'
 CUSTOM_NAT_IFACES_TEMPLATE = 'custom_nat_ifaces.jinja2'
 CUSTOM_NAT_RULES_TEMPLATE = 'custom_nat_rules.jinja2'
 
@@ -263,7 +261,8 @@ if __name__ == "__main__":
     # Arguments
     parser = ArgumentParser(usage=HELP, version=VERSION)
     parser.add_argument('-m', '--meta', action='store',
-                        help="Specify the vm metadata file name for the snapshot (i.e. snapshot.json)", dest='meta')
+                        help="Specify the vm metadata file name for the snapshot (i.e. snapshot.json)", dest='meta',
+                        required=True)
     parser.add_argument('-r', '--ramdisk', action='store', help="Location of ramdisk for vm storage", dest="ramdisk",
                         required=True)
     args = parser.parse_args()
@@ -353,10 +352,6 @@ if __name__ == "__main__":
                                                            'machines': machines})
     with open(KVM_CONF_PATH, 'w') as fh:
         fh.write(kvm_conf)
-
-    mem_conf = render_template(MEMORY_CONF_TEMPLATE, context={})
-    with open(MEMORY_CONF_PATH, 'w') as fh:
-        fh.write(mem_conf)
 
     lv.close()
 

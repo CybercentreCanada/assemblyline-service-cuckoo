@@ -1,6 +1,6 @@
 [kvm]
 machines = {{ machine_names }}
-
+interface = lo
 
 {% for machine in machines %}
 [{{ machine.name }}]
@@ -8,9 +8,8 @@ label = {{ machine.label }}
 platform = {{ machine.platform }}
 ip = {{ machine.ip }}
 tags = {{ machine.tags }}
-volatility_profile = {{ machine.volatility_profile }}
+osprofile = {{ machine.volatility_profile }}
 interface = {{ machine.interface }}
 resultserver_ip = {{ machine.gateway }}
 
 {% endfor %}
-
