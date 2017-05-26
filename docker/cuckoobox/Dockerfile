@@ -96,6 +96,7 @@ RUN mkdir /home/sandbox/conf
 COPY conf/* /home/sandbox/conf/
 
 RUN cuckoo &&\
+  cuckoo community &&\
   mkdir /home/sandbox/supervisor &&\
   cp /home/sandbox/conf/processing.conf /home/sandbox/.cuckoo/conf/
 
