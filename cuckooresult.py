@@ -12,6 +12,7 @@ from assemblyline.common.charset import safe_str
 from assemblyline.common.context import Context
 from assemblyline.al.common import forge
 from assemblyline.al.common.result import Result, ResultSection, SCORE, TAG_TYPE, TAG_WEIGHT, TEXT_FORMAT
+from assemblyline.common.exceptions import RecoverableError
 from al_services.alsvc_cuckoo.clsids import clsids
 from al_services.alsvc_cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
 
@@ -178,7 +179,10 @@ def process_debug(debug, al_result, classification):
             if err_str is not None and len(err_str) > 0:
                 # Timeouts - ok, just means the process never exited
                 # Start Error - probably a corrupt file..
+                # Initialization Error - restart the docker container
                 error_res.add_line(error)
+                if "guest initialization hit the critical timeout" in err_str:
+                    raise RecoverableError("Could not start guest.")
                 if 'timeout' not in err_str and 'start function raised an error' not in err_str:
                     failed = True
         if len(error_res.body) > 0:
