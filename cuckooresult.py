@@ -327,6 +327,7 @@ def process_signatures(sigs, al_result, classification):
     if len(sigs) > 0:
         sigs_score = 0
         sigs_res = ResultSection(title_text="Signatures", classification=classification)
+        skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
         # Severity is 0-5ish with 0 being least severe.
         for sig in sigs:
             severity = float(sig.get('severity', 0))
@@ -339,7 +340,6 @@ def process_signatures(sigs, al_result, classification):
             sig_families = sig.get('families', [])
 
             # Skipped Signature Checks:
-            skipped_sigs = ['dead_host', ]
             if sig_name in skipped_sigs:
                 continue
 
