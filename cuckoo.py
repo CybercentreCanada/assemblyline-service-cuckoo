@@ -602,6 +602,7 @@ class Cuckoo(ServiceBase):
             self.log.debug("Analysis has completed, waiting on report to be produced.")
         elif status == "reported":
             self.log.debug("Cuckoo report generation has completed.")
+            time.sleep(5)  # wait a few seconds in case report isn't actually ready
             self.cuckoo_task.report = self.cuckoo_query_report(self.cuckoo_task.id)
             if self.cuckoo_task.report and isinstance(self.cuckoo_task.report, dict):
                 return status
