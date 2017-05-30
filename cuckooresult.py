@@ -27,7 +27,7 @@ country_code_map = None
 
 
 # noinspection PyBroadException
-def generate_al_result(api_report, al_result, file_ext, service_classification=CLASSIFICATION.UNRESTRICTED):
+def generate_al_result(api_report, al_result, file_ext, guest_ip, service_classification=CLASSIFICATION.UNRESTRICTED):
     log.debug("Generating AL Result.")
     classification = CLASSIFICATION.max_classification(CLASSIFICATION.UNRESTRICTED, service_classification)
     info = api_report.get('info')
@@ -67,7 +67,7 @@ def generate_al_result(api_report, al_result, file_ext, service_classification=C
 
     if executed is True:
         if network:
-            process_network(network, al_result, classification)
+            process_network(network, al_result, guest_ip, classification)
         if sigs:
             process_signatures(sigs, al_result, classification)
     else:
@@ -439,7 +439,7 @@ def _add_ex_data(proto_data, proto_ex_data, protocol, port):
             proto_data[host] = proto_ex_data[host][:]
 
 
-def process_network(network, al_result, classification):
+def process_network(network, al_result, guest_ip, classification):
     global country_code_map
     if not country_code_map:
         country_code_map = forge.get_country_code_map()
@@ -485,12 +485,12 @@ def process_network(network, al_result, classification):
     for proto in [udp, tcp, http, https, icmp, smtp]:
         for hst in proto.keys():
             if hst not in hosts and re.match(r"^[0-9.]+$", hst):
-                if hst.startswith("10.") or hst.startswith("224."):
-                    continue
                 hosts.append(hst)
 
     # network['hosts'] has all unique non-local network ips.
     for host in hosts:
+        if host == guest_ip or wlist_check_ip(host):
+            continue
         add_host_flows(host, 'udp', udp.get(host), result_map)
         add_host_flows(host, 'tcp', tcp.get(host), result_map)
         add_host_flows(host, 'smtp', smtp.get(host), result_map)
@@ -506,6 +506,8 @@ def process_network(network, al_result, classification):
             result_map['host_flows'][host] = []
 
     for domain in domains:
+        if wlist_check_domain(domain):
+            continue
         add_domain_flows(domain, 'dns', dns.get(domain), result_map)
         add_domain_flows(domain, 'http', http.get(domain), result_map)
         add_domain_flows(domain, 'https', https.get(domain), result_map)
@@ -586,8 +588,6 @@ def add_host_flows(host, protocol, flows, result_map):
         return
     host_flows = result_map.get('host_flows', defaultdict(dict))
     flow_key = host
-    if wlist_check_ip(host):
-        return
     host_flows[flow_key][protocol] = flows
     result_map['host_flows'] = host_flows
 
@@ -597,8 +597,6 @@ def add_domain_flows(domain, protocol, flows, result_map):
         return
     domain_flows = result_map.get('domain_flows', defaultdict(dict))
     flow_key = domain
-    if wlist_check_domain(domain):
-        return
     domain_flows[flow_key][protocol] = flows
     result_map['domain_flows'] = domain_flows
 
