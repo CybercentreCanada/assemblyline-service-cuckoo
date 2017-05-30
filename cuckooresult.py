@@ -181,10 +181,8 @@ def process_debug(debug, al_result, classification):
                 # Start Error - probably a corrupt file..
                 # Initialization Error - restart the docker container
                 error_res.add_line(error)
-                if "guest initialization hit the critical timeout" in err_str:
-                    raise RecoverableError("Could not start guest.")
-                if 'timeout' not in err_str and 'start function raised an error' not in err_str:
-                    failed = True
+                if "analysis hit the critical timeout" not in err_str:
+                    raise RecoverableError("An error prevented cuckoo to get complete results, retrying...")
         if len(error_res.body) > 0:
             al_result.add_section(error_res)
     return failed
