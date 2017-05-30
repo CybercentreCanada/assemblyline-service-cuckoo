@@ -29,6 +29,7 @@ CUCKOO_API_QUERY_PCAP = "pcap/get/%s"
 CUCKOO_API_QUERY_MACHINES = "machines/list"
 CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
 CUCKOO_POLL_DELAY = 2
+GUEST_VM_START_TIMEOUT = 20
 CUCKOO_MAX_TIMEOUT = 600
 
 SUPPORTED_EXTENSIONS = [
@@ -552,10 +553,17 @@ class Cuckoo(ServiceBase):
         # Quick sleep to avoid failing when the API can't get the task yet.
         time.sleep(5)
         try:
-            status = self.cuckoo_poll_report()
+            status = self.cuckoo_poll_started()
         except RetryError:
-            self.log.error("Max retries exceeded for report status.")
+            self.log.error("VM startup timed out")
             status = None
+
+        if status == "started":
+            try:
+                status = self.cuckoo_poll_report()
+            except RetryError:
+                self.log.error("Max retries exceeded for report status.")
+                status = None
 
         err_msg = None
         if status is None:
@@ -573,6 +581,31 @@ class Cuckoo(ServiceBase):
         # Need to kill the container; we're about to go down..
         self.log.info("Service is being stopped; removing all running containers and metadata..")
         self.cm.stop()
+
+    @retry(wait_fixed=1000,
+           stop_max_attempt_number=GUEST_VM_START_TIMEOUT,
+           retry_on_result=_retry_on_none)
+    def cuckoo_poll_started(self):
+
+        # Bail if we were stopped
+        if not self.should_run:
+            return "stopped"
+
+        task_info = self.cuckoo_query_task(self.cuckoo_task.id)
+        if task_info is None:
+            # The API didn't return a task..
+            return "missing"
+
+        # Detect if mismatch
+        if task_info.get("id") != self.cuckoo_task.id:
+            self.log.warning("Cuckoo returned mismatched task info for task: %s. Trying again.." %
+                             self.cuckoo_task.id)
+            return None
+
+        if task_info.get("guest", {}).get("status") == "starting":
+            return None
+
+        return "started"
 
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
            stop_max_attempt_number=CUCKOO_MAX_TIMEOUT / CUCKOO_POLL_DELAY,
