@@ -41,6 +41,7 @@ WHITELIST_IPS = {
     'Windows SSDP': r'239.255.255.250',
     'Windows IGMP': r'224\..*',
     'local_net': r'10\..*',
+    'local_net_2': r'192\.168.*',
 }
 
 WHITELIST_DROPPED = [

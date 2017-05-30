@@ -504,6 +504,8 @@ def process_network(network, al_result, guest_ip, classification):
         # network dump. So we'll just manually add the IPs so they're at least being reported.
         result_map['host_flows'] = {}
         for host in hosts:
+            if host == guest_ip or wlist_check_ip(host):
+                continue
             result_map['host_flows'][host] = []
 
     for domain in domains:
