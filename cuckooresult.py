@@ -332,7 +332,6 @@ def process_signatures(sigs, al_result, classification):
             actor = sig.get('actor', '')
             sig_classification = sig.get('classification', CLASSIFICATION.UNRESTRICTED)
             sig_score = int(severity * 100)
-            sigs_score += sig_score
             sig_name = sig.get('name', 'unknown')
             sig_categories = sig.get('categories', [])
             sig_families = sig.get('families', [])
@@ -340,6 +339,8 @@ def process_signatures(sigs, al_result, classification):
             # Skipped Signature Checks:
             if sig_name in skipped_sigs:
                 continue
+
+            sigs_score += sig_score
 
             sigs_res.add_line(sig_name + ' [' + str(sig_score) + ']')
             sigs_res.add_line('\tDescription: ' + sig.get('description'))
