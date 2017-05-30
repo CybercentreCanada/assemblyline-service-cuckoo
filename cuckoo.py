@@ -440,12 +440,14 @@ class Cuckoo(ServiceBase):
 
                     if machine_name is None:
                         self.log.debug('Unable to retrieve machine name from result.')
+                        guest_ip = ""
                     else:
-                        self.report_machine_info(machine_name)
+                        guest_ip = self.report_machine_info(machine_name)
                     self.log.debug("Generating AL Result from Cuckoo results..")
                     success = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
                                                  file_ext,
+                                                 guest_ip,
                                                  self.SERVICE_CLASSIFICATION)
                     if success is False:
                         err_str = self.get_errors()
@@ -832,6 +834,7 @@ class Cuckoo(ServiceBase):
             for tag in machine.get('tags', []):
                 machine_section.add_line('\t ' + safe_str(tag).replace('_', ' '))
             self.file_res.add_section(machine_section)
+            return str(machine.get('ip', ""))
         except Exception as e:
             self.log.error('Unable to retrieve machine information for %s: %s' % (machine_name, safe_str(e)))
 

@@ -39,6 +39,8 @@ WHITELIST_IPS = {
     'localhost': r'127.0.0.1',
     'Honeynet': r'169.169.169.169',
     'Windows SSDP': r'239.255.255.250',
+    'Windows IGMP': r'224\..*',
+    'local_net': r'10\..*',
 }
 
 WHITELIST_DROPPED = [
