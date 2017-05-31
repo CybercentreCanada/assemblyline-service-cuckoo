@@ -97,4 +97,4 @@ fi
 
 echo "Handing off to supervisor" >> $LOG
 # Execute the supervisor daemon
-exec /usr/bin/supervisord -c $SUPERVISORD_CONF
+exec env supervisord -c $SUPERVISORD_CONF
