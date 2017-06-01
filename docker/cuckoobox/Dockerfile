@@ -27,7 +27,7 @@ RUN apt-get update &&\
   xargs apt-get install -y --force-yes --no-install-recommends < /tmp/packages.txt &&\
   dpkg -i /tmp/inetsim_1.2.6-1_all.deb &&\
   rm /tmp/inetsim_1.2.6-1_all.deb &&\
-  xargs pip install --upgrade < /tmp/requirements.txt &&\
+  xargs -n 1 pip install --upgrade < /tmp/requirements.txt &&\
   pip install /tmp/volatility-2.5.tar.gz &&\
   apt-get remove -y --force-yes python-dev libffi-dev libssl-dev libjpeg-dev zlib1g-dev libxml2-dev libxslt1-dev \
   libc6-dev libpython2.7 vim-tiny vim-common gcc cpp g++ make &&\
