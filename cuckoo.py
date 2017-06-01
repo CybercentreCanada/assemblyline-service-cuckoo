@@ -452,7 +452,6 @@ class Cuckoo(ServiceBase):
                     if success is False:
                         err_str = self.get_errors()
                         if "Machinery error: Unable to restore snapshot" in err_str:
-                            self.trigger_cuckoo_reset(1)
                             raise RecoverableError("Cuckoo is restarting container: %s", err_str)
 
                         raise CuckooProcessingException("Cuckoo was unable to process this file. %s",
@@ -463,17 +462,16 @@ class Cuckoo(ServiceBase):
                 except Exception as e:
                     # This is non-recoverable unless we were stopped during processing
                     self.trigger_cuckoo_reset(1)
-                    if not self.should_run:
-                        raise RecoverableError("Cuckoo stopped during result processing..")
-                    else:
+                    if self.should_run:
                         self.log.exception("Error generating AL report: ")
                         raise CuckooProcessingException("Unable to generate cuckoo al report for task %s: %s" %
                                                         (safe_str(self.cuckoo_task.id), safe_str(e)))
 
+                if self.check_stop():
+                    raise RecoverableError("Cuckoo stopped during result processing..")
+
                 if generate_report is True:
                     self.log.debug("Generating cuckoo report tar.gz.")
-
-                    self.last_error_time = None
 
                     # Submit cuckoo analysis report archive as a supplementary file
                     tar_report = self.cuckoo_query_report(self.cuckoo_task.id, fmt='all', params={'tar': 'gz'})
@@ -530,6 +528,12 @@ class Cuckoo(ServiceBase):
     def get_name():
         return "Cuckoo"
 
+    def check_stop(self):
+        if not self.should_run:
+            self.cm.stop()
+            return True
+        return False
+
     def cuckoo_submit(self, file_content):
         try:
             """ Submits a new file to Cuckoo for analysis """
@@ -550,7 +554,10 @@ class Cuckoo(ServiceBase):
         self.log.debug("Submission succeeded. File: %s -- Task ID: %s" % (self.cuckoo_task.file, self.cuckoo_task.id))
 
         # Quick sleep to avoid failing when the API can't get the task yet.
-        time.sleep(5)
+        for i in xrange(5):
+            if self.check_stop():
+                return
+            time.sleep(1)
         try:
             status = self.cuckoo_poll_report()
         except RetryError:
@@ -580,11 +587,11 @@ class Cuckoo(ServiceBase):
     def cuckoo_poll_report(self):
 
         # Bail if we were stopped
-        if not self.should_run:
+        if self.check_stop():
             return "stopped"
 
         task_info = self.cuckoo_query_task(self.cuckoo_task.id)
-        if task_info is None:
+        if task_info is None or task_info == {}:
             # The API didn't return a task..
             return "missing"
 
@@ -604,7 +611,11 @@ class Cuckoo(ServiceBase):
             self.log.debug("Analysis has completed, waiting on report to be produced.")
         elif status == "reported":
             self.log.debug("Cuckoo report generation has completed.")
-            time.sleep(5)  # wait a few seconds in case report isn't actually ready
+            for i in xrange(5):
+                if self.check_stop():
+                    return
+                time.sleep(1)   # wait a few seconds in case report isn't actually ready
+
             self.cuckoo_task.report = self.cuckoo_query_report(self.cuckoo_task.id)
             if self.cuckoo_task.report and isinstance(self.cuckoo_task.report, dict):
                 return status
@@ -615,6 +626,8 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=2000)
     def cuckoo_submit_file(self, file_content):
+        if self.check_stop():
+            return None
         self.log.debug("Submitting file: %s to server %s" % (self.cuckoo_task.file, self.submit_url))
         files = {"file": (self.cuckoo_task.file, file_content)}
 
@@ -636,6 +649,8 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=2000)
     def cuckoo_query_report(self, task_id, fmt="json", params=None):
+        if self.check_stop():
+            return None
         self.log.debug("Querying report, task_id: %s - format: %s", task_id, fmt)
         resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {})
         if resp.status_code != 200:
@@ -659,6 +674,8 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=2000)
     def cuckoo_query_pcap(self, task_id):
+        if self.check_stop():
+            return None
         resp = self.session.get(self.query_pcap_url % task_id)
         if resp.status_code != 200:
             if resp.status_code == 404:
@@ -673,6 +690,8 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=500, stop_max_attempt_number=3, retry_on_result=_retry_on_none)
     def cuckoo_query_task(self, task_id):
+        if self.check_stop():
+            return {}
         resp = self.session.get(self.query_task_url % task_id)
         if resp.status_code != 200:
             if resp.status_code == 404:
@@ -691,7 +710,7 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=2000)
     def cuckoo_query_machine_info(self, machine_name):
-        if not self.should_run:
+        if self.check_stop():
             self.log.debug("Service stopped during machine info query.")
             return None
 
@@ -706,6 +725,8 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=1000, stop_max_attempt_number=2)
     def cuckoo_delete_task(self, task_id):
+        if self.check_stop():
+            return
         resp = self.session.get(self.delete_task_url % task_id)
         if resp.status_code != 200:
             self.log.debug("Failed to delete task %s. Status code: %d" % (task_id, resp.status_code))
@@ -717,7 +738,7 @@ class Cuckoo(ServiceBase):
     # Fixed retry amount to avoid starting an analysis too late.
     @retry(wait_fixed=2000, stop_max_attempt_number=15)
     def cuckoo_query_machines(self):
-        if not self.should_run:
+        if self.check_stop():
             self.log.debug("Service stopped during machine query.")
             return False
         self.log.debug("Querying for available analysis machines..")
@@ -745,7 +766,7 @@ class Cuckoo(ServiceBase):
         ready = False
         attempts = 0
         while not ready:
-            if not self.should_run:
+            if self.check_stop():
                 return False
             try:
                 ready = self.cuckoo_query_machines()
@@ -767,6 +788,8 @@ class Cuckoo(ServiceBase):
             try:
                 dropped_tar = tarfile.open(fileobj=io.BytesIO(dropped_tar_bytes))
                 for tarobj in dropped_tar:
+                    if self.check_stop():
+                        return
                     if tarobj.isfile() and not tarobj.isdir():  # a file, not a dir
                         # A dropped file found
                         dropped_name = os.path.split(tarobj.name)[1]
