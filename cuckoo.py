@@ -238,6 +238,14 @@ class Cuckoo(ServiceBase):
         self.cuckoo_ip = None
         self.restart_interval = 0
 
+    def __del__(self):
+        if self.cm is not None:
+            from assemblyline.common.docker import DockerException
+            try:
+                self.cm.stop()
+            except DockerException:
+                pass
+
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
         global generate_al_result, CuckooVmManager, CuckooContainerManager
