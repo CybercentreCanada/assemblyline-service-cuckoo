@@ -82,7 +82,7 @@ class CuckooVmManager(object):
         self._fetch_meta(join(vm['name'], vm['snapshot_xml']), local_meta_dir)
 
     def __init__(self, cfg):
-        self.log = logging.getLogger('assemblyline.al.service.cuckoo.vmm')
+        self.log = logging.getLogger('assemblyline.svc.cuckoo.vmm')
         self.transport = forge.get_support_filestore()
 
         self.local_vm_root = join(config.workers.virtualmachines.disk_root, cfg['LOCAL_DISK_ROOT'])

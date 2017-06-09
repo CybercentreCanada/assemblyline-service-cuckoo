@@ -22,7 +22,7 @@ UUID_RE = re.compile(r"\{([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\
 USER_SID_RE = re.compile(r"S-1-5-21-\d+-\d+-\d+-\d+")
 WIN_FILE_RE = re.compile(r"Added new file to list with path: (\w:(?:\\[a-zA-Z0-9_\-. $]+)+)")
 DROIDMON_CONN_RE = re.compile(r"([A-Z]{3,5}) (https?://([a-zA-Z0-9.\-]+):?([0-9]{2,5})?([^ ]+)) HTTP/([0-9.]+)")
-log = logging.getLogger('assemblyline.al.service.cuckoo.cuckooresult')
+log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 country_code_map = None
 
 
