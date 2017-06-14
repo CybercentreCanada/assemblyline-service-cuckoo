@@ -377,38 +377,38 @@ class Cuckoo(ServiceBase):
         kwargs = dict()
         task_options = []
 
-        analysis_timeout = request.get_param('analysis_timeout', CUCKOO_TIMEOUT)
+        analysis_timeout = request.get_param('analysis_timeout')
 
-        generate_report = request.get_param('generate_report', True)
+        generate_report = request.get_param('generate_report')
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
 
-        dump_processes = request.get_param('dump_processes', False)
+        dump_processes = request.get_param('dump_processes')
         if dump_processes is True:
             self.log.debug("Setting procmemdump flag in task options")
             task_options.append('procmemdump=yes')
 
-        dll_function = request.get_param('dll_function', None)
+        dll_function = request.get_param('dll_function')
         if dll_function:
             task_options.append('function={}'.format(dll_function))
 
-        arguments = request.get_param('arguments', None)
+        arguments = request.get_param('arguments')
         if arguments:
             task_options.append('arguments={}'.format(arguments))
 
         # Parse extra options (these aren't user selectable because they are dangerous/slow)
-        if request.get_param('pull_memory', False) and request.task.depth == 0:
+        if request.get_param('pull_memory') and request.task.depth == 0:
             pull_memdump = True
 
-        if request.get_param('dump_memory', False) and request.task.depth == 0:
+        if request.get_param('dump_memory') and request.task.depth == 0:
             # Full system dump and volatility scan
             full_memdump = True
             kwargs['memory'] = True
 
-        if request.get_param('no_monitor', False):
+        if request.get_param('no_monitor'):
             task_options.append("free=yes")
 
-        routing = request.get_param('routing', None)
+        routing = request.get_param('routing')
         if routing is None:
             routing = self.enabled_routes[0]
 
