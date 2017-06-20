@@ -315,7 +315,7 @@ class Cuckoo(ServiceBase):
         return pick
 
     def trigger_cuckoo_reset(self, retry_cnt=30):
-        self.log.warn("Forcing docker container reboot due to Cuckoo failure.")
+        self.log.info("Forcing docker container reboot due to Cuckoo failure.")
         self.cm.stop()
         self.cuckoo_ip = self.cm.start_container(self.cm.name)
         self.restart_interval = random.randint(45, 55)
@@ -570,14 +570,14 @@ class Cuckoo(ServiceBase):
         try:
             status = self.cuckoo_poll_started()
         except RetryError:
-            self.log.error("VM startup timed out")
+            self.log.info("VM startup timed out")
             status = None
 
         if status == "started":
             try:
                 status = self.cuckoo_poll_report()
             except RetryError:
-                self.log.error("Max retries exceeded for report status.")
+                self.log.info("Max retries exceeded for report status.")
                 status = None
 
         err_msg = None
