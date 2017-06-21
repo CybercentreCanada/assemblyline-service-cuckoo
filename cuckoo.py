@@ -161,10 +161,10 @@ class Cuckoo(ServiceBase):
             "value": CUCKOO_TIMEOUT,
         },
         {
-            "default": False,
+            "default": True,
             "name": "generate_report",
             "type": "bool",
-            "value": False,
+            "value": True,
         },
         {
             "default": False,
