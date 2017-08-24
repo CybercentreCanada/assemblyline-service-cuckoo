@@ -18,6 +18,7 @@ from assemblyline.common.exceptions import RecoverableError
 from assemblyline.al.service.base import ServiceBase
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.al.common import forge
+from assemblyline.common.docker import DockerException
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -539,7 +540,10 @@ class Cuckoo(ServiceBase):
 
     def check_stop(self):
         if not self.should_run:
-            self.cm.stop()
+            try:
+                self.cm.stop()
+            except DockerException:
+                pass
             return True
         return False
 
