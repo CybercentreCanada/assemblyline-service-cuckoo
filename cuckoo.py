@@ -241,7 +241,6 @@ class Cuckoo(ServiceBase):
 
     def __del__(self):
         if self.cm is not None:
-            from assemblyline.common.docker import DockerException
             try:
                 self.cm.stop()
             except DockerException:
@@ -317,7 +316,10 @@ class Cuckoo(ServiceBase):
 
     def trigger_cuckoo_reset(self, retry_cnt=30):
         self.log.info("Forcing docker container reboot due to Cuckoo failure.")
-        self.cm.stop()
+        try:
+            self.cm.stop()
+        except DockerException:
+            pass
         self.cuckoo_ip = self.cm.start_container(self.cm.name)
         self.restart_interval = random.randint(45, 55)
         self.set_urls()
@@ -599,7 +601,10 @@ class Cuckoo(ServiceBase):
     def stop(self):
         # Need to kill the container; we're about to go down..
         self.log.info("Service is being stopped; removing all running containers and metadata..")
-        self.cm.stop()
+        try:
+            self.cm.stop()
+        except DockerException:
+            pass
 
     @retry(wait_fixed=1000,
            stop_max_attempt_number=GUEST_VM_START_TIMEOUT,
