@@ -2,14 +2,11 @@ Assemblyline (AL) - Terms and Conditions of Use
 
 Unless otherwise noted, computer program source code of Assemblyline (AL) is covered under Crown Copyright, Government of Canada, and is distributed under the MIT License.
 
-The Canada wordmark and related graphics associated with this distribution are protected under trademark law and copyright law. No permission is granted to use them outside the parameters of the Government of Canada's corporate identity program. For more information, see http://www.tbs-sct.gc.ca/fip-pcim/index-eng.asp
-
 Copyright title to all 3rd party software distributed with the Assemblyline (AL) is held by the respective copyright holders as noted in those files. Users are asked to read the 3rd Party Licenses referenced with those assets.
 
+The MIT License (MIT)
 
-MIT License
-
-Copyright 2010-2017 Communications Security Establishment
+Copyright (c) 2010-2017 Crown Copyright, Government of Canada (Communications Security Establishment)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
