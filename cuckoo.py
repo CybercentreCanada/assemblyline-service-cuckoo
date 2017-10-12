@@ -866,7 +866,7 @@ class Cuckoo(ServiceBase):
                                 if skip_file is True:
                                     request.result.add_tag(tag_type=TAG_TYPE.FILE_SUMMARY,
                                                            value="Truncated extraction set",
-                                                           weight=TAG_WEIGHT.INFO)
+                                                           weight=TAG_WEIGHT.NULL)
                                     continue
                                 else:
                                     added_hashes.add(ssdeep_hash)
