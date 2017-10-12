@@ -153,7 +153,7 @@ class Cuckoo(ServiceBase):
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "2048M",
         "ram_limit": "3072m",
-        "dedup_similar_percent": "80"
+        "dedup_similar_percent": 80
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -281,7 +281,7 @@ class Cuckoo(ServiceBase):
         self.restart_interval = random.randint(45, 55)
         self.file_name = None
         self.set_urls()
-        self.ssdeep_match_pct = self.cfg.get("dedup_similar_percent", 80)
+        self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent", 80))
 
         for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
             if param['name'] == "routing":
@@ -863,15 +863,16 @@ class Cuckoo(ServiceBase):
                                     if ssdeep.compare(ssdeep_hash, seen_hash) >= self.ssdeep_match_pct:
                                         skip_file = True
                                         break
-                                if skip_file:
+                                if skip_file is True:
                                     request.result.add_tag(tag_type=TAG_TYPE.FILE_SUMMARY,
                                                            value="Truncated extraction set",
-                                                           weight=TAG_WEIGHT.NULL)
+                                                           weight=TAG_WEIGHT.INFO)
                                     continue
                                 else:
-                                    added_hashes += ssdeep_hash
+                                    added_hashes.add(ssdeep_hash)
                             dropped_hash = hashlib.md5(data).hexdigest()
-
+                            if dropped_hash == self.task.md5:
+                                continue
                         if not (wlist_check_hash(dropped_hash) or wlist_check_dropped(
                                 dropped_name) or dropped_name.endswith('_info.txt')):
                             # Resubmit
