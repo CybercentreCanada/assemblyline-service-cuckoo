@@ -6,6 +6,7 @@ import tarfile
 import time
 import shlex
 import random
+import ssdeep
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -13,7 +14,7 @@ from collections import Counter
 
 from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
-from assemblyline.al.common.result import Result, ResultSection
+from assemblyline.al.common.result import Result, ResultSection, SCORE, TAG_TYPE, TAG_WEIGHT, TEXT_FORMAT
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.al.service.base import ServiceBase
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
@@ -151,7 +152,8 @@ class Cuckoo(ServiceBase):
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "2048M",
-        "ram_limit": "3072m"
+        "ram_limit": "3072m",
+        "dedup_similar_percent": 80
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -237,6 +239,7 @@ class Cuckoo(ServiceBase):
         self.session = None
         self.enabled_routes = None
         self.cuckoo_ip = None
+        self.ssdeep_match_pct = 0
         self.restart_interval = 0
 
     def __del__(self):
@@ -278,6 +281,7 @@ class Cuckoo(ServiceBase):
         self.restart_interval = random.randint(45, 55)
         self.file_name = None
         self.set_urls()
+        self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent", 80))
 
         for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
             if param['name'] == "routing":
@@ -501,7 +505,7 @@ class Cuckoo(ServiceBase):
 
                 self.log.debug("Checking for dropped files and pcap.")
                 # Submit dropped files and pcap if available:
-                self.check_dropped(self.cuckoo_task.id)
+                self.check_dropped(request, self.cuckoo_task.id)
                 self.check_pcap(self.cuckoo_task.id)
 
                 # Check process memory dumps
@@ -831,9 +835,10 @@ class Cuckoo(ServiceBase):
                 return False
         return ready
 
-    def check_dropped(self, task_id):
+    def check_dropped(self, request, task_id):
         self.log.debug("Checking dropped files.")
         dropped_tar_bytes = self.cuckoo_query_report(task_id, 'dropped')
+        added_hashes = set()
         if dropped_tar_bytes is not None:
             try:
                 dropped_tar = tarfile.open(fileobj=io.BytesIO(dropped_tar_bytes))
@@ -851,8 +856,23 @@ class Cuckoo(ServiceBase):
                         # Check the file hash for whitelisting:
                         with open(dropped_file_path, 'r') as fh:
                             data = fh.read()
+                            if not request.deep_scan:
+                                ssdeep_hash = ssdeep.hash(data)
+                                skip_file = False
+                                for seen_hash in added_hashes:
+                                    if ssdeep.compare(ssdeep_hash, seen_hash) >= self.ssdeep_match_pct:
+                                        skip_file = True
+                                        break
+                                if skip_file is True:
+                                    request.result.add_tag(tag_type=TAG_TYPE.FILE_SUMMARY,
+                                                           value="Truncated extraction set",
+                                                           weight=TAG_WEIGHT.NULL)
+                                    continue
+                                else:
+                                    added_hashes.add(ssdeep_hash)
                             dropped_hash = hashlib.md5(data).hexdigest()
-
+                            if dropped_hash == self.task.md5:
+                                continue
                         if not (wlist_check_hash(dropped_hash) or wlist_check_dropped(
                                 dropped_name) or dropped_name.endswith('_info.txt')):
                             # Resubmit
