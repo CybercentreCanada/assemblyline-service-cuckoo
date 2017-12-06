@@ -328,6 +328,7 @@ def process_signatures(sigs, al_result, classification):
         sigs_score = 0
         sigs_res = ResultSection(title_text="Signatures", classification=classification)
         skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
+        print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities']
         # Severity is 0-5ish with 0 being least severe.
         for sig in sigs:
             severity = float(sig.get('severity', 0))
@@ -337,6 +338,7 @@ def process_signatures(sigs, al_result, classification):
             sig_name = sig.get('name', 'unknown')
             sig_categories = sig.get('categories', [])
             sig_families = sig.get('families', [])
+            sig_marks = sig.get('marks', [])
 
             # Skipped Signature Checks:
             if sig_name in skipped_sigs:
@@ -374,6 +376,12 @@ def process_signatures(sigs, al_result, classification):
                                   value=actor,
                                   weight=TAG_WEIGHT.VHIGH,
                                   classification=sig_classification)
+            if sig_name in print_iocs:
+                for mark in sig_marks:
+                    if mark.get('type') == 'ioc' and mark.get('category') in ['url', 'file', 'cmdline', 'request']:
+                        sigs_res.add_line('\tIOC: %s' % mark['ioc'])
+                    elif mark.get('type') == 'generic' and 'reg_key' in mark and 'reg_value' in mark:
+                        sigs_res.add_line('\tIOC: %s = %s' % (mark['reg_key'], mark['reg_value']))
 
         # We don't want to get carried away..
         sigs_res.score = min(1000, sigs_score)
