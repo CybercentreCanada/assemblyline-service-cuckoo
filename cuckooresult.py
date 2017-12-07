@@ -270,14 +270,14 @@ def process_behavior(behavior, al_result, classification):
                                 classification=classification)
         for di in directories_deleted:
             dde_res.add_line(di)
-            al_result.add_section(dde_res)
+        al_result.add_section(dde_res)
 
     if len(dlls_loaded) > 0:
         dll_res = ResultSection(title_text="DLLs Loaded (Limit {})".format(result_limit), score=SCORE.NULL,
                                 classification=classification)
         for dll in dlls_loaded:
             dll_res.add_line(dll)
-            al_result.add_section(dll_res)
+        al_result.add_section(dll_res)
 
     if len(files_downloaded) > 0:
         fd_res = ResultSection(title_text="File Downloads", score=SCORE.HIGH, classification=classification)
@@ -298,15 +298,17 @@ def process_behavior(behavior, al_result, classification):
 
         if len(files_exists) > 0:
             fex_res = ResultSection(title_text="File Exists (Limit {})" .format(result_limit), score=SCORE.NULL,
-                                    classification=classification, parent=fch)
+                                    classification=classification)
             for uri in files_exists:
                 fex_res.add_line(uri)
+            fch.add_section(fex_res)
 
         if len(files_failed) > 0:
             ffa_res = ResultSection(title_text="File Failed (Limit {})" .format(result_limit), score=SCORE.NULL,
-                                    classification=classification, parent=fch)
+                                    classification=classification)
             for uri in files_exists:
                 ffa_res.add_line(uri)
+            fch.add_section(ffa_res)
 
         al_result.add_section(fch)
 
@@ -381,7 +383,8 @@ def process_signatures(sigs, al_result, classification):
         sigs_score = 0
         sigs_res = ResultSection(title_text="Signatures", classification=classification)
         skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
-        print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities']
+        print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities',
+                      'persistence_autorun']
         # Severity is 0-5ish with 0 being least severe.
         for sig in sigs:
             severity = float(sig.get('severity', 0))
