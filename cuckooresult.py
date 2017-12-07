@@ -237,11 +237,18 @@ def process_behavior(behavior, al_result, classification):
                 process_com(call.get("arguments"), result_map)
                 # TODO: More interesting API stuff.
 
-    guids = behavior.get("summary", {}).get("guid", [])
-    files_written = behavior.get("summary", {}).get("file_written", [])
+    result_limit = 25
     commands = behavior.get("summary", {}).get("command_line", [])
-    wmi_queries = behavior.get("summary", {}).get("wmi_query", [])
+    directories_deleted = behavior.get("summary", {}).get("directory_created", [])[:result_limit]
+    dlls_loaded = behavior.get("summary", {}).get("dll_loaded", [])[:result_limit]
     files_downloaded = behavior.get("summary", {}).get("downloads_file", [])
+    files_deleted = behavior.get("summary", {}).get("file_deleted", [])[:result_limit]
+    files_exists = behavior.get("summary", {}).get("file_exists", [])[:result_limit]
+    files_failed = behavior.get("summary", {}).get("file_failed", [])[:result_limit]
+    files_written = behavior.get("summary", {}).get("file_written", [])
+    guids = behavior.get("summary", {}).get("guid", [])
+    regkeys_written = behavior.get("summary", {}).get("regkey_written", [])[:result_limit]
+    wmi_queries = behavior.get("summary", {}).get("wmi_query", [])
 
     if len(files_written) > 0:
         files_res = ResultSection(title_text="Files Written", classification=classification)
@@ -258,11 +265,19 @@ def process_behavior(behavior, al_result, classification):
             cmd_res.add_line(cmd)
         al_result.add_section(cmd_res)
 
-    if len(wmi_queries) > 0:
-        wmi_res = ResultSection(title_text="WMI Queries", classification=classification)
-        for wmi in wmi_queries:
-            wmi_res.add_line(wmi)
-        al_result.add_section(wmi_res)
+    if len(directories_deleted) > 0:
+        dde_res = ResultSection(title_text="Directories Deleted (Limit {})".format(result_limit), score=SCORE.NULL,
+                                classification=classification)
+        for di in directories_deleted:
+            dde_res.add_line(di)
+            al_result.add_section(dde_res)
+
+    if len(dlls_loaded) > 0:
+        dll_res = ResultSection(title_text="DLLs Loaded (Limit {})".format(result_limit), score=SCORE.NULL,
+                                classification=classification)
+        for dll in dlls_loaded:
+            dll_res.add_line(dll)
+            al_result.add_section(dll_res)
 
     if len(files_downloaded) > 0:
         fd_res = ResultSection(title_text="File Downloads", score=SCORE.HIGH, classification=classification)
@@ -270,8 +285,46 @@ def process_behavior(behavior, al_result, classification):
             fd_res.add_line(uri)
         al_result.add_section(fd_res)
 
+    if len(files_deleted) > 0:
+        fde_res = ResultSection(title_text="Files Deleted (Limit {})" .format(result_limit), score=SCORE.NULL,
+                                classification=classification)
+        for uri in files_downloaded:
+            fde_res.add_line(uri)
+        al_result.add_section(fde_res)
+
+    if len(files_exists) > 0 or len(files_failed) > 0:
+        fch = ResultSection(title_text="File Checks:" .format(result_limit), score=SCORE.NULL,
+                            classification=classification)
+
+        if len(files_exists) > 0:
+            fex_res = ResultSection(title_text="File Exists (Limit {})" .format(result_limit), score=SCORE.NULL,
+                                    classification=classification, parent=fch)
+            for uri in files_exists:
+                fex_res.add_line(uri)
+
+        if len(files_failed) > 0:
+            ffa_res = ResultSection(title_text="File Failed (Limit {})" .format(result_limit), score=SCORE.NULL,
+                                    classification=classification, parent=fch)
+            for uri in files_exists:
+                ffa_res.add_line(uri)
+
+        al_result.add_section(fch)
+
     if len(guids) > 0:
         process_com(guids, result_map)
+
+    if len(regkeys_written) > 0:
+        rwr_res = ResultSection(title_text="Registry Keys Written (Limit {})" .format(result_limit), score=SCORE.NULL,
+                                classification=classification)
+        for reg in regkeys_written:
+            rwr_res.add_line(reg)
+        al_result.add_section(rwr_res)
+
+    if len(wmi_queries) > 0:
+        wmi_res = ResultSection(title_text="WMI Queries", classification=classification)
+        for wmi in wmi_queries:
+            wmi_res.add_line(wmi)
+        al_result.add_section(wmi_res)
 
     # Make it serializable and sorted.. maybe we hash these?
     # Could probably do the same thing with registry keys..
@@ -328,6 +381,7 @@ def process_signatures(sigs, al_result, classification):
         sigs_score = 0
         sigs_res = ResultSection(title_text="Signatures", classification=classification)
         skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
+        print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities']
         # Severity is 0-5ish with 0 being least severe.
         for sig in sigs:
             severity = float(sig.get('severity', 0))
@@ -337,6 +391,7 @@ def process_signatures(sigs, al_result, classification):
             sig_name = sig.get('name', 'unknown')
             sig_categories = sig.get('categories', [])
             sig_families = sig.get('families', [])
+            sig_marks = sig.get('marks', [])
 
             # Skipped Signature Checks:
             if sig_name in skipped_sigs:
@@ -374,6 +429,12 @@ def process_signatures(sigs, al_result, classification):
                                   value=actor,
                                   weight=TAG_WEIGHT.VHIGH,
                                   classification=sig_classification)
+            if sig_name in print_iocs:
+                for mark in sig_marks:
+                    if mark.get('type') == 'ioc' and mark.get('category') in ['url', 'file', 'cmdline', 'request']:
+                        sigs_res.add_line('\tIOC: %s' % mark['ioc'])
+                    elif mark.get('type') == 'generic' and 'reg_key' in mark and 'reg_value' in mark:
+                        sigs_res.add_line('\tIOC: %s = %s' % (mark['reg_key'], mark['reg_value']))
 
         # We don't want to get carried away..
         sigs_res.score = min(1000, sigs_score)
