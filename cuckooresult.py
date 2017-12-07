@@ -223,11 +223,6 @@ def process_behavior(behavior, al_result, classification):
     for key in behavior.get("summary", {}).get("regkey_opened", []):
         process_key(key, result_map)
 
-    # Spender
-    mutexes = behavior.get("summary", {}).get("mutexes", [])
-    # Cuckoobox
-    mutexes.extend(behavior.get("summary", {}).get("mutex", []))
-
     result_map['processtree'] = behavior.get("processtree")
     for process in behavior.get("processes"):
         # pid = process.get("process_id")
@@ -237,96 +232,41 @@ def process_behavior(behavior, al_result, classification):
                 process_com(call.get("arguments"), result_map)
                 # TODO: More interesting API stuff.
 
-    result_limit = 25
-    commands = behavior.get("summary", {}).get("command_line", [])
-    directories_deleted = behavior.get("summary", {}).get("directory_created", [])[:result_limit]
-    dlls_loaded = behavior.get("summary", {}).get("dll_loaded", [])[:result_limit]
-    files_downloaded = behavior.get("summary", {}).get("downloads_file", [])
-    files_deleted = behavior.get("summary", {}).get("file_deleted", [])[:result_limit]
-    files_exists = behavior.get("summary", {}).get("file_exists", [])[:result_limit]
-    files_failed = behavior.get("summary", {}).get("file_failed", [])[:result_limit]
-    files_written = behavior.get("summary", {}).get("file_written", [])
     guids = behavior.get("summary", {}).get("guid", [])
-    regkeys_written = behavior.get("summary", {}).get("regkey_written", [])[:result_limit]
-    wmi_queries = behavior.get("summary", {}).get("wmi_query", [])
 
-    if len(files_written) > 0:
-        files_res = ResultSection(title_text="Files Written", classification=classification)
-        for filepath in sorted(files_written):
-            files_res.add_line(filepath)
-            al_result.add_tag(tag_type=TAG_TYPE.DYNAMIC_DROP_PATH, value=filepath,
-                              weight=TAG_WEIGHT.NULL, classification=classification,
-                              context=Context.DYNAMIC)
-        al_result.add_section(files_res)
+    result_limit = 25
 
-    if len(commands) > 0:
-        cmd_res = ResultSection(title_text="Commands", classification=classification)
-        for cmd in commands:
-            cmd_res.add_line(cmd)
-        al_result.add_section(cmd_res)
+    result_queries = {"directory_created":  ["Directories Created", result_limit, None],
+                      "directory_removed":  ["Directories Deleted", result_limit, None],
+                      "dll_loaded":         ["Modules Loaded", result_limit, None],
+                      "file_deleted":       ["Files Deleted", result_limit, None],
+                      "file_exists":        ["Check File: Exists", result_limit, None],
+                      "file_failed":        ["Check File: Failed", result_limit, None],
+                      "regkey_written":     ["Registry Keys Written", result_limit, None],
+                      "command_line":       ["Commands", None, None],
+                      "downloads_file":     ["Files Downloads", None, None],
+                      "file_written":       ["Files Written", None, TAG_TYPE.DYNAMIC_DROP_PATH],
+                      "wmi_query":          ["WMI Queries", None, None],
+                      "mutex":              ["Mutexes", None, TAG_TYPE.DYNAMIC_MUTEX_NAME],
+                      }
+    for q_name, [title, limit, tag_type] in result_queries.iteritems():
+        q_res = behavior.get("summary", {}).get(q_name, [])
+        if q_res:
+            if limit is not None:
+                q_res = q_res[:limit]
+                title = "%s (Limit %i)" % (title, limit)
 
-    if len(directories_deleted) > 0:
-        dde_res = ResultSection(title_text="Directories Deleted (Limit {})".format(result_limit), score=SCORE.NULL,
-                                classification=classification)
-        for di in directories_deleted:
-            dde_res.add_line(di)
-        al_result.add_section(dde_res)
-
-    if len(dlls_loaded) > 0:
-        dll_res = ResultSection(title_text="DLLs Loaded (Limit {})".format(result_limit), score=SCORE.NULL,
-                                classification=classification)
-        for dll in dlls_loaded:
-            dll_res.add_line(dll)
-        al_result.add_section(dll_res)
-
-    if len(files_downloaded) > 0:
-        fd_res = ResultSection(title_text="File Downloads", score=SCORE.HIGH, classification=classification)
-        for uri in files_downloaded:
-            fd_res.add_line(uri)
-        al_result.add_section(fd_res)
-
-    if len(files_deleted) > 0:
-        fde_res = ResultSection(title_text="Files Deleted (Limit {})" .format(result_limit), score=SCORE.NULL,
-                                classification=classification)
-        for uri in files_downloaded:
-            fde_res.add_line(uri)
-        al_result.add_section(fde_res)
-
-    if len(files_exists) > 0 or len(files_failed) > 0:
-        fch = ResultSection(title_text="File Checks:" .format(result_limit), score=SCORE.NULL,
-                            classification=classification)
-
-        if len(files_exists) > 0:
-            fex_res = ResultSection(title_text="File Exists (Limit {})" .format(result_limit), score=SCORE.NULL,
-                                    classification=classification)
-            for uri in files_exists:
-                fex_res.add_line(uri)
-            fch.add_section(fex_res)
-
-        if len(files_failed) > 0:
-            ffa_res = ResultSection(title_text="File Failed (Limit {})" .format(result_limit), score=SCORE.NULL,
-                                    classification=classification)
-            for uri in files_exists:
-                ffa_res.add_line(uri)
-            fch.add_section(ffa_res)
-
-        al_result.add_section(fch)
+            res_sec = ResultSection(title_text=title, classification=classification)
+            for ln in map(safe_str, q_res):
+                res_sec.add_line(ln)
+                if tag_type is not None:
+                    al_result.add_tag(tag_type=tag_type, value=ln,
+                                      weight=TAG_WEIGHT.NULL, classification=classification,
+                                      context=Context.DYNAMIC)
+            al_result.add_section(res_sec)
 
     if len(guids) > 0:
         process_com(guids, result_map)
-
-    if len(regkeys_written) > 0:
-        rwr_res = ResultSection(title_text="Registry Keys Written (Limit {})" .format(result_limit), score=SCORE.NULL,
-                                classification=classification)
-        for reg in regkeys_written:
-            rwr_res.add_line(reg)
-        al_result.add_section(rwr_res)
-
-    if len(wmi_queries) > 0:
-        wmi_res = ResultSection(title_text="WMI Queries", classification=classification)
-        for wmi in wmi_queries:
-            wmi_res.add_line(wmi)
-        al_result.add_section(wmi_res)
 
     # Make it serializable and sorted.. maybe we hash these?
     # Could probably do the same thing with registry keys..
@@ -363,15 +303,6 @@ def process_behavior(behavior, al_result, classification):
         # for key in result_map['regkeys']:
         #     reg_res.add_line(key)
         # al_result.add_section(reg_res)
-
-    if len(mutexes) > 0:
-        mutex_res = ResultSection(title_text="Mutexes", classification=classification)
-        mutexes = sorted([safe_str(x) for x in mutexes])
-        for mutex in sorted(mutexes):
-            mutex_res.add_line(mutex)
-            al_result.add_tag(tag_type=TAG_TYPE.DYNAMIC_MUTEX_NAME, value=mutex,
-                              weight=TAG_WEIGHT.NULL, classification=classification, context=Context.DYNAMIC)
-        al_result.add_section(mutex_res)
 
     log.debug("Behavior processing completed. Looks like valid execution: %s" % str(executed))
     return executed
