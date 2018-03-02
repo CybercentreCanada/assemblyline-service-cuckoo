@@ -275,7 +275,7 @@ if __name__ == "__main__":
     conf = json.loads(data)
 
     # Find eth0 ip
-    eth0_ip = re.search("inet (.*?)/[0-9]+ scope", run_cmd("ip addr show dev eth0")).group(1)
+    eth0_ip = re.search("inet (.*?)/[0-9]+.* scope", run_cmd("ip addr show dev eth0")).group(1)
 
     machines = []
     networks = {}
