@@ -14,7 +14,7 @@ from collections import Counter
 
 from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
-from assemblyline.al.common.result import Result, ResultSection, SCORE, TAG_TYPE, TAG_WEIGHT, TEXT_FORMAT
+from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TAG_WEIGHT
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.al.service.base import ServiceBase
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
@@ -142,7 +142,7 @@ class Cuckoo(ServiceBase):
     SERVICE_TIMEOUT = 800
     SERVICE_CATEGORY = "Dynamic Analysis"
     SERVICE_CPU_CORES = 1.1
-    SERVICE_RAM_MB = 4096
+    SERVICE_RAM_MB = 5120
     SERVICE_SAFE_START = True
 
     SERVICE_DEFAULT_CONFIG = {
@@ -152,7 +152,7 @@ class Cuckoo(ServiceBase):
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "2048M",
-        "ram_limit": "3072m",
+        "ram_limit": "5120m",
         "dedup_similar_percent": 80
     }
 
@@ -722,7 +722,7 @@ class Cuckoo(ServiceBase):
             report_data = resp.content
 
         if not report_data or report_data == '':
-            raise
+            raise Exception("Empty report data")
 
         return report_data
 
