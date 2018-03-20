@@ -32,6 +32,7 @@ from assemblyline.al.common import forge
 # so this will have to do for now.
 
 
+# noinspection PyBroadException
 class PrepareVM:
     class VMPrepException(Exception):
         pass
@@ -100,11 +101,11 @@ class PrepareVM:
         self.log.info("Domain %s has been purged", domain)
 
     def parse_args(self):
-        USAGE = "Snapshot Creator (for container-based malware analysis)"
-        VERSION = "0.1"
+        usage = "Snapshot Creator (for container-based malware analysis)"
+        version = "0.1"
 
         # Command-line arguments for the whole deployment.
-        parser = argparse.ArgumentParser(usage=USAGE, version=VERSION)
+        parser = argparse.ArgumentParser(usage=usage, version=version)
         parser.add_argument('--domain', action='store', help="Existing libvirt domain to prepare",
                             dest='domain', required=True)
         parser.add_argument('--platform', action='store', help="Guest OS platform (windows,linux)",
@@ -192,7 +193,7 @@ class PrepareVM:
                 self.lv = libvirt.open(None)
                 if self.lv is not None:
                     break
-            except:
+            except Exception:
                 last_exception = traceback.format_exc()
             time.sleep(3)
 
@@ -208,11 +209,14 @@ class PrepareVM:
         timeout = int(_t.get("timeout", 60))
         files_out = {}
         for fname, v in _t.get("files", {}).iteritems():
+            contents = ""
+
             if "contents" in v:
                 contents = v['contents']
                 contents = "%s\n" % "\n".join(contents)
             if v.get("render", False):
                 contents = jinja2.Environment().from_string(contents).render(context)
+
             files_out[fname] = contents
 
         return timeout, files_out

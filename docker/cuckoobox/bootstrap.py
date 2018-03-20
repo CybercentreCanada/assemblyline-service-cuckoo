@@ -65,13 +65,13 @@ def render_template(template_filename, context):
 
 
 def run_cmd(command, raise_on_error=False):
-    args = shlex.split(command)
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    cmd_args = shlex.split(command)
+    proc = subprocess.Popen(cmd_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = proc.communicate()
     if stderr:
         print stderr
         if raise_on_error:
-            raise
+            raise Exception(str(stderr))
     return stdout
 
 
@@ -82,15 +82,14 @@ def get_vnet_ip(name):
             ip = net_root.find('ip')
             addr = ip.attrib['address']
             return addr
-    print "CRITICAL: Unable to acquire vnet ip.."
-    raise
+    raise Exception("CRITICAL: Unable to acquire vnet ip..")
 
 
 def gen_mac_addr():
     return "52:54:00:%s" % ":".join(map(binascii.b2a_hex, list(os.urandom(3))))
 
 
-def setup_network(eth0_ip, networks):
+def setup_network(eth0_ip_p, networks_p):
     # Find real DNS server
     resolve = open("/etc/resolv.conf").read()
     dns_ip = re.search("nameserver[\t ]*([0-9.]+)", resolve).group(1)
@@ -101,13 +100,13 @@ def setup_network(eth0_ip, networks):
     create_inetsim = False
     contexts = []
     counter = 1
-    for vm_name, [vm_ip, vm_gateway, vm_netmask, vm_vrouteip, route_opt, if_name] in networks.iteritems():
+    for vm_name, [vm_ip_p, vm_gateway_p, vm_netmask, vm_vrouteip, route_opt, if_name_p] in networks_p.iteritems():
         ctx = {
-            'virt_bridge_name': if_name,
-            'virt_bridge_ip': vm_gateway,
+            'virt_bridge_name': if_name_p,
+            'virt_bridge_ip': vm_gateway_p,
             'virt_bridge_netmask': vm_netmask,
             'virt_route_addr': vm_vrouteip,
-            'vm_ip': vm_ip,
+            'vm_ip': vm_ip_p,
             'route_opt': route_opt,
             'mac': gen_mac_addr(),
             'mark': counter
@@ -128,21 +127,21 @@ def setup_network(eth0_ip, networks):
             "mac": gen_mac_addr()
         })
     ctx["inetsim"] = inetsim
-    ctx['eth_ip'] = eth0_ip
+    ctx['eth_ip'] = eth0_ip_p
     ctx['dns_ip'] = dns_ip
     print json.dumps(ctx, indent=4, sort_keys=True)
     interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context=ctx)
 
     interfaces_file = os.path.join(CFG_BASE, 'interfaces')
-    with open(interfaces_file, 'w') as fh:
-        fh.write(interfaces)
+    with open(interfaces_file, 'w') as i_fh:
+        i_fh.write(interfaces)
     run_cmd("cp %s /etc/network/interfaces" % interfaces_file)
 
     iptables = render_template(CUSTOM_NAT_RULES_TEMPLATE, context=ctx)
     iptables_file = os.path.join(CFG_BASE, 'rules.v4')
 
-    with open(iptables_file, 'w') as fh:
-        fh.write(iptables)
+    with open(iptables_file, 'w') as ipt_fh:
+        ipt_fh.write(iptables)
 
     if create_inetsim:
         run_cmd("ifup inetsim0")
@@ -191,8 +190,7 @@ def jank_backing_disk_chain(new, old):
 
     backing_disk_abspath = os.path.join(old_dir, backing_disk)
     if not os.path.exists(backing_disk_abspath):
-        print "Unable to find the absolute path of the backing disk.. expected at %s" % backing_disk_abspath
-        raise
+        raise Exception("Unable to find the absolute path of the backing disk.. expected at %s" % backing_disk_abspath)
 
     run_cmd('qemu-img rebase -u -b %s %s' % (backing_disk_abspath, new))
 
@@ -248,15 +246,15 @@ def import_disk(domain, domain_xml, snapshot_xml, disk_location, custom_vmnet=No
 if __name__ == "__main__":
     # Acquire libvirt
     for i in xrange(3):
+        # noinspection PyBroadException
         try:
             lv = libvirt.open(None)
             break
-        except:
+        except Exception:
             time.sleep(3)
 
     if lv is None:
-        print "Unable to acquire libvirt connection.. this is fatal!!"
-        raise
+        raise Exception("Unable to acquire libvirt connection.. this is fatal!!")
 
     # Arguments
     parser = ArgumentParser(usage=HELP, version=VERSION)
@@ -275,7 +273,7 @@ if __name__ == "__main__":
     conf = json.loads(data)
 
     # Find eth0 ip
-    eth0_ip = re.search("inet (.*?)/[0-9]+ scope", run_cmd("ip addr show dev eth0")).group(1)
+    eth0_ip = re.search("inet (.*?)/[0-9]+.* scope", run_cmd("ip addr show dev eth0")).group(1)
 
     machines = []
     networks = {}
