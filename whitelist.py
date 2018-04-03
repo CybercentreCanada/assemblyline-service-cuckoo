@@ -155,8 +155,16 @@ WHITELIST_HASHES = [
     # ExcludeDictionary:
     'f3b25701fe362ec84616a93a45ce9998',
 
-    # Inetsim exe
-    'be5eae9bd85769bce02d6e52a4927bcd',
+    # Inetsim fakefiles
+    'e62d73c60f743dd822a652c2c6d32e8b',  # sample.mbox
+    '8e3e307a923321a27a9ed8e868159589',  # sample.jpg
+    '5a56faaf51109f44214b022e0cdddd80',  # sample.gif
+    '985a2930713d530334bd570ef447cc65',  # sample.png
+    'ba9b716bc18cf2010aefd580788a3a47',  # sample.bmp
+    '7031f4a5881dea5522d6aea11ed86fbc',  # sample.txt (http)
+    'd13eac51cd03eb893de24fc827b8cddb',  # sample_gui.exe
+    'be5eae9bd85769bce02d6e52a4927bcd',  # sample.html
+    '08e7d39a806b89366fb3e0328661aa93',  # sample.txt (ftp)
 
     # ######### OTHER HASHES ###########
 
