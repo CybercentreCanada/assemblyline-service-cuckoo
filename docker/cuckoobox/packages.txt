@@ -1,5 +1,6 @@
 python
 python-pip
+python-setuptools
 python-dev
 libffi-dev
 libssl-dev
