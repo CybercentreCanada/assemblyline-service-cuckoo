@@ -251,7 +251,6 @@ Once the operating system has been installed, perform the following setup.
 * Copy agent.py from the cuckoo repository to the users startup folder
 * Rename the extension from .py to .pyw
 * Make sure no password is required to get to a desktop from boot
-* Create a RunOnce key for c:\bootstrap.bat
 
 When done, shutdown the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
 guest has completely shut down. Remove the CD drive configuration from the virtual machine. The virtual machine will
@@ -282,7 +281,7 @@ below.
 
     source /etc/default/al
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo -u al PYTHONPATH=$PYTHONPATH ./prepare_vm.py --domain Win7SP1x86 --platform windows \
+    sudo -E ./prepare_vm.py --domain Win7SP1x86 --platform windows \
         --hostname PREPTEST --tags "pe32,default" --force --base Win7SP1x86  --name inetsim_Win7SP1x86 \
         --guest_profile Win7SP1x86 --template win7 --ordinal 10 --route inetsim
     

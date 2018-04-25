@@ -2,7 +2,7 @@
   "timeout": 60,
   "files":
     {
-      "/bootstrap.bat": {
+      "/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup/bootstrap.bat": {
         "render": true,
         "contents": [
           "sc stop \"netprofm\"",
@@ -12,7 +12,7 @@
           "netsh interface ip set dns name=\"Local Area Connection\" static {{ dns_ip }}",
           "wmic ComputerSystem where name=\"%COMPUTERNAME%\" call Rename Name=\"{{ hostname }}\"",
           "shutdown -s -f -t 5",
-          "del c:\bootstrap.bat"
+          "del \"c:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\bootstrap.bat\""
         ]
       }
     }
