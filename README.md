@@ -41,9 +41,15 @@ deployment.
 
     sudo docker run -d -p 127.0.0.1:5000:5000 --name registry registry:2
 
-Make sure to configure this registry in the ASSEMBLYLINE seed.
+Make sure to configure this registry in the ASSEMBLYLINE seed. In an ipython session:
 
+    from assemblyline.al.common import forge
+    ds = forge.get_datastore()
+    seed = ds.get_blob("seed")
+    
     seed['installation']['docker']['private_registry'] = 'localhost:5000'
+    
+    ds.save_blob("seed", seed)
 
 In a cluster deployment you will want to set up an authentication proxy with a docker registry on your support server. 
 Below are instructions for an Nginx based proxy for domain support.example.com listening on port 8443.
