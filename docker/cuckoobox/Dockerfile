@@ -18,7 +18,7 @@ COPY libs/inetsim_1.2.6-1_all.deb /tmp/inetsim_1.2.6-1_all.deb
 # Also change policy-rc.d to fix errors:
 RUN echo "#!/bin/sh\nexit 0" > /usr/sbin/policy-rc.d
 
-COPY libs/volatility-2.5.tar.gz /tmp/
+COPY libs/volatility-2.6.zip /tmp/
 
 # cgroup-lite fixup compensates for a ubuntu:trusty-docker:cgroup broken package
 RUN apt-get update &&\
@@ -28,12 +28,12 @@ RUN apt-get update &&\
   dpkg -i /tmp/inetsim_1.2.6-1_all.deb &&\
   rm /tmp/inetsim_1.2.6-1_all.deb &&\
   xargs -n 1 pip install --upgrade < /tmp/requirements.txt &&\
-  pip install /tmp/volatility-2.5.tar.gz &&\
+  pip install /tmp/volatility-2.6.zip &&\
   apt-get remove -y --force-yes python-dev libffi-dev libssl-dev libjpeg-dev zlib1g-dev libxml2-dev libxslt1-dev \
   libc6-dev libpython2.7 vim-tiny vim-common gcc cpp g++ make &&\
   apt-get autoremove -y --force-yes &&\
   apt-get clean &&\
-  rm /tmp/requirements.txt /tmp/packages.txt /tmp/volatility-2.5.tar.gz
+  rm /tmp/requirements.txt /tmp/packages.txt /tmp/volatility-2.6.zip
 
 # tcpdump workaround
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump &&\
