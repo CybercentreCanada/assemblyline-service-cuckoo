@@ -2,7 +2,7 @@
 # Docker container for Cuckoo Sandbox
 #
 
-FROM ubuntu:14.04
+FROM ubuntu:16.04
 
 
 # Container needs to know that it has no TTY
@@ -76,7 +76,10 @@ RUN mv /usr/sbin/libvirtd /usr/bin/libvirtd &&\
   ln -s /usr/bin/libvirtd /usr/sbin/libvirtd
 
 # Disable slow ntpdate updating
-RUN rm /etc/network/if-up.d/ntpdate
+#RUN rm /etc/network/if-up.d/ntpdate
+
+RUN pip install libmagic
+RUN apt-get install -y libmagic-dev
 
 ################################### CONFIGURATION ######################################
 
@@ -101,8 +104,13 @@ RUN cuckoo &&\
   cp /home/sandbox/conf/processing.conf /home/sandbox/.cuckoo/conf/
 
 USER root
+
+# TESTING
+#RUN apt-get install -y openssh-server
+#RUN echo "root:P@ssw0rd" | chpasswd
+
 # Expose cuckoo/libvirt ports
-EXPOSE 80 2042 5353 8090 9040 16509
+EXPOSE 80 2042 5353 8090 9040 16509 22
 
 # Set the entry point
 ENTRYPOINT ["/home/sandbox/startup.sh"]
