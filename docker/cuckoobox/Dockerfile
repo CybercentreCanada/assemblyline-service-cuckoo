@@ -81,6 +81,7 @@ RUN mv /usr/sbin/libvirtd /usr/bin/libvirtd &&\
 RUN pip install libmagic
 RUN apt-get install -y libmagic-dev
 
+
 ################################### CONFIGURATION ######################################
 
 COPY startup.sh /home/sandbox/startup.sh
@@ -108,6 +109,10 @@ USER root
 # TESTING
 #RUN apt-get install -y openssh-server
 #RUN echo "root:P@ssw0rd" | chpasswd
+
+# temporary? we should remove this for >14.04
+# TODO: update to use new ip address tools
+RUN apt-get install -y net-tools ifupdown
 
 # Expose cuckoo/libvirt ports
 EXPOSE 80 2042 5353 8090 9040 16509 22
