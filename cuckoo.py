@@ -148,7 +148,7 @@ class Cuckoo(ServiceBase):
     SERVICE_DEFAULT_CONFIG = {
         "cuckoo_image": "cuckoo/cuckoobox:latest",
         "vm_meta": "cuckoo.config",
-        "REMOTE_DISK_ROOT": "var/support/vm/disks/cuckoo/",
+        "REMOTE_DISK_ROOT": "vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "2048M",
