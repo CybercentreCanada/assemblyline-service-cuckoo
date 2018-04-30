@@ -3,7 +3,8 @@
 USAGE="Cuckoo Container v0.1
 Usage: docker run --privileged <this_container> -v <host_vm_store>:/var/lib/libvirt/images -v <vm_meta_store>:/opt/vm_meta <conf_filename>
 
-ie/ sudo docker run --rm=true  --privileged --cap-add=ALL --memory 5120m --volume /opt/al/var/cuckoo/:/opt/vm_meta:ro --volume /opt/al/vmm/disks/cuckoo_vms/:/var/lib/libvirt/images:ro localhost:5000/cuckoo/cuckoobox16:latest cuckoo.config 2048M
+This is what the AL service invokes:
+ie/ sudo docker run --rm=true  --privileged --cap-add=ALL --memory 5120m --volume /opt/al/var/cuckoo/:/opt/vm_meta:ro --volume /opt/al/vmm/disks/cuckoo_vms/:/var/lib/libvirt/images:ro localhost:5000/cuckoo/cuckoobox:latest cuckoo.config 2048M
 "
 
 # GLOBALS
