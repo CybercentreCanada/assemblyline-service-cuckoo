@@ -2,10 +2,14 @@
 
 USAGE="Cuckoo Container v0.1
 Usage: docker run --privileged <this_container> -v <host_vm_store>:/var/lib/libvirt/images -v <vm_meta_store>:/opt/vm_meta <conf_filename>
+
+This is what the AL service invokes:
+ie/ sudo docker run --rm=true  --privileged --cap-add=ALL --memory 5120m --volume /opt/al/var/cuckoo/:/opt/vm_meta:ro --volume /opt/al/vmm/disks/cuckoo_vms/:/var/lib/libvirt/images:ro localhost:5000/cuckoo/cuckoobox:latest cuckoo.config 2048M
 "
 
 # GLOBALS
 export CONTAINER_IP=`ifconfig eth0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`
+#export CONTAINER_IP=`ip address show eth0 | grep "inet " | cut -d" " -f6 | cut -d"/" -f1`
 export CUCKOO_BASE=/home/sandbox/.cuckoo
 
 # LOCALS

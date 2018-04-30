@@ -41,9 +41,15 @@ deployment.
 
     sudo docker run -d -p 127.0.0.1:5000:5000 --name registry registry:2
 
-Make sure to configure this registry in the ASSEMBLYLINE seed.
+Make sure to configure this registry in the ASSEMBLYLINE seed. In an ipython session:
 
+    from assemblyline.al.common import forge
+    ds = forge.get_datastore()
+    seed = ds.get_blob("seed")
+    
     seed['installation']['docker']['private_registry'] = 'localhost:5000'
+    
+    ds.save_blob("seed", seed)
 
 In a cluster deployment you will want to set up an authentication proxy with a docker registry on your support server. 
 Below are instructions for an Nginx based proxy for domain support.example.com listening on port 8443.
@@ -153,7 +159,7 @@ is configured on all workers, the following commands will only need to be run on
 
     cd /opt/al/pkg/al_services/alsvc_cuckoo/docker/cuckoobox
     sudo apt-get install python-dev libffi-dev libfuzzy-dev
-    sudo -u al bash libs.sh
+    python get_libs_for_cuckoo_docker.py
     sudo docker build -t localhost:5000/cuckoo/cuckoobox .
     sudo docker push localhost:5000/cuckoo/cuckoobox
 
@@ -251,7 +257,6 @@ Once the operating system has been installed, perform the following setup.
 * Copy agent.py from the cuckoo repository to the users startup folder
 * Rename the extension from .py to .pyw
 * Make sure no password is required to get to a desktop from boot
-* Create a RunOnce key for c:\bootstrap.bat
 
 When done, shutdown the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
 guest has completely shut down. Remove the CD drive configuration from the virtual machine. The virtual machine will
@@ -282,7 +287,7 @@ below.
 
     source /etc/default/al
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo -u al PYTHONPATH=$PYTHONPATH ./prepare_vm.py --domain Win7SP1x86 --platform windows \
+    sudo -E PYTHONPATH=$PYTHONPATH ./prepare_vm.py --domain Win7SP1x86 --platform windows \
         --hostname PREPTEST --tags "pe32,default" --force --base Win7SP1x86  --name inetsim_Win7SP1x86 \
         --guest_profile Win7SP1x86 --template win7 --ordinal 10 --route inetsim
     
@@ -320,7 +325,7 @@ The parameters for prepare_vm.py are:
 
 #### Deploy all snapshots to Cuckoo
 
-Once you've prepared all the virtual machine, there should be a number of .tar.gz files containing virtual machine
+Once you've prepared all the virtual machines, there should be a number of .tar.gz files containing virtual machine
 metadata. The prepare_cuckoo.py overwrites the current cuckoo configuration, so it's recommended to keep these files
 handy in case you want to deploy new virtual machines in future. The prepare_cuckoo.py script will automatically
 retrieve Cuckoo service configurations including metadata paths and enabled routes. If you change these configurations 
