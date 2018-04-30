@@ -287,7 +287,7 @@ below.
 
     source /etc/default/al
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo -E ./prepare_vm.py --domain Win7SP1x86 --platform windows \
+    sudo -E PYTHONPATH=$PYTHONPATH ./prepare_vm.py --domain Win7SP1x86 --platform windows \
         --hostname PREPTEST --tags "pe32,default" --force --base Win7SP1x86  --name inetsim_Win7SP1x86 \
         --guest_profile Win7SP1x86 --template win7 --ordinal 10 --route inetsim
     
@@ -325,7 +325,7 @@ The parameters for prepare_vm.py are:
 
 #### Deploy all snapshots to Cuckoo
 
-Once you've prepared all the virtual machine, there should be a number of .tar.gz files containing virtual machine
+Once you've prepared all the virtual machines, there should be a number of .tar.gz files containing virtual machine
 metadata. The prepare_cuckoo.py overwrites the current cuckoo configuration, so it's recommended to keep these files
 handy in case you want to deploy new virtual machines in future. The prepare_cuckoo.py script will automatically
 retrieve Cuckoo service configurations including metadata paths and enabled routes. If you change these configurations 
