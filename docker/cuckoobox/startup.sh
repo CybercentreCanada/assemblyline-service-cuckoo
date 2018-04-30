@@ -7,8 +7,8 @@ ie/ sudo docker run --rm=true  --privileged --cap-add=ALL --memory 5120m --volum
 "
 
 # GLOBALS
-#export CONTAINER_IP=`ifconfig eth0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`
-export CONTAINER_IP=`ip address show eth0 | grep "inet " | cut -d" " -f6 | cut -d"/" -f1`
+export CONTAINER_IP=`ifconfig eth0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`
+#export CONTAINER_IP=`ip address show eth0 | grep "inet " | cut -d" " -f6 | cut -d"/" -f1`
 export CUCKOO_BASE=/home/sandbox/.cuckoo
 
 # LOCALS

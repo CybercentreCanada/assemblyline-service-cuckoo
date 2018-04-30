@@ -2,7 +2,7 @@
 # Docker container for Cuckoo Sandbox
 #
 
-FROM ubuntu:16.04
+FROM ubuntu:14.04
 
 
 # Container needs to know that it has no TTY
@@ -18,7 +18,7 @@ COPY libs/inetsim_1.2.6-1_all.deb /tmp/inetsim_1.2.6-1_all.deb
 # Also change policy-rc.d to fix errors:
 RUN echo "#!/bin/sh\nexit 0" > /usr/sbin/policy-rc.d
 
-COPY libs/volatility-2.6.zip /tmp/
+COPY libs/volatility-2.5.tar.gz /tmp/
 
 # cgroup-lite fixup compensates for a ubuntu:trusty-docker:cgroup broken package
 RUN apt-get update &&\
@@ -28,12 +28,12 @@ RUN apt-get update &&\
   dpkg -i /tmp/inetsim_1.2.6-1_all.deb &&\
   rm /tmp/inetsim_1.2.6-1_all.deb &&\
   xargs -n 1 pip install --upgrade < /tmp/requirements.txt &&\
-  pip install /tmp/volatility-2.6.zip &&\
+  pip install /tmp/volatility-2.5.tar.gz &&\
   apt-get remove -y --force-yes python-dev libffi-dev libssl-dev libjpeg-dev zlib1g-dev libxml2-dev libxslt1-dev \
   libc6-dev libpython2.7 vim-tiny vim-common gcc cpp g++ make &&\
   apt-get autoremove -y --force-yes &&\
   apt-get clean &&\
-  rm /tmp/requirements.txt /tmp/packages.txt /tmp/volatility-2.6.zip
+  rm /tmp/requirements.txt /tmp/packages.txt /tmp/volatility-2.5.tar.gz
 
 # tcpdump workaround
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump &&\
@@ -76,11 +76,7 @@ RUN mv /usr/sbin/libvirtd /usr/bin/libvirtd &&\
   ln -s /usr/bin/libvirtd /usr/sbin/libvirtd
 
 # Disable slow ntpdate updating
-#RUN rm /etc/network/if-up.d/ntpdate
-
-RUN pip install libmagic
-RUN apt-get install -y libmagic-dev
-
+RUN rm /etc/network/if-up.d/ntpdate
 
 ################################### CONFIGURATION ######################################
 
@@ -105,17 +101,8 @@ RUN cuckoo &&\
   cp /home/sandbox/conf/processing.conf /home/sandbox/.cuckoo/conf/
 
 USER root
-
-# TESTING
-#RUN apt-get install -y openssh-server
-#RUN echo "root:P@ssw0rd" | chpasswd
-
-# temporary? we should remove this for >14.04
-# TODO: update to use new ip address tools
-RUN apt-get install -y net-tools ifupdown
-
 # Expose cuckoo/libvirt ports
-EXPOSE 80 2042 5353 8090 9040 16509 22
+EXPOSE 80 2042 5353 8090 9040 16509
 
 # Set the entry point
 ENTRYPOINT ["/home/sandbox/startup.sh"]
