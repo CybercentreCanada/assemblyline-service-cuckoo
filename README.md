@@ -259,10 +259,27 @@ Once the operating system has been installed, perform the following setup.
 * Make sure no password is required to get to a desktop from boot
 
 When done, shutdown the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
-guest has completely shut down. Remove the CD drive configuration from the virtual machine. The virtual machine will
-fail if it contains any references to the install medium.
+guest has completely shut down. Remove the CD drive configuration from the virtual machine by editing the XML. 
+The virtual machine will fail if it contains any references to the install medium.
 
     sudo virsh edit Win7SP1x86
+
+**NB**: If you've created the VM on a host that's different from the cuckoobox docker container (currently Ubuntu 14.04), you
+may also have to change the 'machine' attribute in the XML to one that's supported by the docker container.
+
+For example, if you built the VM on Ubuntu 16.04, you may have the machine type set as follows. Simply change 'xenial' to 'trusty'. 
+To see a list of supported machine types, launch a bash shell *inside* the docker container and run ``kvm-spice -machine help``. 
+If you make a change to this, be sure to boot up the VM one more time - Windows will want to install different drivers and reboot again.
+Then finally shutdown and continue the instructions.
+
+    ...
+    <os>
+        <type arch='x86_64' machine='pc-i440fx-xenial'>hvm</type>
+        <boot dev='hd'/>
+    </os>
+    ...
+
+    
 
 Create a snapshot of the virtual machine.
 

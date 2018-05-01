@@ -263,13 +263,6 @@ class PrepareVM:
         if backing_disk is None:
             raise self.VMPrepException("Unable to find any disks.. cannot use a domain with no disk!")
 
-        # Remove machine type. This deals with issues where the docker image is different than the host
-        machine_type = domain_root.find("./os/type")
-        if machine_type is not None:
-            if machine_type.attrib.has_key("machine"):
-                del(machine_type.attrib["machine"])
-                # machine_type.attrib["machine"] = "ubuntu"
-
         # Extend the disk
         snapshot_dir = os.path.split(backing_disk)[0]
         snapshot_disk_name = "%s.%s" % (self.args.snapshot_name, disk_driver)
@@ -322,16 +315,6 @@ class PrepareVM:
         # Using virsh here is just plain easier than creating snapshot xml..
         self._run_cmd("virsh snapshot-create %s" % self.args.snapshot_name)
         snapshot_snap_xml = snapshot_domain.snapshotCurrent().getXMLDesc()
-
-        # Remove machine type. This deals with issues where the docker image is different than the host
-        snapshot_root = lxml.etree.fromstring(snapshot_snap_xml)
-        machine_type = snapshot_root.find("./domain/os/type")
-        if machine_type is not None:
-            if machine_type.attrib.has_key("machine"):
-                del (machine_type.attrib["machine"])
-                # machine_type.attrib["machine"] = "ubuntu"
-        # Dump xml back out
-        snapshot_snap_xml = lxml.etree.tostring(snapshot_root)
 
         snapshot_snap_xml_filename = "%s_snapshot.xml" % self.args.snapshot_name
 
