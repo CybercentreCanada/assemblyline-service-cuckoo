@@ -159,7 +159,7 @@ is configured on all workers, the following commands will only need to be run on
 
     cd /opt/al/pkg/al_services/alsvc_cuckoo/docker/cuckoobox
     sudo apt-get install python-dev libffi-dev libfuzzy-dev
-    python get_libs_for_cuckoo_docker.py
+    sudo -u al python get_libs_for_cuckoo_docker.py
     sudo docker build -t localhost:5000/cuckoo/cuckoobox .
     sudo docker push localhost:5000/cuckoo/cuckoobox
 
