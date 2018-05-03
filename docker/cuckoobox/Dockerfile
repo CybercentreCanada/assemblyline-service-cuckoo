@@ -124,21 +124,21 @@ RUN cuckoo &&\
   mkdir /home/sandbox/supervisor &&\
   cp /home/sandbox/conf/processing.conf /home/sandbox/.cuckoo/conf/
 
-## TESTING
-# Add SSH key for sandbox user (this user is the one who runs cuckoo and kvm processes)
-# Assumes that you've copied id_rsa.pub file to the local build directory
-RUN mkdir /home/sandbox/.ssh
-COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
-RUN chmod 700 /home/sandbox/.ssh
-RUN chmod 600 /home/sandbox/.ssh/authorized_keys
-
 USER root
 
-# TESTING
-RUN mkdir /root/.ssh
-COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
-RUN chmod 700 /root/.ssh
-RUN chmod 600 /root/.ssh/authorized_keys
+## TESTING - SSH ACCESS FOR ROOT & SANDBOX USER
+# Add SSH key for sandbox user (this user is the one who runs cuckoo and kvm processes)
+# as well as the root user
+# Assumes that you've copied id_rsa.pub file to the local build directory.
+# In order to login with ssh, you'll have to get a shell inside the container and start SSH
+# with 'service ssh start'
+#RUN mkdir /home/sandbox/.ssh
+#COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
+#RUN chmod 700 /home/sandbox/.ssh && chmod 600 /home/sandbox/.ssh/authorized_keys && chown sandbox.sandbox -R /home/sandbox/.ssh
+#RUN mkdir /root/.ssh
+#COPY id_rsa.pub /root/.ssh/authorized_keys
+#RUN chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys
+# END TESTING
 
 # Expose cuckoo/libvirt ports
 EXPOSE 80 2042 5353 8090 9040 16509 22
