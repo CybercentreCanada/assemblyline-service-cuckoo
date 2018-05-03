@@ -1,8 +1,11 @@
 #
 # Docker container for Cuckoo Sandbox
 #
+# To test this container on it's own, this is something like what the AL service invokes (assuming default service configuration)
+# ie/ sudo docker run --rm=true  --privileged --cap-add=ALL --memory 5120m --volume /opt/al/var/cuckoo/:/opt/vm_meta:ro --volume /opt/al/vmm/disks/cuckoo_vms/:/var/lib/libvirt/images:ro localhost:5000/cuckoo/cuckoobox:latest cuckoo.config 2048M
+#
 
-FROM ubuntu:14.04
+FROM ubuntu:16.04
 
 
 # Container needs to know that it has no TTY
@@ -35,6 +38,9 @@ RUN apt-get update &&\
   apt-get clean &&\
   rm /tmp/requirements.txt /tmp/packages.txt /tmp/volatility-2.6.zip
 
+# These packages are helpful for testing
+RUN apt-get install -y openssh-server vim less
+
 # tcpdump workaround
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump &&\
   ln -s /usr/bin/tcpdump /usr/sbin/tcpdump &&\
@@ -44,7 +50,18 @@ RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump &&\
 RUN mkdir -p /var/run/dbus || /bin/true
 RUN sed -ie 's/auth_admin_keep/yes/' /usr/share/polkit-1/actions/org.libvirt.unix.policy
 
-#RUN cd /tmp/docker/build
+# locales was causing issues for ubuntu 16.04 build for some reason
+RUN apt-get install -y locales
+RUN LANG=en_US.UTF-8 locale-gen --purge en_US.UTF-8
+
+# temporary -  we should remove this for >14.04
+# TODO: update to use new ip address tools
+RUN apt-get install -y net-tools ifupdown
+
+RUN systemctl enable virtlogd.socket
+
+# Another 16.04 new package
+RUN apt-get install -y policykit-1
 
 # Make sure deps are available
 RUN echo "/usr/local/lib" >> /etc/ld.so.conf
@@ -76,7 +93,14 @@ RUN mv /usr/sbin/libvirtd /usr/bin/libvirtd &&\
   ln -s /usr/bin/libvirtd /usr/sbin/libvirtd
 
 # Disable slow ntpdate updating
-RUN rm /etc/network/if-up.d/ntpdate
+#RUN rm /etc/network/if-up.d/ntpdate
+
+RUN pip install libmagic
+RUN apt-get install -y libmagic-dev
+
+# Set up libvirt-bin service
+COPY conf/etc.default.libvirt-bin /etc/default/libvirt-bin
+
 
 ################################### CONFIGURATION ######################################
 
@@ -100,9 +124,24 @@ RUN cuckoo &&\
   mkdir /home/sandbox/supervisor &&\
   cp /home/sandbox/conf/processing.conf /home/sandbox/.cuckoo/conf/
 
+## TESTING
+# Add SSH key for sandbox user (this user is the one who runs cuckoo and kvm processes)
+# Assumes that you've copied id_rsa.pub file to the local build directory
+RUN mkdir /home/sandbox/.ssh
+COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
+RUN chmod 700 /home/sandbox/.ssh
+RUN chmod 600 /home/sandbox/.ssh/authorized_keys
+
 USER root
+
+# TESTING
+RUN mkdir /root/.ssh
+COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
+RUN chmod 700 /root/.ssh
+RUN chmod 600 /root/.ssh/authorized_keys
+
 # Expose cuckoo/libvirt ports
-EXPOSE 80 2042 5353 8090 9040 16509
+EXPOSE 80 2042 5353 8090 9040 16509 22
 
 # Set the entry point
 ENTRYPOINT ["/home/sandbox/startup.sh"]
