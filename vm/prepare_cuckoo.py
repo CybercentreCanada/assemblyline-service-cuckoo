@@ -5,6 +5,8 @@ import sys
 import tarfile
 import lxml.etree
 import uuid
+import tempfile
+import shutil
 
 from assemblyline.al.common import forge
 from assemblyline.al.common.importing import service_by_name
@@ -44,7 +46,8 @@ def mod_xml_meta(xml_file, path, new_value):
     return lxml.etree.tostring(dom_root)
 
 
-def install_vm_meta(directory, tarball):
+# def install_vm_meta(directory, tarball):
+def get_vm_meta(directory, tarball):
     vm_name = os.path.basename(tarball).split(".", 1)[0]
 
     tar = tarfile.open(tarball)
@@ -58,8 +61,7 @@ def install_vm_meta(directory, tarball):
         sys.exit(7)
 
     json_file = json.load(json_file)
-    trymkdir(os.path.join(directory, json_file['base']))
-
+    # trymkdir(os.path.join(directory, json_file['base']))
 
     new_vm_name, xml_name, snap_name, new_json_file = mod_json_meta(json_file)
     trymkdir(os.path.join(directory, new_vm_name))
@@ -76,6 +78,10 @@ def install_vm_meta(directory, tarball):
         xml_file = mod_xml_meta(xml_file, "./uuid", guid)
         xml_file = mod_xml_meta(xml_file, "domain/seclabel", None)
         fh.write(xml_file)
+    # xml_file = tar.extractfile(tar.getmember(os.path.join(vm_name, json_file['xml']))).read()
+    # xml_file = mod_xml_meta(xml_file, "./name", new_vm_name)
+    # xml_file = mod_xml_meta(xml_file, "./uuid", guid)
+    # xml_file = mod_xml_meta(xml_file, "domain/seclabel", None)
 
     with open(snap_name, "w") as fh:
         xml_file = tar.extractfile(tar.getmember(os.path.join(vm_name, json_file['snapshot_xml']))).read()
@@ -83,14 +89,19 @@ def install_vm_meta(directory, tarball):
         xml_file = mod_xml_meta(xml_file, "domain/uuid", guid)
         xml_file = mod_xml_meta(xml_file, "domain/seclabel", None)
         fh.write(xml_file)
+    # snap_xml_file = tar.extractfile(tar.getmember(os.path.join(vm_name, json_file['snapshot_xml']))).read()
+    # snap_xml_file = mod_xml_meta(snap_xml_file, "domain/name", new_vm_name)
+    # snap_xml_file = mod_xml_meta(snap_xml_file, "domain/uuid", guid)
+    # snap_xml_file = mod_xml_meta(snap_xml_file, "domain/seclabel", None)
 
-    yield new_json_file
+    yield new_json_file, [json_name, xml_name, snap_name]
 
     tar.close()
 
 
 # noinspection PyBroadException
 def main():
+
     if len(sys.argv) == 1:
         print "Usage: %s <One or more prepared VM tarballs>"
         sys.exit(7)
@@ -105,16 +116,20 @@ def main():
     cfg = forge.get_datastore().get_service(svc_class.SERVICE_NAME).get("config", {})
     config = forge.get_config()
 
-    local_meta_root = os.path.join(config.system.root, cfg['REMOTE_DISK_ROOT'])
+    # local_meta_root = os.path.join(config.system.root, "var","support", cfg['REMOTE_DISK_ROOT'])
+    local_meta_root = tempfile.mkdtemp(prefix="/tmp/prepare_cuckoo_")
     vm_meta_path = os.path.join(local_meta_root, cfg['vm_meta'])
 
     out_config = vm_meta_path
-    out_directory = os.path.dirname(out_config)
+    # out_directory = os.path.dirname(out_config)
+    # print out_directory
     vm_list = sys.argv[1:]
 
     cuckoo_config = []
     for vm in vm_list:
-        for js in install_vm_meta(out_directory, vm):
+        print "Running get_vm_meta for %s" % vm
+
+        for js, files_to_upload in get_vm_meta(local_meta_root, vm):
             cuckoo_config.append(js)
 
     with open(out_config, "w") as fh:
@@ -126,7 +141,17 @@ def main():
             separators=(',', ': ')
         )
 
-    print "Wrote %i Definitions to %s!" % (len(cuckoo_config), out_config)
+    # cleanup if we're in a temp dir
+    # if local_meta_root.startswith("/tmp"):
+    #     print "Cleaning up temp directory..."
+    #     shutil.rmtree(local_meta_root)
+    print "Wrote configuration information to %s. Copy these files to your support server directory" % local_meta_root
+
+    print "For an appliance: "
+    print "sudo -u al bash -c 'cp -ri %s/* %s && rm -rf %s'" % (local_meta_root,
+                                                             os.path.join(config.system.root, "var","support", cfg['REMOTE_DISK_ROOT']),
+                                                             local_meta_root)
+    # print "Wrote %i Definitions to %s!" % (len(cuckoo_config), out_config)
 
 if __name__ == "__main__":
     main()
