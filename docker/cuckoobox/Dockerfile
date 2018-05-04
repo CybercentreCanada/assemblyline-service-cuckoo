@@ -132,12 +132,16 @@ USER root
 # Assumes that you've copied id_rsa.pub file to the local build directory.
 # In order to login with ssh, you'll have to get a shell inside the container and start SSH
 # with 'service ssh start'
+# Uncomment the following lines, rebuild the container and then get a bash console and run 'service ssh start'
+# inside the container
+
 #RUN mkdir /home/sandbox/.ssh
 #COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
 #RUN chmod 700 /home/sandbox/.ssh && chmod 600 /home/sandbox/.ssh/authorized_keys && chown sandbox.sandbox -R /home/sandbox/.ssh
 #RUN mkdir /root/.ssh
 #COPY id_rsa.pub /root/.ssh/authorized_keys
 #RUN chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys
+
 # END TESTING
 
 # Expose cuckoo/libvirt ports
