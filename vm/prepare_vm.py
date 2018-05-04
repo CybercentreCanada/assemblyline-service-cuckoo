@@ -284,6 +284,13 @@ class PrepareVM:
         for fname, contents in file_list.iteritems():
             self._upload_file(contents, snapshot_disk, disk_driver, fname)
 
+        # Upload cuckoo agent
+        if self.args.template.startswith("win"):
+            self._upload_file(open("files/agent.py_cuckoo2.0.4.4","r").read(), snapshot_disk, disk_driver,
+                              "/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup/agent.py")
+        else:
+            self.log.error("Selected template not currently supported for automatic cuckoo agent upload. Make sure you've already installed it.")
+
         # Create the snapshot disk's xml file from the base disk's xml, then use it to define a new domain.
         disk_name = domain_root.find("./name")
         disk_uuid = domain_root.find("./uuid")
