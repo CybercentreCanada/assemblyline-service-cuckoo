@@ -159,7 +159,7 @@ is configured on all workers, the following commands will only need to be run on
 
     cd /opt/al/pkg/al_services/alsvc_cuckoo/docker/cuckoobox
     sudo apt-get install python-dev libffi-dev libfuzzy-dev
-    python get_libs_for_cuckoo_docker.py
+    sudo -u al PYTHONPATH=$PYTHONPATH python get_libs_for_cuckoo_docker.py
     sudo docker build -t localhost:5000/cuckoo/cuckoobox .
     sudo docker push localhost:5000/cuckoo/cuckoobox
 
@@ -175,9 +175,12 @@ configurations.
 
 #### Build Base Virtual Machine
 
-This step will very slightly depending on whatever operating system you choose. These are examples for Windows 7 and 
+This step will vary slightly depending on whatever operating system you choose. These are examples for Windows 7 and 
 Ubuntu. Cuckoo expects all virtual machine data and metadata to exist under /opt/al/var/support/vm/disks/cuckoo/ 
 which can be modified via the ASSEMBLYLINE configurations.
+
+**NB**: It is highly recommended that you create all base VMs on a host matching the version of the cuckoobox docker
+container (currently ubuntu 16.04).
 
 Before continuing, make sure the following libraries are installed:
 
@@ -254,15 +257,13 @@ Once the operating system has been installed, perform the following setup.
 * Disable Windows Update, Windows Firewall, and UAC(User Access Control)
 * set python.exe and pythonw.exe to "Run as Administrator"
 * Optional: Install Java, .Net, and other runtime libraries
-* Copy agent.py from the cuckoo repository to the users startup folder
-* Rename the extension from .py to .pyw
 * Make sure no password is required to get to a desktop from boot
 
 When done, shutdown the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
-guest has completely shut down. Remove the CD drive configuration from the virtual machine. The virtual machine will
-fail if it contains any references to the install medium.
+guest has completely shut down. Remove the CD drive configuration from the virtual machine by editing the XML. 
+The virtual machine will fail if it contains any references to the install medium.
 
-    sudo virsh edit Win7SP1x86
+    sudo virsh edit Win7SP1x86  
 
 Create a snapshot of the virtual machine.
 
@@ -347,6 +348,27 @@ configurations. The REMOTE_DISK_ROOT should be relative to the support hosts FTP
 If you need to enter a running cuckoobox docker container while ASSEMBLYLINE is running, use the following command.
 
     sudo docker exec -ti `sudo docker ps | grep cuckoobox | cut -d ' ' -f 1` bash
+    
+Once inside the container, the best log to check for general errors is ``/home/sandbox/.cuckoo/log/cuckoo.log``.
+
+For more in depth debugging:
+
+1. On the physical host, create an SSH keypair using ``ssh-keygen`` and copy ~/.ssh/id_rsa.pub to docker/cuckoobox
+2. Uncomment the lines near the bottom of the Dockerfile (``TESTING - SSH ACCESS FOR ROOT & SANDBOX USER``), rebuild the container and push to whatever registry you're using.
+3. Run the docker container
+    * If you're in a development environment (ie/ no incoming files), simply run the cuckoo service using run_service_live.py
+        * ``sudo -u al /opt/al/pkg/assemblyline/al/service/run_service_live.py al_services.alsvc_cuckoo.Cuckoo``
+    * Otherwise see the top of the Dockerfile for an example of how to start the docker container outside the context of the AL service
+4. Start SSH inside the container
+    * ``sudo docker ps`` to figure out which container ID to use
+    * ``sudo docker exec -ti $CONTAINER_ID bash`` and then ``service ssh start`` inside the container
+5. Confirm that SSH login works from the physical host as root and sandbox user
+    * ``ssh root@$DOCKER_IP``
+    * ``ssh sandbox@$DOCKER_IP``
+    
+You should now be able to use ``virt-manager`` from the physical host and create a remote SSH connection into the docker container, 
+as root and/or sandbox to try and run VM's inside docker (*NB*: Cuckoo runs as the sandbox user, so that user needs to be able to run the VM(s))
+    
 
 To change the service configurations, use supervisorctl.
 

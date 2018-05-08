@@ -1,10 +1,9 @@
 #!/bin/bash
 
-USAGE="Cuckoo Container v0.1
-Usage: docker run --privileged <this_container> -v <host_vm_store>:/var/lib/libvirt/images -v <vm_meta_store>:/opt/vm_meta <conf_filename>
+USAGE="Cuckoo Container v0.1 startup/entrypoint script
 
-This is what the AL service invokes:
-ie/ sudo docker run --rm=true  --privileged --cap-add=ALL --memory 5120m --volume /opt/al/var/cuckoo/:/opt/vm_meta:ro --volume /opt/al/vmm/disks/cuckoo_vms/:/var/lib/libvirt/images:ro localhost:5000/cuckoo/cuckoobox:latest cuckoo.config 2048M
+See the Dockerfile for how to launch the container
+
 "
 
 # GLOBALS
@@ -60,8 +59,12 @@ fi
 #sleep 2
 #killall libvirtd
 #sleep 2
-/usr/sbin/libvirtd -d --listen
+#/etc/init.d/virtlogd start
+#/usr/sbin/libvirtd -d --listen
 #sleep 2
+
+service virtlogd start
+service libvirt-bin start
 
 # Adjust ownership of mounted volumes
 chown -R sandbox:www-data /opt/sandbox
