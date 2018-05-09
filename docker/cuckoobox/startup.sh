@@ -102,6 +102,9 @@ restart=always
 EOF
 fi
 
+echo "Updating cuckoo with community data" >> $LOG
+find /opt/vm_meta -path "*community*" -type f | xargs -IX -n1 -t su -c 'cuckoo community --file X' sandbox >> $LOG
+
 echo "Handing off to supervisor" >> $LOG
 # Execute the supervisor daemon
 exec env supervisord -c $SUPERVISORD_CONF
