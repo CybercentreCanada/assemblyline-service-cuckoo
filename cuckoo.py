@@ -7,6 +7,8 @@ import time
 import shlex
 import random
 import ssdeep
+import urllib
+import shutil
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -16,7 +18,7 @@ from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TAG_WEIGHT
 from assemblyline.common.exceptions import RecoverableError
-from assemblyline.al.service.base import ServiceBase
+from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.al.common import forge
 from assemblyline.common.docker import DockerException
@@ -153,7 +155,8 @@ class Cuckoo(ServiceBase):
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "2048M",
         "ram_limit": "5120m",
-        "dedup_similar_percent": 80
+        "dedup_similar_percent": 80,
+        "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz"]
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -266,6 +269,10 @@ class Cuckoo(ServiceBase):
         self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
 
     def start(self):
+
+        self._register_update_callback(self.community_update, execute_now=True, utype=UpdaterType.BOX,
+                                       freq=UpdaterFrequency.DAY)
+
         self.vmm = CuckooVmManager(self.cfg)
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
@@ -954,3 +961,33 @@ class Cuckoo(ServiceBase):
             self.task.add_supplementary(memdump_path, "Cuckoo Sandbox %s." % dump_type)
         except:
             self.log.exception("Unable to add tar of memory dump for task %s" % self.cuckoo_task.id)
+
+    def community_update(self, **_):
+        """
+        Pull in community updates. startup.sh inside the cuckoobox docker container then applies them to the
+        instance running inside docker.
+        :return:
+        """
+
+        config = forge.get_config()
+
+        local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
+
+        # Check to see if dir exists - if it does, delete it and re-create it
+        if os.path.exists(local_community_root):
+            shutil.rmtree(local_community_root)
+
+        os.makedirs(local_community_root)
+
+        if self.cfg.has_key("community_updates"):
+            for url in self.cfg["community_updates"]:
+                bn = os.path.basename(url)
+
+                local_path = os.path.join(local_community_root, bn)
+
+                self.log.info("Downloading %s to %s" % (url, local_path))
+                urllib.urlretrieve(url, filename=local_path)
+
+            # Trigger a container restart to bring in new updates
+            if self.cm is not None:
+                self.trigger_cuckoo_reset()
