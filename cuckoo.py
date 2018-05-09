@@ -9,6 +9,7 @@ import random
 import ssdeep
 import urllib
 import shutil
+import hashlib
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -245,6 +246,9 @@ class Cuckoo(ServiceBase):
         self.ssdeep_match_pct = 0
         self.restart_interval = 0
 
+        # Use a hash of the community file(s) as the tool version
+        self._tool_version = None
+
     def __del__(self):
         if self.cm is not None:
             try:
@@ -272,6 +276,9 @@ class Cuckoo(ServiceBase):
 
         self._register_update_callback(self.community_update, execute_now=True, utype=UpdaterType.BOX,
                                        freq=UpdaterFrequency.DAY)
+
+        # Make sure this gets called
+        self._update_tool_version()
 
         self.vmm = CuckooVmManager(self.cfg)
         self.cm = CuckooContainerManager(self.cfg,
@@ -962,6 +969,24 @@ class Cuckoo(ServiceBase):
         except:
             self.log.exception("Unable to add tar of memory dump for task %s" % self.cuckoo_task.id)
 
+    def _update_tool_version(self):
+        config = forge.get_config()
+        local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
+
+        version_hash = hashlib.new("sha256")
+
+        if os.path.exists(local_community_root):
+            community_files = os.listdir(local_community_root)
+
+            for f in community_files:
+                with open(os.path.join(local_community_root, f), 'rb') as gethash:
+                    version_hash.update(gethash.read())
+
+        self._tool_version = version_hash.hexdigest()
+
+    def get_tool_version(self):
+        return self._tool_version
+
     def community_update(self, **_):
         """
         Pull in community updates. startup.sh inside the cuckoobox docker container then applies them to the
@@ -991,3 +1016,6 @@ class Cuckoo(ServiceBase):
             # Trigger a container restart to bring in new updates
             if self.cm is not None:
                 self.trigger_cuckoo_reset()
+
+            # Update the tool version
+            self._update_tool_version()
