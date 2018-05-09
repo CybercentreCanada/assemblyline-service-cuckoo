@@ -119,8 +119,8 @@ WORKDIR /home/sandbox/
 RUN mkdir /home/sandbox/conf
 COPY conf/* /home/sandbox/conf/
 
+# Run cuckoo once to create basic directory structure
 RUN cuckoo &&\
-  cuckoo community &&\
   mkdir /home/sandbox/supervisor &&\
   cp /home/sandbox/conf/processing.conf /home/sandbox/.cuckoo/conf/
 
