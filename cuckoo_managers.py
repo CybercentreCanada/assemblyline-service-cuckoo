@@ -92,6 +92,17 @@ class CuckooVmManager(object):
         self.remote_root = cfg['REMOTE_DISK_ROOT']
         self.vm_meta_path = join(self.local_meta_root, cfg['vm_meta'])
 
+        self.cfg = cfg
+
+    def download_data(self):
+        """
+        This functionality was removed from __init__ so that it could be called once per box
+        by the updater function
+        :return:
+        """
+
+        cfg = self.cfg
+
         # Download Metadata
         self._fetch_meta(cfg['vm_meta'], self.local_meta_root)
 
