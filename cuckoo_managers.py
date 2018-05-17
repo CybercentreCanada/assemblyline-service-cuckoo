@@ -5,6 +5,8 @@ from os.path import join
 import subprocess
 import lxml
 import lxml.etree
+import uuid
+import filecmp
 
 from assemblyline.common.docker import DockerException, DockerManager
 from assemblyline.al.common import forge
@@ -92,7 +94,11 @@ class CuckooVmManager(object):
         self.remote_root = cfg['REMOTE_DISK_ROOT']
         self.vm_meta_path = join(self.local_meta_root, cfg['vm_meta'])
 
-        self.cfg = cfg
+        # Download Metadata
+        self._fetch_meta(cfg['vm_meta'], self.local_meta_root)
+
+        with open(self.vm_meta_path, 'r') as fh:
+            self.vm_meta = json.load(fh)
 
     def download_data(self):
         """
@@ -100,14 +106,6 @@ class CuckooVmManager(object):
         by the updater function
         :return:
         """
-
-        cfg = self.cfg
-
-        # Download Metadata
-        self._fetch_meta(cfg['vm_meta'], self.local_meta_root)
-
-        with open(self.vm_meta_path, 'r') as fh:
-            self.vm_meta = json.load(fh)
 
         for vm in self.vm_meta:
 
@@ -147,21 +145,34 @@ class CuckooVmManager(object):
 
     def _fetch_meta(self, fname, local_path):
         remote_path = join(self.remote_root, fname)
+        local_path_tmp = join(local_path, fname + "." + uuid.uuid4().get_hex())
         local_path = join(local_path, fname)
 
-        # Check to see if file exists locally first, and delete it if it does
-        if os.path.exists(local_path):
-            self.log.info("Local meta file %s exists, removing it" % local_path)
-            try:
-                os.unlink(local_path)
-            except:
-                self.log.error("Could not delete file %s" % local_path)
-                pass
+        # Get the latest file into a temp path, then check to see if it's different from
+        # existing file on disk
         try:
-            self.transport.download(remote_path, local_path)
+            self.transport.download(remote_path, local_path_tmp)
         except:
             self.log.exception("Unable to download metadata file %s:", remote_path)
             raise
+
+        overwrite_flag = True
+
+        if os.path.exists(local_path):
+            self.log.info("Local meta file %s exists, checking for changes..." % local_path)
+
+            if not filecmp.cmp(local_path_tmp, local_path):
+                self.log.info("Changes detected, will try to overwrite file")
+            else:
+                overwrite_flag = False
+                os.unlink(local_path_tmp)
+
+        if overwrite_flag:
+            try:
+                os.rename(local_path_tmp, local_path)
+            except:
+                self.log.error("Could not rename %s to %s" % (local_path_tmp, local_path))
+                pass
 
         return local_path
 
