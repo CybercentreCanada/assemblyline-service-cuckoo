@@ -109,36 +109,38 @@ class CuckooVmManager(object):
 
         for vm in self.vm_meta:
 
+            logger = self.log.getChild(vm["name"])
+
             # Download VM XML first
             self.download_xml(vm)
 
             # Check if disk has already been downloaded and if the first level disk
             # has a snapshot that matches the one configured in the snapshot XML file
-            local_disk_path = join(self.local_vm_root, vm['base'], os.path.basename( vm['disk']))
+            local_disk_path = join(self.local_vm_root, vm['base'], os.path.basename(vm['disk']))
             if os.path.exists(local_disk_path):
-                self.log.info("Local disk %s already exists." % local_disk_path)
+                logger.info("Local disk %s already exists." % local_disk_path)
 
                 # Read the info out of the local disk
                 img_info = subprocess.check_output(['qemu-img', 'info', '--output', 'json', local_disk_path])
                 img_info = json.loads(img_info)
                 snap_names_img = [x["name"] for x in img_info.get("snapshots", [])]
-                self.log.info("Local disk has snapshot names: %s" % snap_names_img)
+                logger.info("Local disk has snapshot names: %s" % snap_names_img)
 
                 # Read the XML file
                 snap_file = os.path.join(self.local_meta_root, vm['name'], vm['snapshot_xml'])
                 snap_xml = lxml.etree.fromstring(open(snap_file,'r').read())
                 snap_name_xml = snap_xml.find("./name").text
 
-                self.log.info("Snapshot XML file is configured to use snapshot named %s" % snap_name_xml)
+                logger.info("Snapshot XML file is configured to use snapshot named %s" % snap_name_xml)
 
                 if snap_name_xml not in snap_names_img:
-                    self.log.error("Local disk doesn't contain snapshot - deleting it. If this continues to happen " +
+                    logger.error("Local disk doesn't contain snapshot - deleting it. If this continues to happen " +
                                    "on service restart, it's likely due to the XML and qcow2 file being out of sync and " +
                                    "you probably need to rerun prepare_vm.py / prepare_cuckoo.py")
                     try:
                         os.unlink(local_disk_path)
                     except:
-                        self.log.error("Error deleting %s." % local_disk_path)
+                        logger.error("Error deleting %s." % local_disk_path)
 
             # Download disks
             self.fetch_disk(vm['base'], vm['disk'])
