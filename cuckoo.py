@@ -274,15 +274,16 @@ class Cuckoo(ServiceBase):
 
     def start(self):
 
-        self._register_update_callback(self.community_update, execute_now=True, utype=UpdaterType.BOX,
-                                       freq=UpdaterFrequency.DAY)
-
         # Make sure this gets called
         self._update_tool_version()
 
         self.vmm = CuckooVmManager(self.cfg)
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
+
+        # only call this *after* .vmm and .cm are initialized
+        self._register_update_callback(self.cuckoo_update, execute_now=True, utype=UpdaterType.BOX,
+                                       freq=UpdaterFrequency.DAY)
 
         self._register_cleanup_op({
             'type': 'shell',
@@ -987,15 +988,27 @@ class Cuckoo(ServiceBase):
     def get_tool_version(self):
         return self._tool_version
 
-    def community_update(self, **_):
+    def cuckoo_update(self, **_):
         """
-        Pull in community updates. startup.sh inside the cuckoobox docker container then applies them to the
+        There are two parts to this update function:
+        1. Confirm that XML and qcow2 files for VMs are up to date and in sync (ie/ that the snapshot defined in the
+        xml file exists in the local qcow2 file) - this is taken care of CuckooVmManager.download_data()
+        2. Pull in community updates. startup.sh inside the cuckoobox docker container then applies them to the
         instance running inside docker.
         :return:
         """
 
         config = forge.get_config()
 
+        ###
+        # Do XML/disk updates
+        ###
+        self.vmm.download_data()
+
+
+        ###
+        # Do community updates
+        ###
         local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
 
         # Check to see if dir exists - if it does, delete it and re-create it
