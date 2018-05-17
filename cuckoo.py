@@ -278,12 +278,15 @@ class Cuckoo(ServiceBase):
         self._update_tool_version()
 
         self.vmm = CuckooVmManager(self.cfg)
+
+        # only call this *after* .vmm and is initialized
+        self._register_update_callback(self.cuckoo_update, execute_now=True, utype=UpdaterType.BOX,
+                                       freq=UpdaterFrequency.DAY)
+
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
 
-        # only call this *after* .vmm and .cm are initialized
-        self._register_update_callback(self.cuckoo_update, execute_now=True, utype=UpdaterType.BOX,
-                                       freq=UpdaterFrequency.DAY)
+
 
         self._register_cleanup_op({
             'type': 'shell',
