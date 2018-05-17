@@ -285,7 +285,7 @@ class Cuckoo(ServiceBase):
         self._register_update_callback(self.cuckoo_update, execute_now=True,
                                        blocking=True,
                                        utype=UpdaterType.BOX,
-                                       freq=UpdaterFrequency.DAY)
+                                       freq=UpdaterFrequency.HOUR)
 
         self._register_cleanup_op({
             'type': 'shell',
@@ -1019,7 +1019,9 @@ class Cuckoo(ServiceBase):
 
         os.makedirs(local_community_root)
 
-        if self.cfg.has_key("community_updates"):
+        current_tool_version = self.get_tool_version()
+
+        if "community_updates" in self.cfg:
             for url in self.cfg["community_updates"]:
                 bn = os.path.basename(url)
 
@@ -1028,9 +1030,10 @@ class Cuckoo(ServiceBase):
                 self.log.info("Downloading %s to %s" % (url, local_path))
                 urllib.urlretrieve(url, filename=local_path)
 
-            # Trigger a container restart to bring in new updates
-            if self.cm is not None:
-                self.trigger_cuckoo_reset()
-
             # Update the tool version
             self._update_tool_version()
+
+            # Trigger a container restart to bring in new updates
+            if self.cm is not None and current_tool_version != self.get_tool_version():
+                self.log.info("New version of community repo detected, restarting container")
+                self.trigger_cuckoo_reset()
