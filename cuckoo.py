@@ -7,6 +7,9 @@ import time
 import shlex
 import random
 import ssdeep
+import urllib
+import shutil
+import hashlib
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -16,7 +19,7 @@ from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TAG_WEIGHT
 from assemblyline.common.exceptions import RecoverableError
-from assemblyline.al.service.base import ServiceBase
+from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.al.common import forge
 from assemblyline.common.docker import DockerException
@@ -153,7 +156,8 @@ class Cuckoo(ServiceBase):
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
         "ramdisk_size": "2048M",
         "ram_limit": "5120m",
-        "dedup_similar_percent": 80
+        "dedup_similar_percent": 80,
+        "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz"]
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -242,6 +246,9 @@ class Cuckoo(ServiceBase):
         self.ssdeep_match_pct = 0
         self.restart_interval = 0
 
+        # Use a hash of the community file(s) as the tool version
+        self._tool_version = None
+
     def __del__(self):
         if self.cm is not None:
             try:
@@ -266,9 +273,19 @@ class Cuckoo(ServiceBase):
         self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
 
     def start(self):
+
+        # Make sure this gets called
+        self._update_tool_version()
+
         self.vmm = CuckooVmManager(self.cfg)
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
+
+        # only call this *after* .vmm and is initialized
+        self._register_update_callback(self.cuckoo_update, execute_now=True,
+                                       blocking=True,
+                                       utype=UpdaterType.BOX,
+                                       freq=UpdaterFrequency.HOUR)
 
         self._register_cleanup_op({
             'type': 'shell',
@@ -954,3 +971,69 @@ class Cuckoo(ServiceBase):
             self.task.add_supplementary(memdump_path, "Cuckoo Sandbox %s." % dump_type)
         except:
             self.log.exception("Unable to add tar of memory dump for task %s" % self.cuckoo_task.id)
+
+    def _update_tool_version(self):
+        config = forge.get_config()
+        local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
+
+        version_hash = hashlib.new("sha256")
+
+        if os.path.exists(local_community_root):
+            community_files = os.listdir(local_community_root)
+
+            for f in community_files:
+                with open(os.path.join(local_community_root, f), 'rb') as gethash:
+                    version_hash.update(gethash.read())
+
+        self._tool_version = version_hash.hexdigest()
+
+    def get_tool_version(self):
+        return self._tool_version
+
+    def cuckoo_update(self, **_):
+        """
+        There are two parts to this update function:
+        1. Confirm that XML and qcow2 files for VMs are up to date and in sync (ie/ that the snapshot defined in the
+        xml file exists in the local qcow2 file) - this is taken care of CuckooVmManager.download_data()
+        2. Pull in community updates. startup.sh inside the cuckoobox docker container then applies them to the
+        instance running inside docker.
+        :return:
+        """
+
+        config = forge.get_config()
+
+        ###
+        # Do XML/disk updates
+        ###
+        self.vmm.download_data()
+
+
+        ###
+        # Do community updates
+        ###
+        local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
+
+        # Check to see if dir exists - if it does, delete it and re-create it
+        if os.path.exists(local_community_root):
+            shutil.rmtree(local_community_root)
+
+        os.makedirs(local_community_root)
+
+        current_tool_version = self.get_tool_version()
+
+        if "community_updates" in self.cfg:
+            for url in self.cfg["community_updates"]:
+                bn = os.path.basename(url)
+
+                local_path = os.path.join(local_community_root, bn)
+
+                self.log.info("Downloading %s to %s" % (url, local_path))
+                urllib.urlretrieve(url, filename=local_path)
+
+            # Update the tool version
+            self._update_tool_version()
+
+            # Trigger a container restart to bring in new updates
+            if self.cm is not None and current_tool_version != self.get_tool_version():
+                self.log.info("New version of community repo detected, restarting container")
+                self.trigger_cuckoo_reset()
