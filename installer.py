@@ -3,6 +3,7 @@
 
 def install(alsi):
     alsi.install_docker()
+    alsi.sudo_apt_install(["qemu-utils"])
     alsi.pip_install_all([
         'jinja2',
         'retrying',
