@@ -520,6 +520,16 @@ class Cuckoo(ServiceBase):
                             self.log.exception(
                                 "Unable to add tar of complete report for task %s" % self.cuckoo_task.id)
 
+                        try:
+                            tar_obj = tarfile.open(tar_report_path)
+                            if "reports/report.json" in tar_obj.getnames():
+                                report_json_path = os.path.join(self.working_directory, "reports", "report.json")
+                                tar_obj.extract("reports/report.json", path=self.working_directory, display_name="report.json")
+                                self.task.add_supplementary(report_json_path, "Cuckoo Sandbox report (json)")
+                        except:
+                            self.log.exception(
+                                "Unable to add report.json for task %s" % self.cuckoo_task.id)
+
                 self.log.debug("Checking for dropped files and pcap.")
                 # Submit dropped files and pcap if available:
                 self.check_dropped(request, self.cuckoo_task.id)
