@@ -286,7 +286,7 @@ class PrepareVM:
 
         # Upload cuckoo agent
         if self.args.template.startswith("win"):
-            self._upload_file(open("files/agent.py_cuckoo2.0.4.4","r").read(), snapshot_disk, disk_driver,
+            self._upload_file(open("files/agent.py_cuckoo2.0.5.3","r").read(), snapshot_disk, disk_driver,
                               "/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup/agent.py")
         else:
             self.log.error("Selected template not currently supported for automatic cuckoo agent upload. Make sure you've already installed it.")
