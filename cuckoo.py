@@ -10,6 +10,7 @@ import ssdeep
 import urllib
 import shutil
 import hashlib
+import json
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -17,7 +18,7 @@ from collections import Counter
 
 from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
-from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TAG_WEIGHT
+from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TEXT_FORMAT, TAG_WEIGHT, SCORE
 from assemblyline.common.exceptions import RecoverableError
 from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
@@ -463,6 +464,7 @@ class Cuckoo(ServiceBase):
         try:
             self.cuckoo_submit(file_content)
             if self.cuckoo_task.report:
+
                 try:
                     machine_name = None
                     report_info = self.cuckoo_task.report.get('info', {})
@@ -520,6 +522,8 @@ class Cuckoo(ServiceBase):
                             self.log.exception(
                                 "Unable to add tar of complete report for task %s" % self.cuckoo_task.id)
 
+                        # Attach report.json as a supplementary file. This is duplicating functionality
+                        # a little bit, since this information is included in the JSON result section
                         try:
                             tar_obj = tarfile.open(tar_report_path)
                             if "reports/report.json" in tar_obj.getnames():
@@ -543,6 +547,21 @@ class Cuckoo(ServiceBase):
                 # extra options.
                 if full_memdump and pull_memdump:
                     self.download_memdump('fullmemdump')
+
+                if TEXT_FORMAT.contains_value("JSON"):
+                    # Attach report as json as the last result section
+                    report_json_section = ResultSection(
+                        SCORE.NULL,
+                        'Full Cuckoo report',
+                        self.SERVICE_CLASSIFICATION,
+                        body_format=TEXT_FORMAT.JSON,
+                        body={
+                            "json": self.cuckoo_task.report,
+                            "options": {"mode": "view"}
+                        }
+                    )
+                    self.file_res.add_section(report_json_section)
+
             else:
                 # We didn't get a report back.. cuckoo has failed us
                 if self.should_run:
