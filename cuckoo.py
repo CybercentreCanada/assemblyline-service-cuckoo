@@ -524,8 +524,8 @@ class Cuckoo(ServiceBase):
                             tar_obj = tarfile.open(tar_report_path)
                             if "reports/report.json" in tar_obj.getnames():
                                 report_json_path = os.path.join(self.working_directory, "reports", "report.json")
-                                tar_obj.extract("reports/report.json", path=self.working_directory, display_name="report.json")
-                                self.task.add_supplementary(report_json_path, "Cuckoo Sandbox report (json)")
+                                tar_obj.extract("reports/report.json", path=self.working_directory)
+                                self.task.add_supplementary(report_json_path, "Cuckoo Sandbox report (json)", display_name="report.json")
                         except:
                             self.log.exception(
                                 "Unable to add report.json for task %s" % self.cuckoo_task.id)
