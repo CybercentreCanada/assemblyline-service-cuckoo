@@ -58,9 +58,6 @@ class CuckooVmManager(object):
         if recursion == 0:
             raise DockerException("Disk fetch recursing too far for %s. Cleanup your disks." % disk_url)
 
-        if not os.path.exists(join(config.workers.virtualmachines.disk_root, disk_base)):
-            os.makedirs(join(config.workers.virtualmachines.disk_root, disk_base))
-
         local_disk_path = join(self.local_vm_root, disk_base, os.path.basename(disk_url))
         remote_disk_path = join(self.remote_root, disk_base, disk_url)
 
