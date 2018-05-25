@@ -555,10 +555,7 @@ class Cuckoo(ServiceBase):
                         'Full Cuckoo report',
                         self.SERVICE_CLASSIFICATION,
                         body_format=TEXT_FORMAT.JSON,
-                        body={
-                            "json": self.cuckoo_task.report,
-                            "options": {"mode": "view"}
-                        }
+                        body=self.cuckoo_task.report
                     )
                     self.file_res.add_section(report_json_section)
 
