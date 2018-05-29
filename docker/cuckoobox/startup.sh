@@ -34,7 +34,7 @@ EOF
 chmod +x /usr/bin/pkcheck
 
 # Create the kvm node (requires --privileged)
-groupmod -g `ls -n /dev/kvm | cut -d ' ' -f 4` kvm
+groupmod -og `ls -n /dev/kvm | cut -d ' ' -f 4` kvm
 if [ ! -e /dev/kvm ]; then
     set +e
     mknod /dev/kvm c 10 $(grep '\<kvm\>' /proc/misc | cut -f 1 -d' ')
