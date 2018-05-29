@@ -548,7 +548,7 @@ class Cuckoo(ServiceBase):
                 if full_memdump and pull_memdump:
                     self.download_memdump('fullmemdump')
 
-                if TEXT_FORMAT.contains_value("JSON"):
+                if TEXT_FORMAT.contains_value("JSON") and request.deep_scan:
                     # Attach report as json as the last result section
                     report_json_section = ResultSection(
                         SCORE.NULL,
