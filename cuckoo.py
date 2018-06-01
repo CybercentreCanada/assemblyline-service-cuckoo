@@ -11,6 +11,7 @@ import urllib
 import shutil
 import hashlib
 import json
+import traceback
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -193,6 +194,12 @@ class Cuckoo(ServiceBase):
             "value": "",
         },
         {
+            "default": "",
+            "name": "custom_options",
+            "type": "str",
+            "value": "",
+        },
+        {
             "default": False,
             "name": "pull_memory",
             "type": "bool",
@@ -241,7 +248,7 @@ class Cuckoo(ServiceBase):
         self.file_res = None
         self.cuckoo_task = None
         self.al_report = None
-        self.session = None
+        self.session = requests.Session()
         self.enabled_routes = None
         self.cuckoo_ip = None
         self.ssdeep_match_pct = 0
@@ -353,7 +360,7 @@ class Cuckoo(ServiceBase):
             self.log.debug("Cuckoo is exiting because it currently does not execute on great great grand children.")
             request.set_save_result(False)
             return
-        self.session = requests.Session()
+        # self.session = requests.Session()
         self.task = request.task
         request.result = Result()
         self.file_res = request.result
@@ -447,6 +454,9 @@ class Cuckoo(ServiceBase):
 
         kwargs['timeout'] = analysis_timeout
         kwargs['options'] = ','.join(task_options)
+        custom_options = request.get_param("custom_options")
+        if custom_options is not None:
+            kwargs['options'] += ",%s" % custom_options
         if select_machine:
             kwargs['machine'] = select_machine
 
@@ -533,6 +543,8 @@ class Cuckoo(ServiceBase):
                         except:
                             self.log.exception(
                                 "Unable to add report.json for task %s" % self.cuckoo_task.id)
+
+                        # TODO: Check for any supplementary files
 
                 self.log.debug("Checking for dropped files and pcap.")
                 # Submit dropped files and pcap if available:
@@ -1049,7 +1061,8 @@ class Cuckoo(ServiceBase):
 
         if "community_updates" in self.cfg:
             for url in self.cfg["community_updates"]:
-                bn = os.path.basename(url)
+                # prepend a hash of the url to deal with conflicting basenames
+                bn = "%s-%s" % (hashlib.md5(url).hexdigest(), os.path.basename(url))
 
                 local_path = os.path.join(local_community_root, bn)
 
@@ -1063,3 +1076,5 @@ class Cuckoo(ServiceBase):
             if self.cm is not None and current_tool_version != self.get_tool_version():
                 self.log.info("New version of community repo detected, restarting container")
                 self.trigger_cuckoo_reset()
+
+        self.log.info("update function complete")
