@@ -11,6 +11,7 @@ import urllib
 import shutil
 import hashlib
 import json
+import traceback
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -24,6 +25,7 @@ from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterT
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.al.common import forge
 from assemblyline.common.docker import DockerException
+from assemblyline.common.importing import class_by_name
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -158,7 +160,9 @@ class Cuckoo(ServiceBase):
         "ramdisk_size": "2048M",
         "ram_limit": "5120m",
         "dedup_similar_percent": 80,
-        "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz"]
+        "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz"],
+        "result_parsers": []
+        # "result_parsers": ["al_services.alsvc_cuckoo.result_parsers.example_parser.ExampleParser"]
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -189,6 +193,12 @@ class Cuckoo(ServiceBase):
         {
             "default": "",
             "name": "arguments",
+            "type": "str",
+            "value": "",
+        },
+        {
+            "default": "",
+            "name": "custom_options",
             "type": "str",
             "value": "",
         },
@@ -246,6 +256,7 @@ class Cuckoo(ServiceBase):
         self.cuckoo_ip = None
         self.ssdeep_match_pct = 0
         self.restart_interval = 0
+        self.result_parsers = []
 
         # Use a hash of the community file(s) as the tool version
         self._tool_version = None
@@ -274,6 +285,9 @@ class Cuckoo(ServiceBase):
         self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
 
     def start(self):
+
+        # This needs to be set b/c the updater may use it right away
+        self.session = requests.Session()
 
         # Make sure this gets called
         self._update_tool_version()
@@ -310,6 +324,15 @@ class Cuckoo(ServiceBase):
 
         if self.enabled_routes is None:
             raise ValueError("No routing submission_parameter.")
+
+        # initialize any extra result parsers
+        if "result_parsers" in self.cfg:
+            for parser_path in self.cfg.get("result_parsers"):
+                self.log.info("Adding result_parser %s" % parser_path)
+                parser_class = class_by_name(parser_path)
+                self.result_parsers.append(parser_class())
+        else:
+            self.log.error("Missing 'result_parsers' service configuration.")
         self.log.debug("Cuckoo started!")
 
     def find_machine(self, full_tag, route):
@@ -353,7 +376,7 @@ class Cuckoo(ServiceBase):
             self.log.debug("Cuckoo is exiting because it currently does not execute on great great grand children.")
             request.set_save_result(False)
             return
-        self.session = requests.Session()
+        # self.session = requests.Session()
         self.task = request.task
         request.result = Result()
         self.file_res = request.result
@@ -447,6 +470,9 @@ class Cuckoo(ServiceBase):
 
         kwargs['timeout'] = analysis_timeout
         kwargs['options'] = ','.join(task_options)
+        custom_options = request.get_param("custom_options")
+        if custom_options is not None:
+            kwargs['options'] += ",%s" % custom_options
         if select_machine:
             kwargs['machine'] = select_machine
 
@@ -530,9 +556,28 @@ class Cuckoo(ServiceBase):
                                 report_json_path = os.path.join(self.working_directory, "reports", "report.json")
                                 tar_obj.extract("reports/report.json", path=self.working_directory)
                                 self.task.add_supplementary(report_json_path, "Cuckoo Sandbox report (json)", display_name="report.json")
+                            tar_obj.close()
                         except:
                             self.log.exception(
-                                "Unable to add report.json for task %s" % self.cuckoo_task.id)
+                                "Unable to add report.json for task %s. Exception: %s" % (self.cuckoo_task.id, traceback.format_exc()))
+
+                        # Check for any supplementary files
+                        try:
+                            tar_obj = tarfile.open(tar_report_path)
+                            for f in [x.name for x in tar_obj.getmembers() if x.name.startswith("supplementary") and x.isfile()]:
+                                sup_file_path = os.path.join(self.working_directory, f)
+                                tar_obj.extract(f, path=self.working_directory)
+                                self.task.add_supplementary(sup_file_path, "Supplementary File",
+                                                            display_name=f)
+                            tar_obj.close()
+                        except:
+                            self.log.exception(
+                                "Unable to supplementary file(s) for task %s. Exception: %s" % (self.cuckoo_task.id, traceback.format_exc()))
+
+                # Run extra result parsers
+                for rp in self.result_parsers:
+                    self.log.debug("Running result parser %s" % rp.__module__)
+                    rp.parse(request, self.file_res)
 
                 self.log.debug("Checking for dropped files and pcap.")
                 # Submit dropped files and pcap if available:
@@ -1049,7 +1094,8 @@ class Cuckoo(ServiceBase):
 
         if "community_updates" in self.cfg:
             for url in self.cfg["community_updates"]:
-                bn = os.path.basename(url)
+                # prepend a hash of the url to deal with conflicting basenames
+                bn = "%s-%s" % (hashlib.md5(url).hexdigest(), os.path.basename(url))
 
                 local_path = os.path.join(local_community_root, bn)
 
@@ -1063,3 +1109,5 @@ class Cuckoo(ServiceBase):
             if self.cm is not None and current_tool_version != self.get_tool_version():
                 self.log.info("New version of community repo detected, restarting container")
                 self.trigger_cuckoo_reset()
+
+        self.log.info("update function complete")
