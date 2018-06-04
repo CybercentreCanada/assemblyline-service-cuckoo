@@ -253,8 +253,8 @@ The Cuckoo service is built to allow you to extend it as required primarily thro
 
 1. **community_updates** - This may be 0 to many [cuckoo community](https://github.com/cuckoosandbox/community) 
 repositories. These can include any cuckoo customizations. These repositories are checked every hour for updates.
-2. **result_parsers** - This may be 0 or more paths to custom result parsers that can read Cuckoo results modify 
-the ASSEMBLYLINE service results. See [here](result_parsers/example_parser.py) for a very simple example.
+2. **result_parsers** - This may be 0 or more paths to custom result parser python modules that can read Cuckoo results 
+and modify the ASSEMBLYLINE service results. See [here](result_parsers/example_parser.py) for a very simple example.
 
 ## DEBUGGING
 
