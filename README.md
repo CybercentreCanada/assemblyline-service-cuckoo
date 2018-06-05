@@ -23,7 +23,7 @@ The following options are available for submissions to the Cuckoo service (acces
 * **custom_options** - Custom options to pass to the cuckoo submission. Same as the `--options` command line option [here](https://cuckoo.sh/docs/usage/submit.html)
 * **pull_memory** - DEPRECATED
 * **dump_memory** - Dump full VM memory. *NB*: This is very slow!
-* **no_monitor** - Run analysis without injecting the Cuckoo monitoring agent. Equivalent to passing `--options free=yes` [ref](https://cuckoo.sh/docs/usage/packages.html)
+* **no_monitor** - Run analysis without injecting the Cuckoo monitoring agent. Equivalent to passing `--options free=yes` (see [here](https://cuckoo.sh/docs/usage/packages.html) for more information)
 * **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or `inetsim`
 
 ## DEPLOYMENT INSTRUCTIONS
