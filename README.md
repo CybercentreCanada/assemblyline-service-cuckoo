@@ -11,6 +11,21 @@ Sandbox monitors execution, filesystem, and network activity that occurs when a 
 these results for the ASSEMBLYLINE UI and provides a links to the full result set. Files that are unpacked and saved to 
 disk are fed back into ASSEMBLYLINE.
 
+### SUBMISSION OPTIONS
+
+The following options are available for submissions to the Cuckoo service (accessible via the hidden pane on the left of the screen on the "Submit" page):
+
+* **analysis_timeout** - Maximum amount of time to wait for analysis to complete. NB: The analysis job may complete faster
+* **generate_report** - Generate a full report (cuckoo_report.tar.gz) and attach it as a supplementary file
+* **dump_processes** - Dump process memory. These would be available in the cuckoo_report.tar.gz supplementary file
+* **dll_function** - If a DLL file is submitted, manually select the function within it to execute
+* **arguments** - command line arguments to pass to the sample being analyzed
+* **custom_options** - Custom options to pass to the cuckoo submission. Same as the `--options` command line option [here](https://cuckoo.sh/docs/usage/submit.html)
+* **pull_memory** - DEPRECATED
+* **dump_memory** - Dump full VM memory. *NB*: This is very slow!
+* **no_monitor** - Run analysis without injecting the Cuckoo monitoring agent. Equivalent to passing `--options free=yes` [ref](https://cuckoo.sh/docs/usage/packages.html)
+* **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or `inetsim`
+
 ## DEPLOYMENT INSTRUCTIONS
 
 Prior to provisioning a Cuckoo service, please read and understand this document. Failure to do so may result in a 
