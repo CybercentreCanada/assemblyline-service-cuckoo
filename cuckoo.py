@@ -40,6 +40,9 @@ CUCKOO_POLL_DELAY = 2
 GUEST_VM_START_TIMEOUT = 20
 CUCKOO_MAX_TIMEOUT = 600
 
+# Max amount of time (seconds) between restarting the docker container
+CUCKOOBOX_MAX_LIFETIME = 3600
+
 SUPPORTED_EXTENSIONS = [
     "cpl",
     "dll",
@@ -202,12 +205,12 @@ class Cuckoo(ServiceBase):
             "type": "str",
             "value": "",
         },
-        {
-            "default": False,
-            "name": "pull_memory",
-            "type": "bool",
-            "value": False,
-        },
+        # {
+        #     "default": False,
+        #     "name": "pull_memory",
+        #     "type": "bool",
+        #     "value": False,
+        # },
         {
             "default": False,
             "name": "dump_memory",
@@ -261,6 +264,9 @@ class Cuckoo(ServiceBase):
         # Use a hash of the community file(s) as the tool version
         self._tool_version = None
 
+        # track the last time docker was restarted
+        self._last_docker_restart = 0
+
     def __del__(self):
         if self.cm is not None:
             try:
@@ -313,6 +319,10 @@ class Cuckoo(ServiceBase):
         self.restart_interval = random.randint(45, 55)
         self.file_name = None
         self.set_urls()
+
+        # Set the 'last restart' time
+        self._last_docker_restart = time.time()
+
         self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent", 80))
 
         for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
@@ -368,6 +378,8 @@ class Cuckoo(ServiceBase):
         self.cuckoo_ip = self.cm.start_container(self.cm.name)
         self.restart_interval = random.randint(45, 55)
         self.set_urls()
+
+        self._last_docker_restart = time.time()
         return self.is_cuckoo_ready(retry_cnt)
 
     # noinspection PyTypeChecker
@@ -376,6 +388,10 @@ class Cuckoo(ServiceBase):
             self.log.debug("Cuckoo is exiting because it currently does not execute on great great grand children.")
             request.set_save_result(False)
             return
+
+        if (time.time() - self._last_docker_restart) > CUCKOOBOX_MAX_LIFETIME:
+            self.log.info("Triggering a container restart")
+            self.trigger_cuckoo_reset()
         # self.session = requests.Session()
         self.task = request.task
         request.result = Result()
@@ -445,11 +461,12 @@ class Cuckoo(ServiceBase):
             task_options.append('arguments={}'.format(arguments))
 
         # Parse extra options (these aren't user selectable because they are dangerous/slow)
-        if request.get_param('pull_memory') and request.task.depth == 0:
-            pull_memdump = True
+        # if request.get_param('pull_memory') and request.task.depth == 0:
+        #     pull_memdump = True
 
         if request.get_param('dump_memory') and request.task.depth == 0:
             # Full system dump and volatility scan
+            pull_memdump = True
             full_memdump = True
             kwargs['memory'] = True
 
