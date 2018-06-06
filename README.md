@@ -209,6 +209,10 @@ Android is not *Officially* supported.
 The prepare_vm command line will also differ depending on OS, and IP space. A sample for Windows 7 is provided 
 below.
 
+**NB**: This will create a qcow2 overlay file that references the qcow2 file from your original VM. The overlay is
+linked to the current state of the original qcow2 file, *not* the snapshot. This can lead to problems if you make use of 
+the original base VM that uses (and changes) the original file.
+
     source /etc/default/al
     cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
     sudo -E PYTHONPATH=$PYTHONPATH ./prepare_vm.py --domain Win7SP1x86 --platform windows \
