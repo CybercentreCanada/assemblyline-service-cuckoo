@@ -179,8 +179,14 @@ Once the operating system has been installed, perform the following setup.
 * Optional: Install PIL (Python Image Library) if periodic screenshots are desired
 * Disable Windows Update, Windows Firewall, and UAC(User Access Control)
 * set python.exe and pythonw.exe to "Run as Administrator"
-* Optional: Install Java, .Net, and other runtime libraries
+* Optional: Install Java, .Net, other applications and runtime libraries
 * Make sure no password is required to get to a desktop from boot
+* Notes about specific apps
+    * **Adobe Reader** - Security features of recent version of Adobe Reader cause some 
+    [false positive signature hits](https://github.com/cuckoosandbox/community/issues/421). 
+    For Reader 11, you can turn these off: Go to `Edit -> Preferences` and select `Security (Enhanced)`. 
+    Make sure that `Enabled Protected Mode at Startup` and `Enable Enhanced Security` are unchecked.
+    No workaround is known for Reader DC.
 
 When done, shutdown the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
 guest has completely shut down. Remove the CD drive configuration from the virtual machine by editing the XML. 
