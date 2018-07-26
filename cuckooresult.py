@@ -11,6 +11,7 @@ from pprint import pprint
 from assemblyline.common.charset import safe_str
 from assemblyline.common.context import Context
 from assemblyline.al.common import forge
+from assemblyline.al.common.classification import InvalidClassification
 from assemblyline.al.common.result import Result, ResultSection, SCORE, TAG_TYPE, TAG_WEIGHT, TEXT_FORMAT
 from assemblyline.common.exceptions import RecoverableError
 from al_services.alsvc_cuckoo.clsids import clsids
@@ -29,7 +30,12 @@ country_code_map = None
 # noinspection PyBroadException
 def generate_al_result(api_report, al_result, file_ext, guest_ip, service_classification=CLASSIFICATION.UNRESTRICTED):
     log.debug("Generating AL Result.")
-    classification = CLASSIFICATION.max_classification(CLASSIFICATION.UNRESTRICTED, service_classification)
+    try:
+        classification = CLASSIFICATION.max_classification(CLASSIFICATION.UNRESTRICTED, service_classification)
+    except InvalidClassification as e:
+        log.warning("Could not get the service classification: %s" % e.message)
+        return False
+
     info = api_report.get('info')
     if info is not None:
         info_res = ResultSection(score=SCORE.NULL,
