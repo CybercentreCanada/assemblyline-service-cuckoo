@@ -10,7 +10,7 @@ libxml2-dev
 libxslt1-dev
 libc6-dev
 swig
-iproute
+iproute2
 qemu-utils
 qemu-kvm
 libvirt-bin

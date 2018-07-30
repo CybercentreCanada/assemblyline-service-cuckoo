@@ -5,7 +5,7 @@
 # ie/ sudo docker run --rm=true  --privileged --cap-add=ALL --memory 5120m --volume /opt/al/var/cuckoo/:/opt/vm_meta:ro --volume /opt/al/vmm/disks/cuckoo_vms/:/var/lib/libvirt/images:ro localhost:5000/cuckoo/cuckoobox:latest cuckoo.config 2048M
 #
 
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 
 
 # Container needs to know that it has no TTY
@@ -25,7 +25,7 @@ COPY libs/volatility-2.6.zip /tmp/
 
 # cgroup-lite fixup compensates for a ubuntu:trusty-docker:cgroup broken package
 RUN apt-get update &&\
-  touch /etc/init/cgroup-lite.conf && ln /etc/init/cgroup-lite.conf /etc/init.d/cgroup-lite  &&\
+#  touch /etc/init/cgroup-lite.conf && ln /etc/init/cgroup-lite.conf /etc/init.d/cgroup-lite  &&\
   yes | apt-get install -y --force-yes --no-install-recommends  cgroup-lite &&\
   xargs apt-get install -y --force-yes --no-install-recommends < /tmp/packages.txt &&\
   dpkg -i /tmp/inetsim_1.2.6-1_all.deb &&\
@@ -72,14 +72,14 @@ RUN ldconfig
 RUN mkdir /opt/sandbox &&\
   useradd sandbox &&\
   mkdir /home/sandbox &&\
-  usermod -a -G libvirtd sandbox &&\
+  usermod -a -G libvirt sandbox &&\
   usermod -G sandbox www-data &&\
   chown -R sandbox:sandbox /home/sandbox &&\
   chown -R sandbox:sandbox /opt/sandbox
 
 # Setup KVM user
 # RUN groupadd kvm || /bin/true
-RUN usermod -a -G libvirtd libvirt-qemu &&\
+RUN usermod -a -G libvirt libvirt-qemu &&\
   usermod -a -G kvm libvirt-qemu
 
 # Setup libvirt
@@ -135,12 +135,12 @@ USER root
 # Uncomment the following lines, rebuild the container and then get a bash console and run 'service ssh start'
 # inside the container
 
-#RUN mkdir /home/sandbox/.ssh
-#COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
-#RUN chmod 700 /home/sandbox/.ssh && chmod 600 /home/sandbox/.ssh/authorized_keys && chown sandbox.sandbox -R /home/sandbox/.ssh
-#RUN mkdir /root/.ssh
-#COPY id_rsa.pub /root/.ssh/authorized_keys
-#RUN chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys
+RUN mkdir /home/sandbox/.ssh
+COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
+RUN chmod 700 /home/sandbox/.ssh && chmod 600 /home/sandbox/.ssh/authorized_keys && chown sandbox.sandbox -R /home/sandbox/.ssh
+RUN mkdir /root/.ssh
+COPY id_rsa.pub /root/.ssh/authorized_keys
+RUN chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys
 
 # END TESTING
 
