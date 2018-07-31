@@ -56,7 +56,8 @@ RUN LANG=en_US.UTF-8 locale-gen --purge en_US.UTF-8
 
 # temporary -  we should remove this for >14.04
 # TODO: update to use new ip address tools
-RUN apt-get install -y net-tools ifupdown
+#RUN apt-get install -y net-tools ifupdown
+RUN apt-get install -y ifupdown netcat-openbsd
 
 RUN systemctl enable virtlogd.socket
 
@@ -135,12 +136,12 @@ USER root
 # Uncomment the following lines, rebuild the container and then get a bash console and run 'service ssh start'
 # inside the container
 
-RUN mkdir /home/sandbox/.ssh
-COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
-RUN chmod 700 /home/sandbox/.ssh && chmod 600 /home/sandbox/.ssh/authorized_keys && chown sandbox.sandbox -R /home/sandbox/.ssh
-RUN mkdir /root/.ssh
-COPY id_rsa.pub /root/.ssh/authorized_keys
-RUN chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys
+#RUN mkdir /home/sandbox/.ssh
+#COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
+#RUN chmod 700 /home/sandbox/.ssh && chmod 600 /home/sandbox/.ssh/authorized_keys && chown sandbox.sandbox -R /home/sandbox/.ssh
+#RUN mkdir /root/.ssh
+#COPY id_rsa.pub /root/.ssh/authorized_keys
+#RUN chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys
 
 # END TESTING
 
