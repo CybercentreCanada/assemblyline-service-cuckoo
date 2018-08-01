@@ -31,3 +31,4 @@ libdigest-sha-perl
 libio-socket-ssl-perl
 libnet-libidn-perl
 liburi-perl
+libmagic-dev
