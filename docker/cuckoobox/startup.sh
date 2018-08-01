@@ -7,8 +7,8 @@ See the Dockerfile for how to launch the container
 "
 
 # GLOBALS
-export CONTAINER_IP=`ifconfig eth0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`
-#export CONTAINER_IP=`ip address show eth0 | grep "inet " | cut -d" " -f6 | cut -d"/" -f1`
+#export CONTAINER_IP=`ifconfig eth0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`
+export CONTAINER_IP=`ip address show eth0 | grep "inet " | cut -d" " -f6 | cut -d"/" -f1`
 export CUCKOO_BASE=/home/sandbox/.cuckoo
 
 # LOCALS
@@ -34,12 +34,15 @@ EOF
 chmod +x /usr/bin/pkcheck
 
 # Create the kvm node (requires --privileged)
-groupmod -og `ls -n /dev/kvm | cut -d ' ' -f 4` kvm
+#groupmod -og `ls -n /dev/kvm | cut -d ' ' -f 4` kvm
 if [ ! -e /dev/kvm ]; then
     set +e
     mknod /dev/kvm c 10 $(grep '\<kvm\>' /proc/misc | cut -f 1 -d' ')
     set -e
 fi
+
+chown root.kvm /dev/kvm
+chmod g+w /dev/kvm
 
 # If we have a BRIDGE_IF set, add it to /etc/qemu/bridge.conf
 if [ -n "$BRIDGE_IF" ]; then
@@ -64,7 +67,7 @@ fi
 #sleep 2
 
 service virtlogd start
-service libvirt-bin start
+service libvirtd start
 
 # Adjust ownership of mounted volumes
 chown -R sandbox:www-data /opt/sandbox
@@ -90,7 +93,8 @@ fi
 
 # Bootstrap.py makes the fake inetsim interface, if needed
 # Need our IP for the inetsim config file
-export INETSIM_IP=`ifconfig inetsim0 | grep "inet addr" | cut -d ":" -f 2 | cut -d ' ' -f 1`
+#export INETSIM_IP=`ifconfig inetsim0 | grep "inet addr" | cut -d ":" -f 2 | cut -d ' ' -f 1`
+export INETSIM_IP=`ip address show inetsim0 | grep "inet " | cut -d" " -f6 | cut -d"/" -f1`
 if [[ ! -z $INETSIM_IP ]]; then
     sed -e "s/{{ interface_address }}/$INETSIM_IP/" $CONF_PATH/inetsim.conf.template > /etc/inetsim/inetsim.conf
     cat << EOF >> $SUPERVISORD_CONF
