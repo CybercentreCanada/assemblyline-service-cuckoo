@@ -56,13 +56,11 @@ RUN LANG=en_US.UTF-8 locale-gen --purge en_US.UTF-8
 
 # temporary -  we should remove this for >14.04
 # TODO: update to use new ip address tools
-#RUN apt-get install -y net-tools ifupdown
-RUN apt-get install -y ifupdown netcat-openbsd
+# ifupdown needed for bootstrap.py, netcat-openbsd needed to allow virt-manager to connect in
+# needed to add policykit-1 for this to work on >16.04
+RUN apt-get install -y ifupdown netcat-openbsd policykit-1
 
 RUN systemctl enable virtlogd.socket
-
-# Another 16.04 new package
-RUN apt-get install -y policykit-1
 
 # Make sure deps are available
 RUN echo "/usr/local/lib" >> /etc/ld.so.conf
@@ -96,11 +94,8 @@ RUN mv /usr/sbin/libvirtd /usr/bin/libvirtd &&\
 # Disable slow ntpdate updating
 #RUN rm /etc/network/if-up.d/ntpdate
 
-RUN pip install libmagic
-RUN apt-get install -y libmagic-dev
-
 # Set up libvirt-bin service
-COPY conf/etc.default.libvirt-bin /etc/default/libvirt-bin
+#COPY conf/etc.default.libvirt-bin /etc/default/libvirt-bin
 
 
 ################################### CONFIGURATION ######################################
