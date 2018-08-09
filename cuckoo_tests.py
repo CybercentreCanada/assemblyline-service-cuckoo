@@ -17,9 +17,7 @@ from assemblyline.al.common.message import Message, MT_SVCHEARTBEAT
 from assemblyline.al.common.importing import service_by_name
 from assemblyline.al.service.service_driver import ServiceDriver
 from assemblyline.common.logformat import AL_LOG_FORMAT
-
-# Import alsi to use the runcmd
-from assemblyline.al.install import SiteInstaller
+import subprocess
 
 import al_services.alsvc_cuckoo.cuckoo
 import al_services.alsvc_cuckoo.cuckoo_managers
@@ -121,6 +119,29 @@ class CuckooTesting:
                             self.log.error("Can't find matching file in normal working directory: %s. Newly downloaded: %s" % (old_path, new_path))
                             continue
 
+                        # If qcow2, compare the img info to make sure it matches
+                        if file_ext == ".qcow2":
+                            rc, stdout, stderr = alsi_runcmd("qemu-img info --output json %s" % new_path)
+                            new_img_info = json.loads(stdout)
+                            new_snapshots = new_img_info.get("snapshots", [])
+                            if len(new_snapshots) == 0:
+                                self.log.error("No snapshots found for virtual disk %s "
+                                               "Something is very wrong." % new_path)
+
+                            rc, stdout, stderr = alsi_runcmd("qemu-img info --output json %s" % old_path)
+                            old_img_info = json.loads(stdout)
+                            old_snapshots = old_img_info.get("snapshots", [])
+                            if len(old_snapshots) == 0:
+                                self.log.error("No snapshots found for virtual disk %s "
+                                               "Something is very wrong." % old_path)
+                            self.log.error("qemu-img info reports different information.\n%s:\n%s\n%s:\n%s" %
+                                           (new_path, pprint.pformat(new_img_info),
+                                            old_path, pprint.pformat(old_img_info)))
+                            if new_img_info != old_img_info:
+                                self.log.error("qemu-img info reports different information.\n%s:\n%s\n%s:\n%s" %
+                                               (new_path, pprint.pformat(new_img_info),
+                                                old_path, pprint.pformat(old_img_info)))
+
                         # Compute hashes this way so we handle large files in a reasonable way
                         new_hash = hashlib.sha256()
                         old_hash = hashlib.sha256()
@@ -141,17 +162,41 @@ class CuckooTesting:
                             # TODO: revert the 'new' qcow2 file before doing virt-diff
                             if root_path == vmm.local_vm_root:
                                 # We're working with qcow2 files
-                                self.log.warning("Hash mismatch, trying comparison with virt-diff")
-                                alsi = SiteInstaller()
-                                rc, stdout, stderr = alsi.runcmd("sudo virt-diff -a %s -A %s" % (old_path, new_path))
+                                self.log.warning("Hash mismatch for %s, trying comparison with virt-diff" % new_path)
+                                # don't actually instantiate the SiteInstaller class - we just want to use
+                                # the runcmd staticmethod
+                                # alsi = SiteInstaller
 
-                                if rc == 0 and len(stdout) == 0:
+                                rc, stdout, stderr = alsi_runcmd("qemu-img info --output json %s" % new_path)
+                                img_info = json.loads(stdout)
+                                snapshots = img_info.get("snapshots", [])
+                                if len(snapshots) == 0:
+                                    self.log.error("No snapshots found for virtual disk %s from support server. "
+                                                   "Something is very wrong." % os.path.basename(new_path))
+                                else:
+                                    revert_snapshot = snapshots[0]["name"]
+                                    self.log.debug("Reverting %s to snapshot %s" % (new_path, revert_snapshot))
+                                    rc, stdout, stderr = alsi_runcmd("qemu-img snapshot -a %s %s" % (revert_snapshot, new_path))
+
+                                self.log.debug("Running virt-diff...")
+                                rc, stdout, stderr = alsi_runcmd("sudo virt-diff -a %s -A %s" % (old_path, new_path))
+
+                                if rc == 0 and len(stdout) == 0 and len(stderr) == 0:
                                     # No diffs, so not really a mismatch
+                                    self.log.warning("Hash mismatch but virtual disk contents appear to match for %s. "
+                                                     "If this is a backing disk for other virtual disks this may be an "
+                                                     "issue. You should avoid running the parent VM after prepare_vm.py "
+                                                     "has run. If you do modify the parent VM, you must:\n"
+                                                     " 1) Re-run prepare_vm.py\n"
+                                                     " 2) Deploy all qcow2 disk images and XML to your support server\n"
+                                                     " 3) Remove qcow2 files on your worker(s) in %s \n"
+                                                     " 4) Restart hostagent / cuckoo workers" %
+                                                     (new_path, dirpath.replace(new_path_replace, old_path_replace)))
                                     mismatched = False
 
                             if mismatched:
                                 self.log.error("Mismatched file contents between %(old_path)s and %(new_path)s. "
-                                               "This may be caused by a directory permission issue, or changed backing qcow2 disk. "
+                                               "This may be caused by a directory permission issue, or changed qcow2 disk. "
                                                "Try manually overwriting or just deleting %(old_path)s, "
                                                "The service should re-download from the support server" %
                                                {
@@ -171,6 +216,7 @@ class CuckooTesting:
             shutil.rmtree(vmm.local_meta_root)
         else:
             self.log.warning("Didn't clean up VM disks and configuration files. These directories should be deleted: %s , %s" % (vmm.local_meta_root, vmm.local_vm_root))
+
     def start_service(self):
         self.log.info("Starting service...")
 
@@ -401,6 +447,25 @@ class CuckooTesting:
         # cleanup
         shutil.rmtree(ssh_keydir)
 
+
+# Copied from SiteInstaller. If we import SiteInstaller, we overwrite our local logging setup
+def alsi_runcmd(cmdline, shell=True, raise_on_error=True, piped_stdio=True, silent=False, cwd=None):
+    if not silent:
+        if not cwd:
+            print "Running: %s" % cmdline
+        else:
+            print "Running: %s (%s)" % (cmdline, cwd)
+
+    if piped_stdio:
+        p = subprocess.Popen(cmdline, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell, cwd=cwd)
+    else:
+        p = subprocess.Popen(cmdline, shell=shell, cwd=cwd)
+
+    stdout, stderr = p.communicate()
+    rc = p.returncode
+    if raise_on_error and rc != 0:
+        raise Exception("FAILED: return_code:%s\nstdout:\n%s\nstderr:\n%s" % (rc, stdout, stderr))
+    return rc, stdout, stderr
 
 def main(tests, start_vm_name=None, sleep_loop=True):
     logger = logging.getLogger("assemblyline.cuckoo.testing.main")
