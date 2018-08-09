@@ -18,6 +18,9 @@ from assemblyline.al.common.importing import service_by_name
 from assemblyline.al.service.service_driver import ServiceDriver
 from assemblyline.common.logformat import AL_LOG_FORMAT
 
+# Import alsi to use the runcmd
+from assemblyline.al.install import SiteInstaller
+
 import al_services.alsvc_cuckoo.cuckoo
 import al_services.alsvc_cuckoo.cuckoo_managers
 import pprint
@@ -51,6 +54,7 @@ _AVAILABLE_TESTS = [
     "compare_ubuntu_versions",
     "list_vms"
 ]
+
 
 class CuckooTesting:
 
@@ -97,18 +101,22 @@ class CuckooTesting:
             if root_path == vmm.local_meta_root:
                 self.log.info("Comparing XML Virtual Machine definitions")
                 file_ext = ".xml"
+                old_path_replace = old_vm_meta
+                new_path_replace = new_vm_meta
             elif root_path == vmm.local_vm_root:
                 self.log.info("Comparing qcow2 virtual disks")
                 file_ext = ".qcow2"
+                old_path_replace = old_disk_root
+                new_path_replace = new_disk_root
             all_files_matched = True
 
             for dirpath, dirnames, filenames in os.walk(root_path):
                 for fn in filenames:
                     if fn.lower().endswith(file_ext):
                         new_path = os.path.join(dirpath,fn)
-                        old_path = os.path.join(dirpath.replace(new_vm_meta, old_vm_meta), fn)
+                        old_path = os.path.join(dirpath.replace(new_path_replace, old_path_replace), fn)
 
-                        self.log.debug("Checking %s" % new_path)
+                        self.log.debug("Checking %s against %s" % (new_path, old_path))
                         if not os.path.exists(old_path):
                             self.log.error("Can't find matching file in normal working directory: %s. Newly downloaded: %s" % (old_path, new_path))
                             continue
@@ -125,16 +133,33 @@ class CuckooTesting:
 
                         if new_hash.digest() != old_hash.digest():
 
-                            self.log.error("Mismatched file contents between %(old_path)s and %(new_path)s. "
-                                           "This may be caused by a directory permission issue, or changed backing qcow2 disk. "
-                                           "Try manually overwriting or just deleting %(old_path)s, "
-                                           "The service should re-download from the support server" %
-                                           {
-                                               "old_path": old_path,
-                                               "new_path": new_path
-                                           }
-                                           )
-                            all_files_matched = False
+                            mismatched = True
+
+                            # If these are qcow2 files and we're on an appliance,
+                            # there's a decent chance the backed disk (ie/ inetsim_)
+                            # has been used, but that shouldn't matter since the snapshot is reverted
+                            # TODO: revert the 'new' qcow2 file before doing virt-diff
+                            if root_path == vmm.local_vm_root:
+                                # We're working with qcow2 files
+                                self.log.warning("Hash mismatch, trying comparison with virt-diff")
+                                alsi = SiteInstaller()
+                                rc, stdout, stderr = alsi.runcmd("sudo virt-diff -a %s -A %s" % (old_path, new_path))
+
+                                if rc == 0 and len(stdout) == 0:
+                                    # No diffs, so not really a mismatch
+                                    mismatched = False
+
+                            if mismatched:
+                                self.log.error("Mismatched file contents between %(old_path)s and %(new_path)s. "
+                                               "This may be caused by a directory permission issue, or changed backing qcow2 disk. "
+                                               "Try manually overwriting or just deleting %(old_path)s, "
+                                               "The service should re-download from the support server" %
+                                               {
+                                                   "old_path": old_path,
+                                                   "new_path": new_path
+                                               }
+                                               )
+                                all_files_matched = False
 
             if all_files_matched:
                 self.log.info("GOOD. All files match.")
@@ -369,16 +394,15 @@ class CuckooTesting:
 
             self.log.info("Tunnel should be up. VNC to localhost:%d, or ssh -i %s/private.key root@%s" %
                           (local_vnc_port, ssh_keydir, self.service.cuckoo_ip))
-            x = raw_input("Press any key and ENTER to continue...")
+            x = raw_input("Press any key and ENTER to continue (this will tear down the SSH tunnel "
+                          "but leave the docker container running until you press Ctrl-C")
 
         self.log.info("Cleaning up SSH keys...")
         # cleanup
         shutil.rmtree(ssh_keydir)
 
 
-def main(tests, sleep_loop=True):
-
-
+def main(tests, start_vm_name=None, sleep_loop=True):
     logger = logging.getLogger("assemblyline.cuckoo.testing.main")
 
     ct = CuckooTesting()
@@ -389,7 +413,13 @@ def main(tests, sleep_loop=True):
         fn = getattr(ct, t)
         fn()
 
+    if start_vm_name is not None:
+        ct.start_vm(start_vm_name)
+
     if sleep_loop and ct.service is not None:
+        logger.info("Docker container is running. You can open a shell inside the container "
+                    "with 'docker exec -ti %s /bin/bash'. "
+                    "Press Ctrl-C to shut down cleanly" % ct.service.cm.name)
         try:
             while True:
                 time.sleep(config.system.update_interval)
@@ -409,6 +439,10 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--tests", nargs="+",
                         help="The tests to run",
                         choices = _AVAILABLE_TESTS)
+    parser.add_argument("-s", "--start_vm", metavar="KVM_DOMAIN",
+                        help="""Start a VM inside docker and configure SSH port forwarding for VNC.
+                        This allows you to run a VM in the same context as cuckoo and connect to the GUI to
+                        make sure it's working as expected""")
     parser.add_argument("-v", "--verbose", action="store_true", default=False,
                         help="Verbose mode")
 
@@ -431,5 +465,4 @@ if __name__ == "__main__":
 
     else:
         # Do something more interesting...
-        # print args.tests
-        main(args.tests)
+        main(args.tests, args.start_vm)
