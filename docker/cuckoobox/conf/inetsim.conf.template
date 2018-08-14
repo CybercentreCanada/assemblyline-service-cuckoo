@@ -28,7 +28,6 @@ start_service chargen_udp
 start_service dummy_tcp
 start_service dummy_udp
 service_bind_address	{{ interface_address }}
-dns_default_ip	{{ interface_address }}
 http_fakefile		txt	sample.txt	text/plain
 http_fakefile		htm	sample.html	text/html
 http_fakefile		html	sample.html	text/html
@@ -90,3 +89,6 @@ tftp_option		TIMEOUT 5 60
 tftp_option		TSIZE 10485760
 redirect_external_address	{{ interface_address }}
 redirect_exclude_port		tcp:22
+dns_random_ip yes
+dns_random_range 10.0.0.0-10.255.255.255
+
