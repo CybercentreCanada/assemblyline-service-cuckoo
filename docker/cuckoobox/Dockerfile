@@ -16,7 +16,7 @@ WORKDIR /tmp
 ############################# PACKAGE INSTALLATION ################################
 COPY packages.txt /tmp/
 COPY requirements.txt /tmp/
-#COPY libs/inetsim_1.2.8-1_all.deb /tmp/inetsim_1.2.8-1_all.deb
+COPY libs/inetsim_1.2.8-1_all.deb /tmp/inetsim_1.2.8-1_all.deb
 
 # Also change policy-rc.d to fix errors:
 RUN echo "#!/bin/sh\nexit 0" > /usr/sbin/policy-rc.d
@@ -28,8 +28,8 @@ RUN apt-get update &&\
 #  touch /etc/init/cgroup-lite.conf && ln /etc/init/cgroup-lite.conf /etc/init.d/cgroup-lite  &&\
   yes | apt-get install -y --force-yes --no-install-recommends  cgroup-lite &&\
   xargs apt-get install -y --force-yes --no-install-recommends < /tmp/packages.txt &&\
-#  dpkg -i /tmp/inetsim_1.2.8-1_all.deb &&\
-#  rm /tmp/inetsim_1.2.8-1_all.deb &&\
+  dpkg -i /tmp/inetsim_1.2.8-1_all.deb &&\
+  rm /tmp/inetsim_1.2.8-1_all.deb &&\
   xargs -n 1 pip install --upgrade < /tmp/requirements.txt &&\
   pip install /tmp/volatility-2.6.zip &&\
   apt-get remove -y --force-yes python-dev libffi-dev libssl-dev libjpeg-dev zlib1g-dev libxml2-dev libxslt1-dev \
@@ -40,6 +40,10 @@ RUN apt-get update &&\
 
 # These packages are helpful for testing
 RUN apt-get install -y openssh-server vim less
+
+# Copy inetsim patch over
+COPY inetsim_patch/Config.pm /usr/share/perl5/INetSim/Config.pm
+COPY inetsim_patch/DNS.pm /usr/share/perl5/INetSim/DNS.pm
 
 # tcpdump workaround
 RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump &&\
@@ -142,9 +146,9 @@ USER root
 
 
 ### inetsim testing
-RUN groupadd inetsim
-RUN mkdir /root/inetsim
-RUN mkdir /etc/inetsim
+#RUN groupadd inetsim
+#RUN mkdir /root/inetsim
+#RUN mkdir /etc/inetsim
 #COPY inetsim/ /root/inetsim/
 #RUN chmod +x /root/inetsim/setup.sh
 #RUN cd /root/inetsim && /root/inetsim/setup.sh
