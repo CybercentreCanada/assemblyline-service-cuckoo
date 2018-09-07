@@ -32,3 +32,4 @@ libio-socket-ssl-perl
 libnet-libidn-perl
 liburi-perl
 libmagic-dev
+nfqueue-bindings-perl
