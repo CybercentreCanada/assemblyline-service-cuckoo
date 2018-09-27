@@ -94,7 +94,7 @@ fi
 # Bootstrap.py makes the fake inetsim interface, if needed
 # Need our IP for the inetsim config file
 #export INETSIM_IP=`ifconfig inetsim0 | grep "inet addr" | cut -d ":" -f 2 | cut -d ' ' -f 1`
-export INETSIM_IP=`ip address show inetsim0 | grep "inet " | cut -d" " -f6 | cut -d"/" -f1`
+export INETSIM_IP=`ip netns exec inetsimns ip address show inetsim0 | grep "inet " | cut -d" " -f6 | cut -d"/" -f1`
 if [[ ! -z $INETSIM_IP ]]; then
     sed -e "s/{{ interface_address }}/$INETSIM_IP/" $CONF_PATH/inetsim.conf.template > /etc/inetsim/inetsim.conf
     cat << EOF >> $SUPERVISORD_CONF

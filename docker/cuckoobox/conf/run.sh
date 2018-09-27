@@ -9,5 +9,8 @@ find /var/lib/inetsim/ -name "*.mbox" -delete
 iptables -F
 iptables-restore /home/sandbox/conf/rules.v4
 
+/sbin/ip netns exec inetsimns iptables -F
+/sbin/ip netns exec inetsimns iptables-restore /home/sandbox/conf/rules.inetsimns.v4
+
 chmod g+r /var/lib/inetsim/certs/*
-/usr/bin/inetsim --config=/etc/inetsim/inetsim.conf --log-dir=/var/log/inetsim --data-dir=/var/lib/inetsim/
+/sbin/ip netns exec inetsimns /usr/bin/inetsim --config=/etc/inetsim/inetsim.conf --log-dir=/var/log/inetsim --data-dir=/var/lib/inetsim/

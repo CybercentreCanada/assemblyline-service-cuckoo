@@ -126,6 +126,10 @@ RUN cuckoo &&\
 
 USER root
 
+# TODO - move this earlier, but easier to put it here for testing
+COPY libs/debian-netns-master-axxName.tar.gz /tmp/
+RUN tar -zxf /tmp/debian-netns-master-axxName.tar.gz --strip=1 -C /etc/network/
+
 ## TESTING - SSH ACCESS FOR ROOT & SANDBOX USER
 # Add SSH key for sandbox user (this user is the one who runs cuckoo and kvm processes)
 # as well as the root user
