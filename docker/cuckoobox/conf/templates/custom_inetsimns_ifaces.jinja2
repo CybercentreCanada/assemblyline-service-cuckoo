@@ -1,0 +1,29 @@
+# This file defines the interfaces to be brought up in the 'inetsimns' namespace
+# see 'custom_nat_ifaces' file for more information
+
+{% for context in contexts %}
+
+{% if context.route_opt == "inetsim" %}
+# Set the gateway IP on the inetsimns side of the veth pair
+auto veth2_{{ context.virt_bridge_name[:4] }}
+iface veth2_{{ context.virt_bridge_name[:4] }} inet static
+    address {{ context.virt_bridge_ip}}
+    netmask {{ context.virt_bridge_netmask }}
+
+{% if context.fake_ip_stub %}
+auto veth2_{{ context.virt_bridge_name[:4] }}:0
+iface veth2_{{ context.virt_bridge_name[:4] }}:0 inet static
+    address {{ context.fake_ip_stub }}
+    netmask {{ context.virt_bridge_netmask }}
+{% endif %}
+{% endif %}
+
+{% endfor %}
+
+{% for ins_meta in inetsim %}
+auto {{ ins_meta.iface_name }}
+iface {{ ins_meta.iface_name }} inet manual
+    pre-up /sbin/ip link add {{ ins_meta.iface_name }} type dummy
+    up /sbin/ip link set {{ ins_meta.iface_name }} address {{ ins_meta.mac }}
+    up /sbin/ip addr add {{ ins_meta.ip }}/24 dev {{ ins_meta.iface_name }}
+{% endfor %}

@@ -55,7 +55,9 @@ TEMPLATE_CUSTOM_NAT_IFACES = 'custom_nat_ifaces.jinja2'
 CUCKOO_CONF_TEMPLATE = 'cuckoo.conf.jinja2'
 KVM_CONF_TEMPLATE = 'kvm.conf.jinja2'
 CUSTOM_NAT_IFACES_TEMPLATE = 'custom_nat_ifaces.jinja2'
+CUSTOM_INETSIMNS_IFACES_TEMPLATE = 'custom_inetsimns_ifaces.jinja2'
 CUSTOM_NAT_RULES_TEMPLATE = 'custom_nat_rules.jinja2'
+CUSTOM_INTESIMNS_RULES_TEMPLATE = 'custom_inetsimns_rules.jinja2'
 
 lv = None
 
@@ -100,10 +102,11 @@ def setup_network(eth0_ip_p, networks_p):
     create_inetsim = False
     contexts = []
     counter = 1
-    for vm_name, [vm_ip_p, vm_gateway_p, vm_netmask, vm_vrouteip, route_opt, if_name_p] in networks_p.iteritems():
+    for vm_name, [vm_ip_p, vm_gateway_p, vm_resultserver_ip, vm_netmask, vm_vrouteip, route_opt, if_name_p] in networks_p.iteritems():
         ctx = {
             'virt_bridge_name': if_name_p,
             'virt_bridge_ip': vm_gateway_p,
+            'virt_bridge_resultserver_ip': vm_resultserver_ip,
             'virt_bridge_netmask': vm_netmask,
             'virt_route_addr': vm_vrouteip,
             'vm_ip': vm_ip_p,
@@ -132,32 +135,48 @@ def setup_network(eth0_ip_p, networks_p):
     print json.dumps(ctx, indent=4, sort_keys=True)
     interfaces = render_template(CUSTOM_NAT_IFACES_TEMPLATE, context=ctx)
 
+    # We also need the inetsim namespace interfaces
+    interfaces_inetsimns = render_template(CUSTOM_INETSIMNS_IFACES_TEMPLATE, context=ctx)
+
     interfaces_file = os.path.join(CFG_BASE, 'interfaces')
+    interfaces_inetsimns_file = os.path.join(CFG_BASE, 'interfaces.inetsimns')
     with open(interfaces_file, 'w') as i_fh:
         i_fh.write(interfaces)
+    with open(interfaces_inetsimns_file, "w") as i_fh:
+        i_fh.write(interfaces_inetsimns)
+
     run_cmd("cp %s /etc/network/interfaces" % interfaces_file)
+    run_cmd("cp %s /etc/network/interfaces.inetsimns" % interfaces_inetsimns_file)
 
     iptables = render_template(CUSTOM_NAT_RULES_TEMPLATE, context=ctx)
+    iptables_inetsimns = render_template(CUSTOM_INTESIMNS_RULES_TEMPLATE, context=ctx)
+
     iptables_file = os.path.join(CFG_BASE, 'rules.v4')
+    iptables_inetsimns_file = os.path.join(CFG_BASE, 'rules.inetsimns.v4')
 
     with open(iptables_file, 'w') as ipt_fh:
         ipt_fh.write(iptables)
 
-    if create_inetsim:
-        run_cmd("ifup inetsim0")
+    with open(iptables_inetsimns_file, "w") as ipt_fh:
+        ipt_fh.write(iptables_inetsimns)
+
+    # if create_inetsim:
+    #     run_cmd("ifup inetsim0")
 
     gateway_ip = re.search("default via ([0-9.]+) dev eth0", run_cmd("ip route")).group(1)
-    for ctx in contexts:
-        run_cmd("ip rule add fwmark %i table %i" % (ctx['mark'], ctx['mark']))
-        if ctx['route_opt'] == 'inetsim':
-            run_cmd("ip route add table %i default dev inetsim0 via %s" % (ctx['mark'], inetsim[0]['ip']))
-        else:
-            run_cmd("ip route add table %i default dev eth0 via %s" % (ctx['mark'], gateway_ip))
 
-    [run_cmd("ifup %s_dmy" % ctx['virt_bridge_name']) for ctx in contexts]
-    [run_cmd("ifup %s" % ctx['virt_bridge_name']) for ctx in contexts]
-    [run_cmd("ifup %s:0" % ctx['virt_bridge_name']) for ctx in contexts if ctx.get('fake_ip_stub', None) is not None]
-    [run_cmd("ip addr add %s dev %s" % (ctx['virt_bridge_ip'], ctx['virt_bridge_name'])) for ctx in contexts]
+    # for ctx in contexts:
+    #     run_cmd("ip rule add fwmark %i table %i" % (ctx['mark'], ctx['mark']))
+    #     if ctx['route_opt'] == 'inetsim':
+    #         run_cmd("ip route add table %i default dev inetsim0 via %s" % (ctx['mark'], inetsim[0]['ip']))
+    #     else:
+    #         run_cmd("ip route add table %i default dev eth0 via %s" % (ctx['mark'], gateway_ip))
+
+    # [run_cmd("ifup %s_dmy" % ctx['virt_bridge_name']) for ctx in contexts]
+    # [run_cmd("ifup %s" % ctx['virt_bridge_name']) for ctx in contexts]
+    # [run_cmd("ifup %s:0" % ctx['virt_bridge_name']) for ctx in contexts if ctx.get('fake_ip_stub', None) is not None]
+    # [run_cmd("ip addr add %s dev %s" % (ctx['virt_bridge_ip'], ctx['virt_bridge_name'])) for ctx in contexts]
+    run_cmd("ifup -a")
     run_cmd("iptables-restore %s" % iptables_file)
 
 
@@ -298,6 +317,9 @@ if __name__ == "__main__":
         if_name = "%s10" % binascii.b2a_hex(os.urandom(4))
 
         import_disk(kvm['name'], kvm['xml'], kvm['snapshot_xml'], dest_path, custom_vmnet=if_name)
+        # Aim for backwards compatibility - if the result server isn't set
+        # Just make one up by one-upping the gateway
+        resultserver_ip = kvm.get("resultserver_ip", str(ipaddress.IPv4Address(kvm["gateway"]) + 1))
         machines.append(
             {
                 'name': kvm['name'],
@@ -307,12 +329,14 @@ if __name__ == "__main__":
                 'tags': kvm['tags'],
                 'interface': if_name,
                 'volatility_profile': kvm.get('guest_profile', ""),
-                'gateway': kvm['gateway']
+                'gateway': kvm['gateway'],
+                "resultserver_ip": resultserver_ip
             }
         )
 
         networks[kvm['name']] = [kvm['ip'],
                                  kvm['gateway'],
+                                 resultserver_ip,
                                  kvm['netmask'],
                                  kvm["fakenet"],
                                  kvm['route'],
