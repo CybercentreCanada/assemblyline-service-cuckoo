@@ -274,6 +274,9 @@ class Cuckoo(ServiceBase):
             except DockerException:
                 pass
 
+    def sysprep(self):
+        self.log.info("Running sysprep...")
+
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
         global generate_al_result, CuckooVmManager, CuckooContainerManager
