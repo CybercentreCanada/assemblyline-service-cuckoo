@@ -298,30 +298,24 @@ If you've deployed ASSEMBLYLINE in a cluster configuration and the Cuckoo servic
 transport errors. It is possible that there is a mismatch between the FTP root of the support host and Cuckoo's service 
 configurations. The REMOTE_DISK_ROOT should be relative to the support hosts FTP root directory.
 
-If you need to enter a running cuckoobox docker container while ASSEMBLYLINE is running, use the following command.
+### DEBUGGING - docker/VM issues with cuckoo_tests.py
 
-    sudo docker exec -ti `sudo docker ps | grep cuckoobox | cut -d ' ' -f 1` bash
-    
-Once inside the container, the best log to check for general errors is ``/home/sandbox/.cuckoo/log/cuckoo.log``.
+If the logs don't provide any clues about what may be going wrong, there is a 'cuckoo_test.py' script included in the 
+service repository. This is meant to be run on the workers, as the `al` user (or another user who can run docker containers)
 
-For more in depth debugging:
+    source /etc/default/al
+    
+    # View help for the script
+    /opt/al/pkg/al_services/alsvc_cuckoo/cuckoo_tests.py --help
+    
+    # View a description of each of the available tests
+    /opt/al/pkg/al_services/alsvc_cuckoo/cuckoo_tests.py --help_tests
+    
+    # Run a test
+    /opt/al/pkg/al_services/alsvc_cuckoo/cuckoo_tests.py -t is_cuckoo_ready
+    
 
-1. On the physical host, create an SSH keypair using ``ssh-keygen`` and copy ~/.ssh/id_rsa.pub to docker/cuckoobox
-2. Uncomment the lines near the bottom of the Dockerfile (``TESTING - SSH ACCESS FOR ROOT & SANDBOX USER``), rebuild the container and push to whatever registry you're using.
-3. Run the docker container
-    * If you're in a development environment (ie/ no incoming files), simply run the cuckoo service using run_service_live.py
-        * ``sudo -u al /opt/al/pkg/assemblyline/al/service/run_service_live.py al_services.alsvc_cuckoo.Cuckoo``
-    * Otherwise see the top of the Dockerfile for an example of how to start the docker container outside the context of the AL service
-4. Start SSH inside the container
-    * ``sudo docker ps`` to figure out which container ID to use
-    * ``sudo docker exec -ti $CONTAINER_ID bash`` and then ``service ssh start`` inside the container
-5. Confirm that SSH login works from the physical host as root and sandbox user
-    * ``ssh root@$DOCKER_IP``
-    * ``ssh sandbox@$DOCKER_IP``
-    
-You should now be able to use ``virt-manager`` from the physical host and create a remote SSH connection into the docker container, 
-as root and/or sandbox to try and run VM's inside docker (*NB*: Cuckoo runs as the sandbox user, so that user needs to be able to run the VM(s))
-    
+### DEBUGGING - Additional Issues
 
 To change the service configurations, use supervisorctl.
 
@@ -335,3 +329,31 @@ If you find that the Cuckoobox container exists immediately after being launched
 the ram mount inside the container. This directory is limited to 2 gigabytes by default, but can be modified in the 
 ASSEMBLYLINE configurations. It must be large enough to store the snapshot image for all virtual machines with enough 
 room left over for any given virtual machine to run a malware sample.
+
+### DEBUGGING - docker/VM issues (deprecated)
+
+`cuckoo_tests.py` **should** obviate the need for the following, however it may still be useful in some situations.
+
+If you need to enter a running cuckoobox docker container while ASSEMBLYLINE is running, use the following command.
+
+    sudo docker exec -ti `sudo docker ps | grep cuckoobox | cut -d ' ' -f 1` bash
+    
+Once inside the container, the best log to check for general errors is ``/home/sandbox/.cuckoo/log/cuckoo.log``.
+
+For more in depth debugging:
+
+1. On the physical host, create an SSH keypair using ``ssh-keygen`` and copy ~/.ssh/id_rsa.pub to docker/cuckoobox
+2. Uncomment the lines near the bottom of the Dockerfile (``TESTING - SSH ACCESS FOR ROOT & SANDBOX USER``), rebuild the container and push to whatever registry you're using.
+3. Run the docker container
+    * If you're in a development environment (ie/ no incoming files), simply run the cuckoo service using run_service_live.py
+        * ``sudo -u al /opt/al/pkg/assemblyline/al/service/run_service_live.py Cuckoo``
+    * Otherwise see the top of the Dockerfile for an example of how to start the docker container outside the context of the AL service
+4. Start SSH inside the container
+    * ``sudo docker ps`` to figure out which container ID to use
+    * ``sudo docker exec -ti $CONTAINER_ID bash`` and then ``service ssh start`` inside the container
+5. Confirm that SSH login works from the physical host as root and sandbox user
+    * ``ssh root@$DOCKER_IP``
+    * ``ssh sandbox@$DOCKER_IP``
+    
+You should now be able to use ``virt-manager`` from the physical host and create a remote SSH connection into the docker container, 
+as root and/or sandbox to try and run VM's inside docker (*NB*: Cuckoo runs as the sandbox user, so that user needs to be able to run the VM(s))
