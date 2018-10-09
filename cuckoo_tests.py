@@ -123,6 +123,9 @@ class CuckooTesting:
                         if file_ext == ".qcow2":
                             rc, stdout, stderr = alsi_runcmd("qemu-img info --output json %s" % new_path)
                             new_img_info = json.loads(stdout)
+                            # pop the 'filename' key out - this is going to be different
+                            if 'filename' in new_img_info:
+                                new_img_info.pop("filename")
                             new_snapshots = new_img_info.get("snapshots", [])
                             if len(new_snapshots) == 0:
                                 self.log.error("No snapshots found for virtual disk %s "
@@ -130,19 +133,26 @@ class CuckooTesting:
 
                             rc, stdout, stderr = alsi_runcmd("qemu-img info --output json %s" % old_path)
                             old_img_info = json.loads(stdout)
+                            if 'filename' in old_img_info:
+                                old_img_info.pop("filename")
                             old_snapshots = old_img_info.get("snapshots", [])
                             if len(old_snapshots) == 0:
                                 self.log.error("No snapshots found for virtual disk %s "
                                                "Something is very wrong." % old_path)
-                            self.log.error("qemu-img info reports different information.\n%s:\n%s\n%s:\n%s" %
-                                           (new_path, pprint.pformat(new_img_info),
-                                            old_path, pprint.pformat(old_img_info)))
-                            if new_img_info != old_img_info:
-                                self.log.error("qemu-img info reports different information.\n%s:\n%s\n%s:\n%s" %
-                                               (new_path, pprint.pformat(new_img_info),
-                                                old_path, pprint.pformat(old_img_info)))
+
+                            if new_snapshots != old_snapshots:
+                                self.log.error("Snapshot information between the two images differs.\n%s:\n%s\n%s:\n%s" %
+                                               (new_path, pprint.pformat(new_snapshots),
+                                                old_path, pprint.pformat(old_snapshots)))
+
+                            # This may not be a great test.
+                            # if new_img_info != old_img_info:
+                            #     self.log.error("qemu-img info reports different information.\n%s:\n%s\n%s:\n%s" %
+                            #                    (new_path, pprint.pformat(new_img_info),
+                            #                     old_path, pprint.pformat(old_img_info)))
 
                         # Compute hashes this way so we handle large files in a reasonable way
+                        self.log.info("Calculating hashes... this may take awhile")
                         new_hash = hashlib.sha256()
                         old_hash = hashlib.sha256()
                         with open(new_path, "rb") as new_fh:
@@ -163,9 +173,6 @@ class CuckooTesting:
                             if root_path == vmm.local_vm_root:
                                 # We're working with qcow2 files
                                 self.log.warning("Hash mismatch for %s, trying comparison with virt-diff" % new_path)
-                                # don't actually instantiate the SiteInstaller class - we just want to use
-                                # the runcmd staticmethod
-                                # alsi = SiteInstaller
 
                                 rc, stdout, stderr = alsi_runcmd("qemu-img info --output json %s" % new_path)
                                 img_info = json.loads(stdout)
@@ -339,6 +346,10 @@ class CuckooTesting:
         if self.service is None:
             self.start_service()
 
+        self.log.info("Waiting on is_cuckoo_ready...")
+        self.is_cuckoo_ready()
+
+
         cmd = """docker exec %s virsh list --all --name""" % self.service.cm.name
         self.log.info("Trying to get a list of VMs using command: %s" % cmd)
         stdout, stderr = self.service.cm._run_cmd(cmd)
@@ -381,6 +392,9 @@ class CuckooTesting:
 
         if self.service is None:
             self.start_service()
+
+        self.log.debug("Need to wait until cuckoo is ready to make sure libvirtd is up and running")
+        self.is_cuckoo_ready()
 
         cmd = """docker exec %s virsh snapshot-revert --current --domain %s""" % (self.service.cm.name, vm_name)
         self.log.info("Trying to start VM inside docker with command: %s" % cmd)
@@ -472,11 +486,12 @@ def main(tests, start_vm_name=None, sleep_loop=True):
 
     ct = CuckooTesting()
 
-    logger.info("Running tests %s" % ",".join(tests))
+    if tests:
+        logger.info("Running tests %s" % ",".join(tests))
 
-    for t in tests:
-        fn = getattr(ct, t)
-        fn()
+        for t in tests:
+            fn = getattr(ct, t)
+            fn()
 
     if start_vm_name is not None:
         ct.start_vm(start_vm_name)
