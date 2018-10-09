@@ -31,7 +31,7 @@ COMMIT
 {%-  if ctx.route_opt == "inetsim" %}
 -A PREROUTING -i {{ ctx.virt_bridge_name }} -d {{ eth_ip }} -p tcp -m tcp --sport 8000 -j RETURN
 -A PREROUTING -i {{ ctx.virt_bridge_name }} -d {{ eth_ip }} -p tcp -m tcp --dport 2042 -j RETURN
--A PREROUTING -i {{ ctx.virt_bridge_name }} -j DNAT --to-destination {{ ins.ip }}
+#-A PREROUTING -i {{ ctx.virt_bridge_name }} -j DNAT --to-destination {{ ins.ip }}
 {%- else %}
 -A PREROUTING -i {{ ctx.virt_bridge_name }} -d 8.8.8.8/32 -j DNAT --to-destination {{ dns_ip }}
 {%- endif %}
@@ -66,7 +66,9 @@ COMMIT
 -A FORWARD -i {{ ctx.virt_bridge_name }} -o {{ ctx.virt_bridge_name }} -j ACCEPT
 -A FORWARD -d {{ ctx.virt_route_addr }} -o {{ ctx.virt_bridge_name }} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 -A FORWARD -i {{ ctx.virt_bridge_name }} -j ACCEPT
+{%- if ctx.route_opt == "inetsim" %}
 -A FORWARD -o {{ ctx.virt_bridge_name }} -j REJECT --reject-with icmp-port-unreachable
+{%- endif %}
 {%- endfor %}
 # Reject everything else.
 #-A INPUT -m conntrack --ctstate INVALID -j DROP

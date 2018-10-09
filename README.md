@@ -1,4 +1,5 @@
 # CUCKOO SERVICE
+
 This ASSEMBLYLINE service provides the ability to perform live dynamic analysis on submitted files via the Open Source project [Cuckoo Sandbox](https://cuckoosandbox.org).
 
 **NOTE**: This service **requires extensive additional installation** before being functional. It is **not** preinstalled during a default installation.
@@ -10,6 +11,16 @@ Android virtual machines; and can also launch files that may cause unintended ex
 Sandbox monitors execution, filesystem, and network activity that occurs when a file is opened. This service summarizes 
 these results for the ASSEMBLYLINE UI and provides a links to the full result set. Files that are unpacked and saved to 
 disk are fed back into ASSEMBLYLINE.
+
+## CUCKOO ASSEMBLYLINE OVERVIEW
+
+In order to support horizontal scaling, each instance of this service encapsulates an instance of Cuckoo Sandbox inside a Docker
+container. The Cuckoo server inside of each Docker container then launches the required KVM Virtual Machine and performs
+the normal Cuckoo Sandbox functions.
+
+A patch to [INetSim](https://www.inetsim.org/) is distributed and applied within the Docker container that allows inetsim to create 
+random IPs for DNS requests. By default it will create IPs in the range 10.0.0.0-10.255.255.255. This feature can be disabled by editing
+`docker/cuckoobox/conf/inetsim.conf.template` before building the docker container as outlined below.
 
 ### SUBMISSION OPTIONS
 
@@ -24,7 +35,7 @@ The following options are available for submissions to the Cuckoo service (acces
 * **pull_memory** - DEPRECATED
 * **dump_memory** - Dump full VM memory. *NB*: This is very slow!
 * **no_monitor** - Run analysis without injecting the Cuckoo monitoring agent. Equivalent to passing `--options free=yes` (see [here](https://cuckoo.sh/docs/usage/packages.html) for more information)
-* **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or `inetsim`
+* **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or simulated services (`inetsim`) using [INetSim](https://www.inetsim.org/).
 
 ## DEPLOYMENT INSTRUCTIONS
 
