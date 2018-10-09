@@ -298,7 +298,7 @@ If you've deployed ASSEMBLYLINE in a cluster configuration and the Cuckoo servic
 transport errors. It is possible that there is a mismatch between the FTP root of the support host and Cuckoo's service 
 configurations. The REMOTE_DISK_ROOT should be relative to the support hosts FTP root directory.
 
-### DEBUGGING - docker/VM issues with cuckoo_test.py
+### DEBUGGING - docker/VM issues with cuckoo_tests.py
 
 If the logs don't provide any clues about what may be going wrong, there is a 'cuckoo_test.py' script included in the 
 service repository. This is meant to be run on the workers, as the `al` user (or another user who can run docker containers)
@@ -332,7 +332,7 @@ room left over for any given virtual machine to run a malware sample.
 
 ### DEBUGGING - docker/VM issues (deprecated)
 
-`cuckoo_test.py` **should** obviate the need for the following, however it may still be useful in some situations.
+`cuckoo_tests.py` **should** obviate the need for the following, however it may still be useful in some situations.
 
 If you need to enter a running cuckoobox docker container while ASSEMBLYLINE is running, use the following command.
 
