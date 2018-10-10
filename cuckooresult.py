@@ -16,6 +16,15 @@ from assemblyline.al.common.result import Result, ResultSection, SCORE, TAG_TYPE
 from assemblyline.common.exceptions import RecoverableError
 from al_services.alsvc_cuckoo.clsids import clsids
 from al_services.alsvc_cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
+import os
+
+try:
+    from typing import TYPE_CHECKING
+    if TYPE_CHECKING:
+        from assemblyline.al.service.base import ServiceRequest
+except ImportError:
+    # we don't care if this isn't here at runtime...
+    pass
 
 CLASSIFICATION = forge.get_classification()
 
@@ -28,7 +37,7 @@ country_code_map = None
 
 
 # noinspection PyBroadException
-def generate_al_result(api_report, al_result, file_ext, guest_ip, service_classification=CLASSIFICATION.UNRESTRICTED):
+def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, service_classification=CLASSIFICATION.UNRESTRICTED):
     log.debug("Generating AL Result.")
     try:
         classification = CLASSIFICATION.max_classification(CLASSIFICATION.UNRESTRICTED, service_classification)
@@ -66,7 +75,7 @@ def generate_al_result(api_report, al_result, file_ext, guest_ip, service_classi
         process_debug(debug, al_result, classification)
 
     if behavior:
-        executed = process_behavior(behavior, al_result, classification)
+        executed = process_behavior(behavior, al_result, al_request, classification)
 
     if droidmon:
         process_droidmon(droidmon, network, al_result, classification)
@@ -218,7 +227,8 @@ def process_com(args, result_map):
                 process_clsid(arg, result_map)
 
 
-def process_behavior(behavior, al_result, classification):
+def process_behavior(behavior, al_result, al_request, classification):
+    # type: (dict, Result, ServiceRequest, str) -> bool
     log.debug("Processing behavior results.")
     executed = True
     result_map = {}
@@ -269,6 +279,14 @@ def process_behavior(behavior, al_result, classification):
                     al_result.add_tag(tag_type=tag_type, value=ln,
                                       weight=TAG_WEIGHT.NULL, classification=classification,
                                       context=Context.DYNAMIC)
+            # Dump out contents to a temporary file and add as an extracted file
+            if q_name == "command_line":
+                for raw_ln in q_res:
+                    cli_hash = hashlib.sha256(raw_ln).hexdigest()
+                    temp_filepath = os.path.join(al_request._svc.working_directory, "command_%s" % cli_hash[:10])
+                    with open(temp_filepath, 'wb') as temp_fh:
+                        temp_fh.write(raw_ln)
+                    al_request.add_extracted(temp_filepath, "Extracted command_line from Cuckoo")
             al_result.add_section(res_sec)
 
     if len(guids) > 0:

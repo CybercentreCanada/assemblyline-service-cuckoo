@@ -527,6 +527,7 @@ class Cuckoo(ServiceBase):
                     self.log.debug("Generating AL Result from Cuckoo results..")
                     success = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
+                                                 request,
                                                  file_ext,
                                                  guest_ip,
                                                  self.SERVICE_CLASSIFICATION)
