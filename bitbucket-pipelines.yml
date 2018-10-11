@@ -6,10 +6,16 @@
 #image: python:3.5.1
 
 pipelines:
-  default:
-    - step:
-        script: # Modify the commands below to build your repository.
-          - docker build -t cuckoo/cuckoobox docker/cuckoobox
+  custom:
+    build_docker:
+      - step:
+          name: Build docker cuckoobox
+          image: atlassian/pipelines-awscli
+          script: # Modify the commands below to build your repository.
+            - cd docker/cuckoobox
+            # Get libraries
+            - python get_libs_for_cuckoo_docker.py | xargs -IX -n1 aws s3 cp s3://assemblyline-support/X libs/
+            - docker build -t cuckoo/cuckoobox .
 
 options:
   docker: true
