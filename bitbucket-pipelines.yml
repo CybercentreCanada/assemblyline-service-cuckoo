@@ -8,6 +8,7 @@
 pipelines:
   default:
     - step:
+        image: atlassian/pipelines-awscli
         script: # Modify the commands below to build your repository.
           - cd docker/cuckoobox
           - aws s3 cp s3://assemblyline-support/volatility-2.6.zip libs/
