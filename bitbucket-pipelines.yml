@@ -9,7 +9,11 @@ pipelines:
   default:
     - step:
         script: # Modify the commands below to build your repository.
-          - docker build -t cuckoo/cuckoobox docker/cuckoobox
+          - cd docker/cuckoobox
+          - aws s3 cp s3://assemblyline-support/volatility-2.6.zip libs/
+          - aws s3 cp s3://assemblyline-support/inetsim_1.2.8-1_all.deb libs/
+          - aws s3 cp s3://assemblyline-support/debian-netns-master-axxName.tar.gz libs/
+          - docker build -t cuckoo/cuckoobox .
 
 options:
   docker: true
