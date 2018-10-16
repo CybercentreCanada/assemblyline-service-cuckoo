@@ -1074,6 +1074,7 @@ class Cuckoo(ServiceBase):
             community_files = os.listdir(local_community_root)
 
             for f in community_files:
+                # TODO: could just do an os.stat and hash the mtime rather than reading the whole file? ~100us vs ~75ms
                 with open(os.path.join(local_community_root, f), 'rb') as gethash:
                     version_hash.update(gethash.read())
 
@@ -1100,9 +1101,18 @@ class Cuckoo(ServiceBase):
         self.vmm.download_data()
 
 
-        ###
-        # Do community updates
-        ###
+
+
+        self.log.info("update function complete")
+
+    def _cuckoo_community_updates(self):
+        """
+        Do "community" updates. This also allows you to configure extra cuckoo specific features
+        if you like
+        :return:
+        """
+
+        config = forge.get_config()
         local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
 
         # Check to see if dir exists - if it does, delete it and re-create it
@@ -1127,8 +1137,9 @@ class Cuckoo(ServiceBase):
             self._update_tool_version()
 
             # Trigger a container restart to bring in new updates
+            # TODO: need a better way to do this. maybe make the updater per process and just
+            # check the last update time on the community file?
+            # Or check it in execute?
             if self.cm is not None and current_tool_version != self.get_tool_version():
                 self.log.info("New version of community repo detected, restarting container")
                 self.trigger_cuckoo_reset()
-
-        self.log.info("update function complete")
