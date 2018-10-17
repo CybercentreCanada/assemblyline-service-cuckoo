@@ -32,14 +32,21 @@ RUN apt-get update &&\
   rm /tmp/inetsim_1.2.8-1_all.deb &&\
   xargs -n 1 pip install --upgrade < /tmp/requirements.txt &&\
   pip install /tmp/volatility-2.6.zip &&\
+  # These packages are helpful for testing
+  apt-get install -y --force-yes openssh-server vim less &&\
+  # locales was causing issues on 16.04
+  apt-get install -y locales &&\
+  LANG=en_US.UTF-8 locale-gen --purge en_US.UTF-8 &&\
+  # Sticking with ifupdown tools for now
+  # ifupdown needed for bootstrap.py, netcat-openbsd needed to allow virt-manager to connect in
+  # needed to add policykit-1 for this to work on >16.04
+  apt-get install -y ifupdown netcat-openbsd policykit-1 &&\
   apt-get remove -y --force-yes python-dev libffi-dev libssl-dev libjpeg-dev zlib1g-dev libxml2-dev libxslt1-dev \
-  libc6-dev libpython2.7 vim-tiny vim-common gcc cpp g++ make &&\
+  libc6-dev libpython2.7 gcc cpp g++ make &&\
   apt-get autoremove -y --force-yes &&\
   apt-get clean &&\
   rm /tmp/requirements.txt /tmp/packages.txt /tmp/volatility-2.6.zip
 
-# These packages are helpful for testing
-RUN apt-get install -y openssh-server vim less
 
 # Copy inetsim patch over
 COPY inetsim_patch/Config.pm /usr/share/perl5/INetSim/Config.pm
@@ -54,15 +61,10 @@ RUN mv /usr/sbin/tcpdump /usr/bin/tcpdump &&\
 RUN mkdir -p /var/run/dbus || /bin/true
 RUN sed -ie 's/auth_admin_keep/yes/' /usr/share/polkit-1/actions/org.libvirt.unix.policy
 
-# locales was causing issues for ubuntu 16.04 build for some reason
-RUN apt-get install -y locales
-RUN LANG=en_US.UTF-8 locale-gen --purge en_US.UTF-8
-
-# temporary -  we should remove this for >14.04
-# TODO: update to use new ip address tools
-# ifupdown needed for bootstrap.py, netcat-openbsd needed to allow virt-manager to connect in
-# needed to add policykit-1 for this to work on >16.04
-RUN apt-get install -y ifupdown netcat-openbsd policykit-1
+# Copy over ifup/down scripts to help with setting up network namespaces
+# source: https://github.com/axxName/debian-netns
+COPY libs/debian-netns-master-axxName.tar.gz /tmp/
+RUN tar -zxf /tmp/debian-netns-master-axxName.tar.gz --strip=1 -C /etc/network/
 
 RUN systemctl enable virtlogd.socket
 
@@ -120,42 +122,11 @@ RUN mkdir /home/sandbox/conf
 COPY conf/* /home/sandbox/conf/
 
 # Run cuckoo once to create basic directory structure
-RUN cuckoo &&\
-  mkdir /home/sandbox/supervisor &&\
-  cp /home/sandbox/conf/processing.conf /home/sandbox/.cuckoo/conf/
+RUN cuckoo --cwd /home/sandbox/.cuckoo init --conf /home/sandbox/conf/cuckoo_init.conf &&\
+  mkdir /home/sandbox/supervisor
 
 USER root
 
-# TODO - move this earlier, but easier to put it here for testing
-COPY libs/debian-netns-master-axxName.tar.gz /tmp/
-RUN tar -zxf /tmp/debian-netns-master-axxName.tar.gz --strip=1 -C /etc/network/
-
-## TESTING - SSH ACCESS FOR ROOT & SANDBOX USER
-# Add SSH key for sandbox user (this user is the one who runs cuckoo and kvm processes)
-# as well as the root user
-# Assumes that you've copied id_rsa.pub file to the local build directory.
-# In order to login with ssh, you'll have to get a shell inside the container and start SSH
-# with 'service ssh start'
-# Uncomment the following lines, rebuild the container and then get a bash console and run 'service ssh start'
-# inside the container
-
-#RUN mkdir /home/sandbox/.ssh
-#COPY id_rsa.pub /home/sandbox/.ssh/authorized_keys
-#RUN chmod 700 /home/sandbox/.ssh && chmod 600 /home/sandbox/.ssh/authorized_keys && chown sandbox.sandbox -R /home/sandbox/.ssh
-#RUN mkdir /root/.ssh
-#COPY id_rsa.pub /root/.ssh/authorized_keys
-#RUN chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys
-
-# END TESTING
-
-
-### inetsim testing
-#RUN groupadd inetsim
-#RUN mkdir /root/inetsim
-#RUN mkdir /etc/inetsim
-#COPY inetsim/ /root/inetsim/
-#RUN chmod +x /root/inetsim/setup.sh
-#RUN cd /root/inetsim && /root/inetsim/setup.sh
 
 # Expose cuckoo/libvirt ports
 EXPOSE 80 2042 5353 8090 9040 16509 22

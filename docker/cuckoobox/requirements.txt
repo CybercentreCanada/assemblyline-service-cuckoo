@@ -9,7 +9,7 @@ cryptography==2.1.2
 asn1crypto==0.23.0
 pycrypto==2.6.1
 pyOpenSSL==17.3.0
-cuckoo==2.0.5.3
+cuckoo==2.0.6.2
 supervisor==3.3.3
 superlance==1.0.0
 lxml==4.1.0
