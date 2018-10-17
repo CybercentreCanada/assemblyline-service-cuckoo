@@ -237,7 +237,7 @@ class Cuckoo(ServiceBase):
         super(Cuckoo, self).__init__(cfg)
         self.cfg = cfg
         self.vmm = None
-        self.cm = None
+        self.cm = None  # type: CuckooContainerManager
         self.vm_xml = None
         self.vm_snapshot_xml = None
         self.vm_meta = None
@@ -556,6 +556,7 @@ class Cuckoo(ServiceBase):
                     self.log.debug("Generating cuckoo report tar.gz.")
 
                     # Submit cuckoo analysis report archive as a supplementary file
+                    # TODO: once https://github.com/cuckoosandbox/cuckoo/pull/2533 is accepted, change fmt to 'all_memory'
                     tar_report = self.cuckoo_query_report(self.cuckoo_task.id, fmt='all', params={'tar': 'gz'})
                     if tar_report is not None:
                         tar_report_path = os.path.join(self.working_directory, "cuckoo_report.tar.gz")
@@ -605,14 +606,32 @@ class Cuckoo(ServiceBase):
                 self.check_dropped(request, self.cuckoo_task.id)
                 self.check_pcap(self.cuckoo_task.id)
 
-                # Check process memory dumps
-                if dump_processes is True:
-                    self.download_memdump('procmemdump')
+                if full_memdump:
+                    # TODO: temporary hack until cuckoo upstream PR #2533 is merged ... or maybe not. for any
+                    # reasonably sized memdump (~1GB) the default max upload size for AL is too small, so
+                    # that would probably kill the report
+                    # Try to copy the memory dump out of the docker container
+                    memdump_hostpath = os.path.join(self.working_directory, "memory.dmp")
+                    self.cm._run_cmd("docker cp %(container_name)s:%(container_path)s %(host_path)s" %
+                                     {
+                                         "container_name": self.cm.name,
+                                         "container_path": "/home/sandbox/.cuckoo/storage/analyses/%d/memory.dmp" % self.cuckoo_task.id,
+                                         "host_path": memdump_hostpath
+                                     }, raise_on_error=False, log=self.log)
 
-                # We only retrieve full memory dumps for top-level files, and only if it was specified in
-                # extra options.
-                if full_memdump and pull_memdump:
-                    self.download_memdump('fullmemdump')
+                    # Check file size, make sure we can actually add it
+                    config = forge.get_config()
+                    max_extracted_size = config.get("submissions", {}).get("max", {}).get("size", 0)
+                    memdump_size = os.stat(memdump_hostpath).st_size
+                    if memdump_size < max_extracted_size:
+                        # Try to add as an extracted file
+                        request.add_extracted(memdump_hostpath, "Cuckoo VM Full Memory Dump")
+                    else:
+                        self.file_res.add_section(ResultSection(
+                            SCORE.NULL,
+                            title_text="Attempted to re-submit full memory dump, but it's too large",
+                            body="Memdump size: %d, current max AL size: %d" % (memdump_size, max_extracted_size)
+                        ))
 
                 if TEXT_FORMAT.contains_value("JSON") and request.deep_scan:
                     # Attach report as json as the last result section
@@ -1039,30 +1058,6 @@ class Cuckoo(ServiceBase):
             return str(machine.get('ip', ""))
         except Exception as e:
             self.log.error('Unable to retrieve machine information for %s: %s' % (machine_name, safe_str(e)))
-
-    def download_memdump(self, dump_type):
-        self.log.debug("Downloading memdumps")
-        resp = self.session.get(self.query_report_url % self.cuckoo_task.id + '/' + dump_type,
-                                params={'tar': 'gz'},
-                                stream=True)
-        if resp.status_code != 200:
-            if resp.status_code == 404:
-                self.log.warning("Task or report not found for task: %s" % self.cuckoo_task.id)
-                return None
-            else:
-                self.log.warning("Failed to query report %s. Status code: %d" % (self.cuckoo_task.id, resp.status_code))
-                self.log.debug(resp.text)
-                return None
-
-        memdump_path = os.path.join(self.working_directory, "%s.tar.gz" % dump_type)
-        try:
-            with open(memdump_path, 'wb') as fh:
-                for chunk in resp.iter_content(chunk_size=262144):
-                    if chunk:
-                        fh.write(chunk)
-            self.task.add_supplementary(memdump_path, "Cuckoo Sandbox %s." % dump_type)
-        except:
-            self.log.exception("Unable to add tar of memory dump for task %s" % self.cuckoo_task.id)
 
     def _update_tool_version(self):
         config = forge.get_config()
