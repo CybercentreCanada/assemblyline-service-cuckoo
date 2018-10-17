@@ -38,7 +38,6 @@ HELP = '''
 
 VM_IMAGES_PATH = '/var/lib/libvirt/images'
 CUCKOO_BASE = os.environ["CUCKOO_BASE"]
-CUCKOO_CONF_PATH = os.path.join(CUCKOO_BASE, 'conf/cuckoo.conf')
 KVM_CONF_PATH = os.path.join(CUCKOO_BASE, 'conf/kvm.conf')
 BASELINE_JSON_DIR = os.path.join(CUCKOO_BASE, 'storage/baseline/')
 LIBVIRTD_CONF_PATH = "/etc/libvirt/libvirtd.conf"
@@ -52,7 +51,6 @@ TEMPLATE_ENVIRONMENT = Environment(
     loader=FileSystemLoader(CFG_BASE),
     trim_blocks=False)
 TEMPLATE_CUSTOM_NAT_IFACES = 'custom_nat_ifaces.jinja2'
-CUCKOO_CONF_TEMPLATE = 'cuckoo.conf.jinja2'
 KVM_CONF_TEMPLATE = 'kvm.conf.jinja2'
 CUSTOM_NAT_IFACES_TEMPLATE = 'custom_nat_ifaces.jinja2'
 CUSTOM_INETSIMNS_IFACES_TEMPLATE = 'custom_inetsimns_ifaces.jinja2'
@@ -350,21 +348,6 @@ if __name__ == "__main__":
             run_cmd('chown -R sandbox:www-data %s' % CUCKOO_BASE)
 
     setup_network(eth0_ip, networks)
-
-    print "Creating cuckoo configuration in %s" % CUCKOO_CONF_PATH
-
-    new_conf = render_template(CUCKOO_CONF_TEMPLATE,
-                               context={
-                                   'machinery': 'kvm',
-                                   'resultserver': "0.0.0.0",
-                                   'route': 'none',
-                                   'internet': 'none',
-                                   'rt_table': '',
-                                 }
-                               )
-    # Write the conf files..
-    with open(CUCKOO_CONF_PATH, 'w') as fh:
-        fh.write(new_conf)
 
     print "Creating machinery configuration in %s" % KVM_CONF_PATH
 
