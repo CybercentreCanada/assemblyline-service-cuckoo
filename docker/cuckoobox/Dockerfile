@@ -122,7 +122,7 @@ RUN mkdir /home/sandbox/conf
 COPY conf/* /home/sandbox/conf/
 
 # Run cuckoo once to create basic directory structure
-RUN cuckoo init --conf /home/sandbox/conf/cuckoo_init.conf &&\
+RUN cuckoo --cwd /home/sandbox/.cuckoo init --conf /home/sandbox/conf/cuckoo_init.conf &&\
   mkdir /home/sandbox/supervisor
 
 USER root

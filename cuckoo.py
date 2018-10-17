@@ -607,7 +607,9 @@ class Cuckoo(ServiceBase):
                 self.check_pcap(self.cuckoo_task.id)
 
                 if full_memdump:
-                    # TODO: temporary hack until cuckoo upstream PR #2533 is merged
+                    # TODO: temporary hack until cuckoo upstream PR #2533 is merged ... or maybe not. for any
+                    # reasonably sized memdump (~1GB) the default max upload size for AL is too small, so
+                    # that would probably kill the report
                     # Try to copy the memory dump out of the docker container
                     memdump_hostpath = os.path.join(self.working_directory, "memory.dmp")
                     self.cm._run_cmd("docker cp %(container_name)s:%(container_path)s %(host_path)s" %
@@ -617,8 +619,19 @@ class Cuckoo(ServiceBase):
                                          "host_path": memdump_hostpath
                                      }, raise_on_error=False, log=self.log)
 
-                    # Try to add as an extracted file
-                    request.add_extracted(memdump_hostpath, "Cuckoo VM Full Memory Dump")
+                    # Check file size, make sure we can actually add it
+                    config = forge.get_config()
+                    max_extracted_size = config.get("submissions", {}).get("max", {}).get("size", 0)
+                    memdump_size = os.stat(memdump_hostpath).st_size
+                    if memdump_size < max_extracted_size:
+                        # Try to add as an extracted file
+                        request.add_extracted(memdump_hostpath, "Cuckoo VM Full Memory Dump")
+                    else:
+                        self.file_res.add_section(ResultSection(
+                            SCORE.NULL,
+                            title_text="Attempted to re-submit full memory dump, but it's too large",
+                            body="Memdump size: %d, current max AL size: %d" % (memdump_size, max_extracted_size)
+                        ))
 
                 if TEXT_FORMAT.contains_value("JSON") and request.deep_scan:
                     # Attach report as json as the last result section
