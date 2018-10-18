@@ -552,6 +552,10 @@ class Cuckoo(ServiceBase):
                 if self.check_stop():
                     raise RecoverableError("Cuckoo stopped during result processing..")
 
+                # Get the max size for extract files, used a few times after this
+                config = forge.get_config()
+                max_extracted_size = config.get("submissions", {}).get("max", {}).get("size", 0)
+
                 if generate_report is True:
                     self.log.debug("Generating cuckoo report tar.gz.")
 
@@ -583,18 +587,52 @@ class Cuckoo(ServiceBase):
                             self.log.exception(
                                 "Unable to add report.json for task %s. Exception: %s" % (self.cuckoo_task.id, traceback.format_exc()))
 
-                        # Check for any supplementary files
+                        # Check for any extra files in full report to add as extracted files
+                        # special 'supplementary' directory
+                        # memory artifacts
                         try:
+                            # 'supplementary' files
                             tar_obj = tarfile.open(tar_report_path)
                             for f in [x.name for x in tar_obj.getmembers() if x.name.startswith("supplementary") and x.isfile()]:
                                 sup_file_path = os.path.join(self.working_directory, f)
                                 tar_obj.extract(f, path=self.working_directory)
                                 self.task.add_supplementary(sup_file_path, "Supplementary File",
                                                             display_name=f)
+
+                            # process memory dump related
+                            memdesc_lookup = {
+                                "py": "IDA script to load process memory",
+                                "dmp": "Process Memory Dump",
+                                "exe_": "EXE Extracted from Memory Dump"
+                            }
+                            for f in [x.name for x in tar_obj.getmembers() if
+                                      x.name.startswith("memory") and x.isfile()]:
+                                mem_file_path = os.path.join(self.working_directory, f)
+                                tar_obj.extract(f, path=self.working_directory)
+                                # Lookup a more descriptive name, depending the filename suffix
+                                filename_suffix = f.split(".")[-1]
+                                memdesc = memdesc_lookup.get(filename_suffix, "Process Memory Artifact")
+                                if filename_suffix == "py":
+                                    self.task.add_supplementary(mem_file_path, memdesc,
+                                                            display_name=f)
+                                else:
+                                    mem_filesize = os.stat(mem_file_path).st_size
+                                    if mem_filesize > max_extracted_size:
+                                        self.file_res.add_section(ResultSection(
+                                            SCORE.NULL,
+                                            title_text="Extracted file too large to add",
+                                            body="Extracted file %s is %d bytes, which is larger than the maximum size "
+                                            "allowed for extracted files (%d). You can still access this file "
+                                            "by downloading the 'cuckoo_report.tar.gz' supplementary file" %
+                                                 (f, mem_filesize, max_extracted_size)
+                                        ))
+                                    self.task.add_extracted(mem_file_path, memdesc,
+                                                            display_name=f)
                             tar_obj.close()
                         except:
                             self.log.exception(
-                                "Unable to supplementary file(s) for task %s. Exception: %s" % (self.cuckoo_task.id, traceback.format_exc()))
+                                "Unable to extra file(s) for task %s. Exception: %s" % (self.cuckoo_task.id, traceback.format_exc()))
+
 
                 # Run extra result parsers
                 for rp in self.result_parsers:
@@ -620,8 +658,6 @@ class Cuckoo(ServiceBase):
                                      }, raise_on_error=False, log=self.log)
 
                     # Check file size, make sure we can actually add it
-                    config = forge.get_config()
-                    max_extracted_size = config.get("submissions", {}).get("max", {}).get("size", 0)
                     memdump_size = os.stat(memdump_hostpath).st_size
                     if memdump_size < max_extracted_size:
                         # Try to add as an extracted file
