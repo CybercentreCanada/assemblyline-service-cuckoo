@@ -12,6 +12,8 @@ import shutil
 import hashlib
 import json
 import traceback
+import filecmp
+import datetime
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -266,6 +268,9 @@ class Cuckoo(ServiceBase):
 
         # track the last time docker was restarted
         self._last_docker_restart = 0
+
+        # Keep track of the mtime on the community files
+        self._community_mtimes = {}
 
     def __del__(self):
         if self.cm is not None:
@@ -1136,6 +1141,19 @@ class Cuckoo(ServiceBase):
 
         self.log.info("update function complete")
 
+    def _get_community_mtimes(self):
+        mtimes = {}
+        if "community_updates" in self.cfg:
+            config = forge.get_config()
+            local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
+
+            for url in self.cfg["community_updates"]:
+                bn = "%s-%s" % (hashlib.md5(url).hexdigest(), os.path.basename(url))
+                local_path = os.path.join(local_community_root, bn)
+                mtimes[bn] = datetime.datetime.fromtimestamp(os.stat(local_path).st_mtime)
+
+        return mtimes
+
     def _cuckoo_community_updates(self):
         """
         Do "community" updates. This also allows you to configure extra cuckoo specific features
@@ -1146,23 +1164,40 @@ class Cuckoo(ServiceBase):
         config = forge.get_config()
         local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
 
-        # Check to see if dir exists - if it does, delete it and re-create it
-        if os.path.exists(local_community_root):
-            shutil.rmtree(local_community_root)
-
         os.makedirs(local_community_root)
 
         current_tool_version = self.get_tool_version()
 
         if "community_updates" in self.cfg:
+
+            # keep a list of basenames that should exist - then remove any extraneous stuff after
+            community_repo_basenames = []
             for url in self.cfg["community_updates"]:
                 # prepend a hash of the url to deal with conflicting basenames
                 bn = "%s-%s" % (hashlib.md5(url).hexdigest(), os.path.basename(url))
+                community_repo_basenames.append(bn)
 
+                local_temp_path = os.path.join(self.working_directory, bn)
                 local_path = os.path.join(local_community_root, bn)
 
-                self.log.info("Downloading %s to %s" % (url, local_path))
-                urllib.urlretrieve(url, filename=local_path)
+                self.log.info("Downloading %s to %s" % (url, local_temp_path))
+                urllib.urlretrieve(url, filename=local_temp_path)
+
+                if os.path.exists(local_path):
+                    # Compare this file against the existing file
+                    if not filecmp.cmp(local_temp_path, local_path):
+                        shutil.move(local_temp_path, local_path)
+                    else:
+                        # Cleanup
+                        os.unlink(local_temp_path)
+
+            # Check for any extraneous files that shouldn't be here
+            for f in os.listdir(local_community_root):
+                if f not in community_repo_basenames:
+                    extra_path = os.path.join(local_community_root, f)
+                    self.log.info("During community update, found extra file %s, removing it" %
+                                  extra_path)
+                    os.unlink(extra_path)
 
             # Update the tool version
             self._update_tool_version()
