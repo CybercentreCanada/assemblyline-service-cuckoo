@@ -1136,10 +1136,8 @@ class Cuckoo(ServiceBase):
         ###
         self.vmm.download_data()
 
-
-
-
         self.log.info("update function complete")
+
 
     def _get_community_mtimes(self):
         mtimes = {}
@@ -1209,3 +1207,4 @@ class Cuckoo(ServiceBase):
             if self.cm is not None and current_tool_version != self.get_tool_version():
                 self.log.info("New version of community repo detected, restarting container")
                 self.trigger_cuckoo_reset()
+
