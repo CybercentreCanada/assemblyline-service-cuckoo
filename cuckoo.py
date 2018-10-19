@@ -78,7 +78,9 @@ SUPPORTED_EXTENSIONS = [
     "eml",
     "js",
     "wsf",
-    "elf"
+    "elf",
+    "bin",
+    "hta"
 ]
 
 
@@ -466,13 +468,14 @@ class Cuckoo(ServiceBase):
                 file_ext = '.' + submitted_ext
         else:
             # This is unknown without an extension that we accept/recognize.. no scan!
-            self.log.debug("Cuckoo is exiting because the file type could not be identified. %s %s" %
+            self.log.info("Cuckoo is exiting because the file type could not be identified. %s %s" %
                            (tag_extension, self.task.tag))
             return
 
         # Rename based on the found extension.
         if file_ext and self.task.sha256:
-            self.file_name = self.task.sha256 + file_ext
+            # self.file_name = self.task.sha256 + file_ext
+            self.file_name = original_ext[0] + file_ext
 
         # Parse user-specified options
         kwargs = dict()
