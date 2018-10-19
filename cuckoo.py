@@ -43,7 +43,7 @@ GUEST_VM_START_TIMEOUT = 20
 CUCKOO_MAX_TIMEOUT = 600
 
 # Max amount of time (seconds) between restarting the docker container
-CUCKOOBOX_MAX_LIFETIME = 3600
+CUCKOOBOX_MAX_LIFETIME = 86400
 
 SUPPORTED_EXTENSIONS = [
     "cpl",
@@ -263,9 +263,6 @@ class Cuckoo(ServiceBase):
         self.restart_interval = 0
         self.result_parsers = []
 
-        # Use a hash of the community file(s) as the tool version
-        self._tool_version = None
-
         # track the last time docker was restarted
         self._last_docker_restart = 0
 
@@ -280,7 +277,26 @@ class Cuckoo(ServiceBase):
                 pass
 
     def sysprep(self):
-        self.log.info("Running sysprep...")
+        """
+        This function checks for VM config and disk updates, and then checks for 'cuckoo community' updates
+        if they're configured
+        :return:
+        """
+        logger = self.log.getChild("sysprep")
+        logger.info("Running sysprep...")
+
+        logger.info("Importing dependencies...")
+        self.import_service_deps()
+
+        logger.info("Init VMM object and checking for VM updates...")
+        self.vmm = CuckooVmManager(self.cfg)
+        self.vmm.download_data()
+
+        logger.info("Checking for community updates")
+        self._cuckoo_community_updates()
+        self._community_mtimes = self._get_community_mtimes()
+
+        logger.info("Done")
 
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
@@ -300,19 +316,17 @@ class Cuckoo(ServiceBase):
 
     def start(self):
 
-        # This needs to be set b/c the updater may use it right away
-        self.session = requests.Session()
-
-        # Make sure this gets called
-        self._update_tool_version()
+        # Set the community mtime dict. sysprep should have already made sure we're up to date
+        self._community_mtimes = self._get_community_mtimes()
 
         self.vmm = CuckooVmManager(self.cfg)
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
 
         # only call this *after* .vmm and is initialized
-        self._register_update_callback(self.cuckoo_update, execute_now=True,
-                                       blocking=True,
+        # we don't need to 'execute_now', sysprep should have taken care of making sure everything's up to date
+        self._register_update_callback(self.cuckoo_update, execute_now=False,
+                                       blocking=False,
                                        utype=UpdaterType.BOX,
                                        freq=UpdaterFrequency.HOUR)
 
@@ -378,7 +392,7 @@ class Cuckoo(ServiceBase):
         return pick
 
     def trigger_cuckoo_reset(self, retry_cnt=30):
-        self.log.info("Forcing docker container reboot due to Cuckoo failure.")
+        self.log.info("Restarting cuckoobox container")
         try:
             self.cm.stop()
         except DockerException:
@@ -393,16 +407,31 @@ class Cuckoo(ServiceBase):
     # noinspection PyTypeChecker
     def execute(self, request):
         if request.task.depth > 3:
-            self.log.debug("Cuckoo is exiting because it currently does not execute on great great grand children.")
+            self.log.warning("Cuckoo is exiting because it currently does not execute on great great grand children.")
             request.set_save_result(False)
             return
 
+        # Set this here, b/c trigger_cuckoo_reset->set_urls uses the session object
+        self.session = requests.Session()
+
         if (time.time() - self._last_docker_restart) > CUCKOOBOX_MAX_LIFETIME:
-            self.log.info("Triggering a container restart")
+            self.log.info("Triggering a container restart due to reaching CUCKOOBOX_MAX_LIFETIME (%d)" % CUCKOOBOX_MAX_LIFETIME)
             self.trigger_cuckoo_reset()
-        # self.session = requests.Session()
+
+        # Check to see if the community repos have been updated
+        if self._get_community_mtimes() != self._community_mtimes:
+            # The updater must have run, trigger a restart
+            self.log.info("Changes to cuckoo community repos found, triggering container restart")
+            self.trigger_cuckoo_reset()
+            self._community_mtimes = self._get_community_mtimes()
+
         self.task = request.task
         request.result = Result()
+        request.set_service_context("Cuckoo Image:%(container_name)s; Community Repos:%(repos)s" %
+                                    {
+                                        "container_name": self.cfg.get("cuckoo_image"),
+                                        "repos": ",".join(["%s_%s" % (k,v.date().isoformat()) for k, v in self._community_mtimes.iteritems()])
+                                    })
         self.file_res = request.result
         file_content = request.get()
         self.cuckoo_task = None
@@ -505,6 +534,7 @@ class Cuckoo(ServiceBase):
                                       **kwargs)
 
         if self.restart_interval <= 0 or not self.is_cuckoo_ready():
+            self.log.info("Restart interval reached or cuckoobox still not ready, triggering restart")
             cuckoo_up = self.trigger_cuckoo_reset()
             if not cuckoo_up:
                 self.session.close()
@@ -544,10 +574,12 @@ class Cuckoo(ServiceBase):
                         raise CuckooProcessingException("Cuckoo was unable to process this file. %s",
                                                         err_str)
                 except RecoverableError:
+                    self.log.info("Recoverable error, triggering cuckoobox container restart")
                     self.trigger_cuckoo_reset(5)
                     raise
                 except Exception as e:
                     # This is non-recoverable unless we were stopped during processing
+                    self.log.info("Non-recoverable error, triggering cuckoobox container restart")
                     self.trigger_cuckoo_reset(1)
                     if self.should_run:
                         self.log.exception("Error generating AL report: ")
@@ -688,6 +720,7 @@ class Cuckoo(ServiceBase):
             else:
                 # We didn't get a report back.. cuckoo has failed us
                 if self.should_run:
+                    self.log.info("No report received, triggering cuckoobox restart")
                     self.trigger_cuckoo_reset(5)
                     self.log.info("Raising recoverable error for running job.")
                     raise RecoverableError("Unable to retrieve cuckoo report. The following errors were detected: %s" %
@@ -1100,44 +1133,20 @@ class Cuckoo(ServiceBase):
         except Exception as e:
             self.log.error('Unable to retrieve machine information for %s: %s' % (machine_name, safe_str(e)))
 
-    def _update_tool_version(self):
-        config = forge.get_config()
-        local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
-
-        version_hash = hashlib.new("sha256")
-
-        if os.path.exists(local_community_root):
-            community_files = os.listdir(local_community_root)
-
-            for f in community_files:
-                # TODO: could just do an os.stat and hash the mtime rather than reading the whole file? ~100us vs ~75ms
-                with open(os.path.join(local_community_root, f), 'rb') as gethash:
-                    version_hash.update(gethash.read())
-
-        self._tool_version = version_hash.hexdigest()
-
     def get_tool_version(self):
-        return self._tool_version
+        return hashlib.sha256(str(self._community_mtimes)).hexdigest()
 
     def cuckoo_update(self, **_):
         """
-        There are two parts to this update function:
-        1. Confirm that XML and qcow2 files for VMs are up to date and in sync (ie/ that the snapshot defined in the
-        xml file exists in the local qcow2 file) - this is taken care of CuckooVmManager.download_data()
-        2. Pull in community updates. startup.sh inside the cuckoobox docker container then applies them to the
-        instance running inside docker.
+        The updater only checks for new versions of community repos
         :return:
         """
 
-        config = forge.get_config()
+        # check for updates
+        self._cuckoo_community_updates()
 
-        ###
-        # Do XML/disk updates
-        ###
-        self.vmm.download_data()
-
-        self.log.info("update function complete")
-
+        # update the mtime dict
+        self._community_mtimes = self._get_community_mtimes()
 
     def _get_community_mtimes(self):
         mtimes = {}
@@ -1159,12 +1168,12 @@ class Cuckoo(ServiceBase):
         :return:
         """
 
+        logger = self.log.getChild("_cuckoo_community_updates")
         config = forge.get_config()
         local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
 
-        os.makedirs(local_community_root)
-
-        current_tool_version = self.get_tool_version()
+        if not os.path.exists(local_community_root):
+            os.makedirs(local_community_root)
 
         if "community_updates" in self.cfg:
 
@@ -1178,33 +1187,27 @@ class Cuckoo(ServiceBase):
                 local_temp_path = os.path.join(self.working_directory, bn)
                 local_path = os.path.join(local_community_root, bn)
 
-                self.log.info("Downloading %s to %s" % (url, local_temp_path))
+                logger.info("Downloading %s to %s" % (url, local_temp_path))
                 urllib.urlretrieve(url, filename=local_temp_path)
 
                 if os.path.exists(local_path):
                     # Compare this file against the existing file
                     if not filecmp.cmp(local_temp_path, local_path):
+                        logger.info("Local copy exists, but downloaded version is different. Replacing.")
                         shutil.move(local_temp_path, local_path)
                     else:
                         # Cleanup
+                        logger.info("Local copy exists and matches download")
                         os.unlink(local_temp_path)
+                else:
+                    logger.info("No local copy exists")
+                    shutil.move(local_temp_path, local_path)
 
             # Check for any extraneous files that shouldn't be here
             for f in os.listdir(local_community_root):
                 if f not in community_repo_basenames:
                     extra_path = os.path.join(local_community_root, f)
-                    self.log.info("During community update, found extra file %s, removing it" %
+                    logger.info("Found extra file %s, removing it" %
                                   extra_path)
                     os.unlink(extra_path)
-
-            # Update the tool version
-            self._update_tool_version()
-
-            # Trigger a container restart to bring in new updates
-            # TODO: need a better way to do this. maybe make the updater per process and just
-            # check the last update time on the community file?
-            # Or check it in execute?
-            if self.cm is not None and current_tool_version != self.get_tool_version():
-                self.log.info("New version of community repo detected, restarting container")
-                self.trigger_cuckoo_reset()
 
