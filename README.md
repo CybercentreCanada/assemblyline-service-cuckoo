@@ -22,6 +22,24 @@ A patch to [INetSim](https://www.inetsim.org/) is distributed and applied within
 random IPs for DNS requests. By default it will create IPs in the range 10.0.0.0-10.255.255.255. This feature can be disabled by editing
 `docker/cuckoobox/conf/inetsim.conf.template` before building the docker container as outlined below.
 
+### SERVICE OPTIONS
+
+* **community_updates** - See EXTENDING section below for details
+* **result_parsers** - See EXTENDING section below for details
+* **cuckoo_image** - The name of the cuckoobox docker container to use
+* **vm_meta** - The name of the configuration file describing the VM(s) located at ``REMOTE_DISK_ROOT``
+* **ramdisk_size** - (default 2048M) This is the size of the ramdisk that Cuckoo will use to store VM snapshots and the running virtual machine image. If it's not large enough analysis will fail, see the Troubleshooting section for more information.
+* **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.
+
+The following options are available, but shouldn't need to be changed from the defaults:
+
+* **LOCAL_DISK_ROOT** - Local path to disk images on worker, appended to ``workers.virtualmachines.disk_root`` from your seed.
+* **LOCAL_VM_META_ROOT** - Local path to XML files describing
+* **REMOTE_DISK_ROOT** - Path to disk images and XML files for cuckoo virtual machines on your support server.
+* **dedup_similar_percent** - (default 80) If a file is X% similar (as measured using ssdeep) it's not reported/extracted by AssemblyLine.
+
+**NB**: In order for any changes to virtual machines (new VM, changed ``vm_meta`` file, etc) to be picked up, hostagent will need to be restarted.
+
 ### SUBMISSION OPTIONS
 
 The following options are available for submissions to the Cuckoo service (accessible via the hidden pane on the left of the screen on the "Submit" page):
@@ -42,17 +60,6 @@ The following options are available for submissions to the Cuckoo service (acces
 Prior to provisioning a Cuckoo service, please read and understand this document. Failure to do so may result in a 
 large volume of error messages in your hostagent log file. 
 
-### CONFIGURATIONS
-
-The Cuckoo service provides a number of sane default configurations. However, if the administrator plans on running
-multiple virtual machines simultaneously the ram usage options should be increased as needed. The submission parameter 
-`routing` affects whether submissions can talk to the internet or not. 
-
-| Name | Default | Description |
-|:---:|:---:|---|
-|ramdisk_size|2048M|This is the size of the ramdisk that Cuckoo will use to store VM snapshots and the running virtual machine image. If it's not large enough analysis will fail, see the Troubleshooting section for more information.|
-|ram_limit|3072m|This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.|
-|routing| inetsim, gateway |This submission parameter indicates which routing options users can use. Inetsim is an internet simulator, and gateway routes traffic onto the internet. If either of these are disabled they will no longer be usable by users.|
 
 ### DOCKER COMPONENTS
 
