@@ -23,6 +23,8 @@ import subprocess
 import uuid
 import pyroute2
 import requests
+import datetime
+import json
 
 try:
     import vmcloak
@@ -35,7 +37,8 @@ CUCKOO_AGENT_PORT = 8000
 
 
 def main():
-    parser = argparse.ArgumentParser(usage="VM export. Get a KVM VM ready for use in AssemblyLine Cuckoo.")
+    parser = argparse.ArgumentParser(usage="VM export. Get a KVM VM ready for use in AssemblyLine Cuckoo.",
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('--in_domain', action='store', help="Existing libvirt domain to prepare",
                         required=True)
@@ -52,16 +55,25 @@ def main():
     parser.add_argument('--force', action='store_true', default=False,
                         help="Force creation of the snapshot domain. "
                              "(If one already exists with the same name, it will be deleted)")
+    parser.add_argument('--only_create', action='store_true', default=False,
+                        help="Just create snapshot_domain and exit. This allows you the option to boot it and make "
+                             "any configuration changes, then use --no_create (and optionally --no_boot if"
+                             "it's running) to create the running snapshot and dump configuration ")
     parser.add_argument('--no_create', action='store_true', default=False,
                         help="Do not attempt to create the snapshot domain, just export all relevant files. "
                              "This option is useful if you've made additional modifications to an existing snapshot "
                              "or manually created a snapshot. *NB*: It's important that the snapshot disk be smaller than "
                              "the configured ramdisk_size option for the Cuckoo AssemblyLine service")
+    parser.add_argument('--no_boot', action='store_true', default=False,
+                        help="Don't boot snapshot_domain VM. Use this if you already have it running and just want to "
+                             "dump a snapshot of its current state")
     parser.add_argument('--tags', action='store', help="Comma-separated list of tags describing the vm",
                         required=True)
     parser.add_argument('--disk_base', action='store',
                         help="Base folder where qcow2 disk images will be stored. "
                              "If none is provide, the name of the input domain is used.")
+    parser.add_argument('--output', action='store', default="al_cuckoo_vms",
+                        help="Root output directory")
     parser.add_argument('--vm_timeout', action='store', type=int, default=60,
                         help="Max timeout to wait for VM to come up.")
     parser.add_argument('--guest_profile', action='store', help="Volatility guest profile, i.e. Win7SP1x86",
@@ -91,6 +103,17 @@ def main():
     #                       help="DNS server this IP should try to use")
     ip_group.add_argument('--resultserver_ip', action='store', type=ipaddress.ip_address,
                         help="(optional) manually pick the resultserver IP to use")
+
+    # Advanced options
+    advanced_group = parser.add_argument_group("Advanced Options", "These options are available, but "
+                                               "shouldn't be changed unless you are confident you know "
+                                               "what you're doing")
+    advanced_group.add_argument('--max_running_snapshots', type=int, default=1,
+                                help="The max amount of running snapshots allowed in 'snapshot_domain'. "
+                                     "The snapshot_domain child disk is copied into each instance of docker "
+                                     "so must be kept smaller than 'ramdisk_size'. It's not possible to shrink "
+                                     "a qcow2 disk containing a running snapshot, so just avoid having more than "
+                                     "one running snapshot.")
 
     args = parser.parse_args()
 
@@ -158,13 +181,21 @@ def main():
     if not args.disk_base:
         args.disk_base = args.in_domain
 
-
     ex = ExportVm(args)
+
+    if args.only_create:
+        ex.create_snapshot_domain()
+        logger.info("snapshot_domain '%s' created. Boot and make any necessary modifications" % args.snapshot_domain)
+        return
 
     if not args.no_create:
         ex.create_snapshot_domain()
 
-    ex.boot_snapshot()
+    if not args.no_boot:
+        ex.boot_snapshot()
+
+    # finally, take the snapshot and dump config
+    ex.snap_and_dump()
 
 
 
@@ -212,31 +243,31 @@ class ExportVm:
 
     def get_domain_xml(self):
         """
-        Get the XML for the input domain, purge the existing domain if we have to
+        Get the XML for the input domain
 
         :return:
         """
         in_domain = self.args.in_domain
-        snapshot_domain = self.args.snapshot_domain
 
         dom = self.lv.lookupByName(in_domain)
         # Make sure the domain we're going to snapshot exists
         if not dom:
             raise ExportVmException("Domain %s was not found." % in_domain)
 
-        # Make sure the domain we're creating doesn't exist, or delete it if force=True
-        if snapshot_domain in self.lv.listDefinedDomains():
-            if self.args.force is True:
-                self._purge_domain(snapshot_domain)
-            else:
-                raise ExportVmException("The specified snapshot domain name already exists: %s. If you want to "
-                                        "destroy this domain, the corresponding snapshots and the disk image, "
-                                        "re-run this script with the --force flag" % snapshot_domain)
-        else:
-            self.log.debug("Snapshot %s not in domain list %s" % (snapshot_domain, self.lv.listDefinedDomains()))
         return dom
 
     def create_snapshot_domain(self):
+
+        # Make sure the domain we're creating doesn't exist, or delete it if force=True
+        if self.args.snapshot_domain in self.lv.listDefinedDomains():
+            if self.args.force is True:
+                self._purge_domain(self.args.snapshot_domain)
+            else:
+                raise ExportVmException("The specified snapshot domain name already exists: %s. If you want to "
+                                        "destroy this domain, the corresponding snapshots and the disk image, "
+                                        "re-run this script with the --force flag" % self.args.snapshot_domain)
+        else:
+            self.log.debug("Snapshot %s not in domain list %s" % (self.args.snapshot_domain, self.lv.listDefinedDomains()))
 
         self.log.info("Creating snapshot domain %(snapshot_domain)s based on %(in_domain)s. "
                       "*DO NOT* boot/modify %(in_domain)s" % vars(self.args))
@@ -284,13 +315,27 @@ class ExportVm:
         if not snapshot_domain:
             raise ExportVmException("Domain %s was not found when trying to boot it" % self.args.snapshot_domain)
 
-        # Make sure we have an IP assigned to the interface this VM is connected to so that we can actually talk
-        # to the VM
+        self.network_config()
+
+        self.log.info("Booting snapshot domain: %s (%d second timeout)", self.args.snapshot_domain, self.args.vm_timeout)
+        snapshot_domain.create()
+
+        agent_working = self.check_agent_connectivity()
+
+    def network_config(self):
+        """
+        Make sure we have an IP assigned to the interface the snapshot VM is connected to so that we can actually talk
+        to the VM
+        :return:
+        """
+
+        snapshot_domain = self.lv.lookupByName(self.args.snapshot_domain)
+
+        if not snapshot_domain:
+            raise ExportVmException("Domain %s was not found when trying to boot it" % self.args.snapshot_domain)
         snapshot_xml = lxml.etree.fromstring(snapshot_domain.XMLDesc())
         if not self.args.net_device:
             net_device = snapshot_xml.find("./devices/interface/source")
-
-            print lxml.etree.tostring(net_device)
 
             if net_device is not None:
                 network = net_device.attrib.get("network")
@@ -322,8 +367,12 @@ class ExportVm:
                     iface.add_ip("%s/%s" % (self.args.resultserver_ip, self.args.vm_ip.netmask))
                     self.added_ip = True
 
-        self.log.info("Booting snapshot domain: %s (%d second timeout)", self.args.snapshot_domain, self.args.vm_timeout)
-        snapshot_domain.create()
+    def check_agent_connectivity(self):
+        """
+        From the VM host, make sure we can actually talk to the cuckoo agent
+
+        :return:
+        """
         waited = 0
         max_wait = self.args.vm_timeout
 
@@ -331,20 +380,113 @@ class ExportVm:
             try:
                 r = requests.get("http://%s:%s/status" % (self.args.vm_ip.ip, CUCKOO_AGENT_PORT))
             except Exception as e:
-                self.log.info("No response from cuckoo agent: %s" % e.msg)
+                self.log.info("... waiting for VM to boot / response from cuckoo agent")
+                self.log.debug("requests exception: %s" % e.message)
                 time.sleep(5)
                 waited += 5
                 continue
 
-            self.log.info("Got response!")
-            print r.content
-            break
-        # while snapshot_domain.state()[0] != libvirt.VIR_DOMAIN_SHUTOFF:
-        #     time.sleep(2)
-        #     waited += 2
-        #     if waited >= max_wait:
-        #         raise self.VMPrepException("Domain %s did not shut down within timeout. "
-        #                                    "Bootstrapping failed." % self.args.snapshot_name)
+            self.log.debug("Got response: %s" % r.content)
+            if r.status_code == 200:
+                self.log.info("Cuckoo agent appears to be running")
+                return True
+            else:
+                self.log.error("Error returned from agent (%s), exiting" % r.content)
+                return False
+
+        self.log.error("Timed out trying to connect to agent")
+        return False
+
+    def snap_and_dump(self):
+        """
+        Take a running snapshot, dump XML and JSON configuration files and copy all qcow2 disk files.
+
+        :return:
+        """
+
+        snapshot_domain = self.lv.lookupByName(self.args.snapshot_domain)
+
+        if not snapshot_domain:
+            raise ExportVmException("Domain %s was not found when trying to boot it" % self.args.snapshot_domain)
+
+        # We can only have *one* running snapshot defined, otherwise we will probably run into disk space issues
+        # inside the docker container. However, if you're sure you know what you're doing,
+        # this is configurable with the --max_running_snapshots argument
+        running_snaps = snapshot_domain.listAllSnapshots(flags=libvirt.VIR_DOMAIN_SNAPSHOT_LIST_ACTIVE)
+        if len(running_snaps) >= self.args.max_running_snapshots:
+            self.log.warning(
+                "Found %d running snapshots: %s. They will be deleted in 10s unless you press Ctrl-C to "
+                "exit this script" % (len(running_snaps), ",".join([x.getName() for x in running_snaps])))
+            time.sleep(10)
+            for snap in running_snaps:
+                self.log.warning("Deleting snapshot %s" % snap.getName())
+                snap.delete()
+
+        agent_connection = self.check_agent_connectivity()
+        if not agent_connection:
+            raise ExportVmException("Can't connect to cuckoo agent, is the VM booted and running the cuckoo agent "
+                                    "on port %d? Double check IP settings?" % CUCKOO_AGENT_PORT)
+
+        # python code for this taken from
+        # https://stackoverflow.com/questions/48232561/how-to-create-snapshot-with-libvirt-api-in-python
+        SNAPSHOT_XML_TEMPLATE = """<domainsnapshot>
+          <name>{snapshot_name}</name>
+        </domainsnapshot>"""
+
+        running_snapshot = snapshot_domain.snapshotCreateXML(
+            SNAPSHOT_XML_TEMPLATE.format(snapshot_name=datetime.datetime.now().isoformat()),
+            libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_ATOMIC
+        )
+
+        # We don't need the VM to be running anymore. We need to shut it down so we can get qemu info out of it
+        snapshot_domain.destroy()
+
+        # Collect configuration information to output
+        running_snapshot_xml = running_snapshot.getXMLDesc()
+        snapshot_xml = snapshot_domain.XMLDesc()
+        snapshot_root = lxml.etree.fromstring(snapshot_xml)
+        snapshot_disk_path = snapshot_root.find("./devices/disk/source").attrib["file"]
+        snapshot_context = {
+            "name":     self.args.snapshot_domain,
+            "base":     self.args.disk_base,
+            # We still need to provide the disk so that we can easily fetch all the disks
+            "disk":     os.path.basename(snapshot_disk_path),
+            "xml":      self.args.snapshot_domain + ".xml",
+            "snapshot_xml": self.args.snapshot_domain + "_snapshot.xml",
+            "ip":       self.args.vm_ip.ip.compressed,
+            "netmask":  self.args.vm_ip.netmask.compressed,
+            "network":  self.args.vm_ip.network.network_address.compressed,
+            "gateway":  self.args.gw_ip,
+            "tags":     self.args.tags,
+            "platform": self.args.platform,
+            "guest_profile": self.args.guest_profile,
+            "route":    self.args.route
+        }
+        snapshot_context_json = json.dumps(snapshot_context, indent=4)
+
+        config_output_dir = os.path.join(self.args.output, self.args.snapshot_domain)
+        disk_output_dir = os.path.join(self.args.output, self.args.disk_base)
+
+        # Make sure the directories exist
+        for dirname in [config_output_dir, disk_output_dir]:
+            if not os.path.exists(dirname):
+                os.makedirs(dirname)
+            else:
+                if not os.path.isdir(dirname):
+                    raise ExportVmException("Path %s exists and is not a directory" % dirname)
+
+        for filepath, filecontent in [
+            (os.path.join(config_output_dir, self.args.snapshot_domain + ".xml"), snapshot_xml),
+            (os.path.join(config_output_dir, self.args.snapshot_domain + "_snapshot.xml"), running_snapshot_xml),
+            (os.path.join(config_output_dir, self.args.snapshot_domain + "_meta.json"), snapshot_context_json)]:
+
+            self.log.debug("Writing config file %s" % filepath)
+            with open(filepath, "w") as fh:
+                fh.write(filecontent)
+
+        # TODO: copy all disk images as well
+        # This needs to the VM to be shutdown
+        # get full backing chain with qemu-img info --output json --backing-chain /var/lib/libvirt/images/inetsim_win10.qcow2
 
     def _purge_domain(self, domain):
         self.log.info("Purging snapshot, domain definition and disk images for %s", domain)
@@ -384,6 +526,8 @@ class ExportVm:
                         iface.del_ip("%s/%s" % self.args.resultserver_ip, self.args.vm_ip.netmask)
             except:
                 self.log.error("Problem removing IP from interface. Traceback: %s" % traceback.format_exc())
+
+        self.lv.close()
 
 if __name__ == "__main__":
     main()
