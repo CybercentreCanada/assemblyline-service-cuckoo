@@ -27,7 +27,6 @@ random IPs for DNS requests. By default it will create IPs in the range 10.0.0.0
 * **community_updates** - See EXTENDING section below for details
 * **result_parsers** - See EXTENDING section below for details
 * **cuckoo_image** - The name of the cuckoobox docker container to use
-* **vm_meta** - The name of the configuration file describing the VM(s) located at ``REMOTE_DISK_ROOT``
 * **ramdisk_size** - (default 2048M) This is the size of the ramdisk that Cuckoo will use to store VM snapshots and the running virtual machine image. If it's not large enough analysis will fail, see the Troubleshooting section for more information.
 * **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.
 
@@ -44,6 +43,7 @@ The following options are available, but shouldn't need to be changed from the d
 
 The following options are available for submissions to the Cuckoo service (accessible via the hidden pane on the left of the screen on the "Submit" page):
 
+* **analysis_vm** - The name of the virtual machine to use for this submission. The list of options must contain the VM names you want to make available, where 'auto' is a special value.
 * **analysis_timeout** - Maximum amount of time to wait for analysis to complete. NB: The analysis job may complete faster
 * **generate_report** - Generate a full report (cuckoo_report.tar.gz) and attach it as a supplementary file
 * **dump_processes** - Dump process memory. These would be available in the cuckoo_report.tar.gz supplementary file

@@ -160,7 +160,7 @@ class Cuckoo(ServiceBase):
 
     SERVICE_DEFAULT_CONFIG = {
         "cuckoo_image": "cuckoo/cuckoobox:latest",
-        "vm_meta": "cuckoo.config",
+        #"vm_meta": "cuckoo.config",
         "REMOTE_DISK_ROOT": "vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
@@ -173,6 +173,13 @@ class Cuckoo(ServiceBase):
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
+        {
+            "name": "analysis_vm",
+            "default": "auto",
+            "list": ["auto"],
+            "type": "list",
+            "value": "auto"
+        },
         {
             "default": CUCKOO_TIMEOUT,
             "name": "analysis_timeout",
