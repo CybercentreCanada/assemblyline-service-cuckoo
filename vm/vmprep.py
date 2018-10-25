@@ -1,10 +1,17 @@
 #!/usr/bin/python
 
-"""
-export-vm.py
+_USAGE = """
 
 This script is used to get an existing KVM VM ready and exported ready for import
 into an AssemblyLine appliance or cluster for use with the AssemblyLine Cuckoo service.
+
+This script can be used outside of your AL appliance/cluster, then you just copy the output
+directory over to your support server and run 'import-vm.py'.
+
+One important caveat about running outside of your appliance/cluster - you must run it on 
+the same or earlier version of Ubuntu that you have running on your AL workers. This is due to
+the XML definition exported containing VM hardware configuration that may not be supported on your
+workers if you build the VM on a newer version of Ubuntu.
 
 """
 
@@ -25,6 +32,7 @@ import pyroute2
 import requests
 import datetime
 import json
+import shutil
 
 try:
     import vmcloak
@@ -37,7 +45,7 @@ CUCKOO_AGENT_PORT = 8000
 
 
 def main():
-    parser = argparse.ArgumentParser(usage="VM export. Get a KVM VM ready for use in AssemblyLine Cuckoo.",
+    parser = argparse.ArgumentParser(usage=_USAGE,
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('--in_domain', action='store', help="Existing libvirt domain to prepare",
@@ -433,8 +441,10 @@ class ExportVm:
           <name>{snapshot_name}</name>
         </domainsnapshot>"""
 
+        snap_name = datetime.datetime.now().isoformat()
+        self.log.info("Taking snapshot %s" % snap_name)
         running_snapshot = snapshot_domain.snapshotCreateXML(
-            SNAPSHOT_XML_TEMPLATE.format(snapshot_name=datetime.datetime.now().isoformat()),
+            SNAPSHOT_XML_TEMPLATE.format(snapshot_name=snap_name),
             libvirt.VIR_DOMAIN_SNAPSHOT_CREATE_ATOMIC
         )
 
@@ -456,7 +466,7 @@ class ExportVm:
             "ip":       self.args.vm_ip.ip.compressed,
             "netmask":  self.args.vm_ip.netmask.compressed,
             "network":  self.args.vm_ip.network.network_address.compressed,
-            "gateway":  self.args.gw_ip,
+            "gateway":  self.args.gw_ip.compressed,
             "tags":     self.args.tags,
             "platform": self.args.platform,
             "guest_profile": self.args.guest_profile,
@@ -484,9 +494,19 @@ class ExportVm:
             with open(filepath, "w") as fh:
                 fh.write(filecontent)
 
-        # TODO: copy all disk images as well
-        # This needs to the VM to be shutdown
-        # get full backing chain with qemu-img info --output json --backing-chain /var/lib/libvirt/images/inetsim_win10.qcow2
+        # Copy disk images over -this needs to the VM to be shutdown
+        # Get img info and full backing chain
+        img_info_json = self._run_cmd("qemu-img info --output json --backing-chain %s" % snapshot_disk_path)
+        img_info = json.loads(img_info_json)
+
+        for img_file in [x.get("filename") for x in img_info]:
+            self.log.info("Copying files %s to %s. This may take awhile..." % (img_file, disk_output_dir))
+            # shutil.copy(img_file, disk_output_dir)
+
+        shutil.copy("import-vm.py", self.args.output)
+        self.log.info("VM is ready to be imported. Copy %s to your support server and run import-vm.py" % self.args.output)
+
+
 
     def _purge_domain(self, domain):
         self.log.info("Purging snapshot, domain definition and disk images for %s", domain)
