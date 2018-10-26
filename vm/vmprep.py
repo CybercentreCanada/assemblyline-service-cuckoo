@@ -454,8 +454,23 @@ class ExportVm:
         # Collect configuration information to output
         running_snapshot_xml = running_snapshot.getXMLDesc()
         snapshot_xml = snapshot_domain.XMLDesc()
+
+        # this mod_xml stuff was in the old prepare_cuckoo script. I'm not sure if
+        # it's absolutely required, but I'm assuming it was there for a reason
+        guid = str(uuid.uuid4())
+        snapshot_xml = self.mod_xml_meta(snapshot_xml, "./uuid", guid)
+        snapshot_xml = self.mod_xml_meta(snapshot_xml, "domain/seclabel", None)
+        running_snapshot_xml = self.mod_xml_meta(running_snapshot_xml, "domain/uuid", guid)
+        running_snapshot_xml = self.mod_xml_meta(running_snapshot_xml, "domain/seclabel", None)
+
+        # Look up the path to the disk
         snapshot_root = lxml.etree.fromstring(snapshot_xml)
         snapshot_disk_path = snapshot_root.find("./devices/disk/source").attrib["file"]
+
+        # Fill out the snapshot_context. This is dumped to a json file
+        # and used by:
+        # - the service to find out what the root disk is and download all disks in the backing chain to the workers
+        # - inside docker to configure networking for the VM and configure cuckoo
         snapshot_context = {
             "name":     self.args.snapshot_domain,
             "base":     self.args.disk_base,
@@ -506,7 +521,18 @@ class ExportVm:
         shutil.copy("import-vm.py", self.args.output)
         self.log.info("VM is ready to be imported. Copy %s to your support server and run import-vm.py" % self.args.output)
 
+    @staticmethod
+    def mod_xml_meta(xml_file, path, new_value):
+        dom_root = lxml.etree.fromstring(xml_file)
+        node = dom_root.find(path)
+        if node is None:
+            return xml_file
 
+        if new_value is None:
+            node.getparent().remove(node)
+        else:
+            node.text = new_value
+        return lxml.etree.tostring(dom_root)
 
     def _purge_domain(self, domain):
         self.log.info("Purging snapshot, domain definition and disk images for %s", domain)

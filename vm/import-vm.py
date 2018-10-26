@@ -4,6 +4,16 @@ _USAGE="""
 
 This script is used to import a VM package created with vmprep into an AL cluster.
 
+This script does two tasks:
+
+1. Copies the two directories (per VM) created by vmprep to your support server to 
+whatever Cuckoo's service config has configured for REMOTE_DISK_ROOT.
+2. Modifies Cuckoo's submission parameters to make sure this VM is included as an option
+
+In a default appliance configuration, the support server data is located at /opt/al/var/support
+and REMOTE_DISK_ROOT defaults to 'vm/disks/cuckoo/', so you could just copy the directories to
+/opt/al/var/support/vm/disks/cuckoo/
+
 """
 
 import argparse
@@ -50,8 +60,6 @@ def main():
 
     ds = forge.get_datastore()
     svc_config = ds.get_service(args.svc_name).get("config", {})
-    al_config = forge.get_config()
-    support_transport = forge.get_support_filestore()
 
     remote_root = svc_config['REMOTE_DISK_ROOT']
 
@@ -108,6 +116,10 @@ def main():
                          "snapshot image containing the running snapshot.")
             fatal_error = True
 
+        # FOR TESTING, don't do any uploads
+        files_to_upload = []
+
+
         # Before uploading checking for errors
         if not fatal_error:
             logger.info("Now trying to upload to filestore")
@@ -116,39 +128,65 @@ def main():
                 full_remote_path = os.path.join(remote_root, remote_path)
                 logger.debug("working on uploading %s to %s" % (local_path, full_remote_path))
 
-                if support_transport.exists(full_remote_path):
-                    logger.warning("%s exists, trying to delete it" % full_remote_path)
-                    support_transport.delete(full_remote_path)
-
-                    # Check again to see if file still exists
+                with forge.get_support_filestore() as support_transport:
                     if support_transport.exists(full_remote_path):
-                        logger.error("Unable to delete remote file, you'll have to manually copy "
+                        logger.warning("%s exists, trying to delete it" % full_remote_path)
+                        support_transport.delete(full_remote_path)
+
+                        # Check again to see if file still exists
+                        if support_transport.exists(full_remote_path):
+                            logger.error("Unable to delete remote file, you'll have to manually copy "
+                                         "the two folders (%s containing the XML files, and "
+                                         "%s containing the disk images) to %s on your support server" %
+                                         (snapshot_context["name"], snapshot_context["base"], remote_root))
+                            break
+
+                    # Now try uploading the file
+                    support_transport.put(local_path, full_remote_path)
+
+                    # Make sure it exists
+                    if not support_transport.exists(full_remote_path):
+                        logger.error("Unable to upload remote file, you'll have to manually copy "
                                      "the two folders (%s containing the XML files, and "
                                      "%s containing the disk images) to %s on your support server" %
                                      (snapshot_context["name"], snapshot_context["base"], remote_root))
                         break
-
-                # Now try uploading the file
-                support_transport.put(local_path, full_remote_path)
-
-                # Make sure it exists
-                if not support_transport.exists(full_remote_path):
-                    logger.error("Unable to upload remote file, you'll have to manually copy "
-                                 "the two folders (%s containing the XML files, and "
-                                 "%s containing the disk images) to %s on your support server" %
-                                 (snapshot_context["name"], snapshot_context["base"], remote_root))
-                    break
                     
             # If we got here, it should be safe to add the VM as a submission param
+            logger.info("Modifying submission params for %s" % args.svc_name)
             svc_data = ds.get_service(args.svc_name)
+            logger.debug("Current service config: %s" % json.dumps(svc_data, indent=4))
+            svc_data_modified = False
+            if len([x for x in svc_data["submission_params"] if x["name"] == "analysis_vm"]) == 0:
+                # We need to add this param
+                svc_data_modified = True
+                svc_data["submission_params"].append({
+                    "name": "analysis_vm",
+                    "default": "auto",
+                    "list": ["auto"],
+                    "type": "list",
+                    "value": "auto"
+                    })
+
+            # Now we should be fine to add our own
+            for sp in svc_data["submission_params"]:
+                if sp["name"] == "analysis_vm":
+                    if snapshot_context["name"] in sp["list"]:
+                        logger.info("A VM with this name is already available as a submission param")
+                    else:
+                        svc_data_modified = True
+                        sp["list"].append(snapshot_context["name"])
+
+            if svc_data_modified:
+                logger.info("Modified service config, saving back to seed")
+                ds.save_service(args.svc_name, svc_data)
 
         else:
             logger.info("A fatal error occurred. Please see log messages above and "
                         "try to fix it. Exiting")
 
-
-
     shutil.rmtree(local_temp)
+
 
 # Copied from https://stackoverflow.com/questions/229186/os-walk-without-digging-into-directories-below
 def walklevel(some_dir, level=1):
@@ -160,6 +198,7 @@ def walklevel(some_dir, level=1):
         num_sep_this = root.count(os.path.sep)
         if num_sep + level <= num_sep_this:
             del dirs[:]
+
 
 if __name__ == "__main__":
     main()
