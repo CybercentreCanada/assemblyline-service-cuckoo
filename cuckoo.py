@@ -251,7 +251,7 @@ class Cuckoo(ServiceBase):
         self.cm = None  # type: CuckooContainerManager
         self.vm_xml = None
         self.vm_snapshot_xml = None
-        self.vm_meta = None
+        # self.vm_meta = None
         self.file_name = None
         self.base_url = None
         self.submit_url = None
@@ -298,7 +298,7 @@ class Cuckoo(ServiceBase):
         self.import_service_deps()
 
         logger.info("Init VMM object and checking for VM updates...")
-        self.vmm = CuckooVmManager(self.cfg)
+        self.vmm = CuckooVmManager(self.cfg, self.SERVICE_NAME)
         self.vmm.download_data()
 
         logger.info("Checking for community updates")
@@ -328,7 +328,7 @@ class Cuckoo(ServiceBase):
         # Set the community mtime dict. sysprep should have already made sure we're up to date
         self._community_mtimes = self._get_community_mtimes()
 
-        self.vmm = CuckooVmManager(self.cfg)
+        self.vmm = CuckooVmManager(self.cfg, self.SERVICE_NAME)
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
 
@@ -419,6 +419,23 @@ class Cuckoo(ServiceBase):
             self.log.warning("Cuckoo is exiting because it currently does not execute on great great grand children.")
             request.set_save_result(False)
             return
+
+        # vm_meta is being deprecated - check here and throw out a warning
+        # TODO: actual vm_meta deprecation
+        if "vm_meta" in self.cfg:
+            self.log.warning("The 'vm_meta' service configuration option will be deprecated and ignored "
+                             "in future version. Please see the updated README and use the 'analysis_vm' "
+                             "submission parameter to define what VMs are available for this service")
+
+            # If analysis_vms is in submission params, log an error
+            config = forge.get_config()
+            params_from_seed = [x['name'] for x in
+                                config.services.master_list[request.task.service_name]['submission_params']]
+            if "analysis_vm" in params_from_seed:
+                self.log.error("It appears that you have both the soon to be deprecated 'vm_meta' service "
+                               "configuration option as well as the 'analysis_vm' submission parameter. "
+                               "You should modify your service configuration to use only the 'analysis_vm' "
+                               "submission parameter.")
 
         # Set this here, b/c trigger_cuckoo_reset->set_urls uses the session object
         self.session = requests.Session()
