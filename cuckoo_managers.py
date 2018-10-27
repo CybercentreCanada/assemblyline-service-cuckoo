@@ -103,6 +103,7 @@ class CuckooVmManager(object):
                 self.vm_meta = json.load(fh)
 
         else:
+            self.log.info("Building vm_meta from _meta.json files")
             # Look up the submission parameters for this service
             submission_params = config.services.master_list[svc_name]['submission_params']
             vm_list = [x.get("list", []) for x in submission_params if x["name"] == "analysis_vm"][0]
@@ -112,7 +113,13 @@ class CuckooVmManager(object):
 
             for vm_name in vm_list:
                 # Now go get the _meta.json file for each of these VMs
+                remote_json_path = os.path.join(vm_name, "%s_meta.json" % vm_name)
+                local_json_path = self._fetch_meta(remote_json_path, self.local_meta_root)
 
+                with open(local_json_path, 'r') as fh:
+                    self.vm_meta.append(json.load(fh))
+
+        self.log.debug("vm_meta configuration: %s" % json.dumps(self.vm_meta, indent=4))
 
 
     def download_data(self):
