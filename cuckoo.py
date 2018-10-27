@@ -22,7 +22,7 @@ from collections import Counter
 from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TEXT_FORMAT, TAG_WEIGHT, SCORE
-from assemblyline.common.exceptions import RecoverableError
+from assemblyline.common.exceptions import RecoverableError, NonRecoverableError
 from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.al.common import forge
@@ -541,13 +541,31 @@ class Cuckoo(ServiceBase):
         if routing is None:
             routing = self.enabled_routes[0]
 
-        select_machine = self.find_machine(self.task.tag, routing)
+        if request.get_param("analysis_vm") == "auto":
+            select_machine = self.find_machine(self.task.tag, routing)
+        else:
+            # We need to make sure that the 'routing' option chose is compatible with
+            # the VM selected
+            select_machine = request.get_param("analysis_vm")
+            selected_vm_meta_list = [x for x in self.vmm.vm_meta if x["name"] == select_machine]
+            if len(selected_vm_meta_list) == 0:
+                raise NonRecoverableError("Selected VM name %s not found in configured VMs. "
+                                          "If this was newly added, you may need to restart hostagent" %
+                                          select_machine)
+            else:
+                if len(selected_vm_meta_list) > 1:
+                    self.log.warning("More than one VM found with name %s. Using the first one in the list" %
+                                     select_machine)
+                selected_vm_meta = selected_vm_meta_list[0]
+
+                # Make sure routing matches up
+                if selected_vm_meta.get("routing") != routing:
+                    raise NonRecoverableError("The selected routing option %s doesn't match the routing "
+                                              "configured for the selected VM %s" % (routing, select_machine))
 
         if select_machine is None:
             # No matching VM and no default
-            self.log.debug("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)
-            request.set_save_result(False)
-            return
+            raise NonRecoverableError("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)
 
         kwargs['timeout'] = analysis_timeout
         kwargs['options'] = ','.join(task_options)

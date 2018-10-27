@@ -119,8 +119,11 @@ class CuckooVmManager(object):
                 with open(local_json_path, 'r') as fh:
                     self.vm_meta.append(json.load(fh))
 
-        self.log.debug("vm_meta configuration: %s" % json.dumps(self.vm_meta, indent=4))
+            self.log.debug("Writing local vm_meta file %s" % self.vm_meta_path)
+            with open(self.vm_meta_path, "w") as fh:
+                fh.write(json.dumps(self.vm_meta, indent=4))
 
+        self.log.debug("vm_meta configuration: %s" % json.dumps(self.vm_meta, indent=4))
 
     def download_data(self):
         """
