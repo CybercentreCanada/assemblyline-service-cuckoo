@@ -117,7 +117,7 @@ def main():
             fatal_error = True
 
         # FOR TESTING, don't do any uploads
-        files_to_upload = []
+        # files_to_upload = []
 
 
         # Before uploading checking for errors

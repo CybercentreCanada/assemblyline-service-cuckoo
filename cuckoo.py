@@ -18,12 +18,13 @@ import datetime
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
 from collections import Counter
+import humanfriendly
 
 from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TEXT_FORMAT, TAG_WEIGHT, SCORE
 from assemblyline.common.exceptions import RecoverableError, NonRecoverableError
-from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType
+from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType, ServiceDefinitionException
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.al.common import forge
 from assemblyline.common.docker import DockerException
@@ -332,6 +333,19 @@ class Cuckoo(ServiceBase):
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
 
+        # Check here to make sure that tmpfs is big enough to hold the configured snapshots
+        ramdisk_size = humanfriendly.parse_size(self.cfg["ramdisk_size"], binary=True)
+        total_snapshot_size = 0
+        config = forge.get_config()
+        for vm_base, disk_name  in [(x["base"], x["disk"]) for x in self.vmm.vm_meta]:
+            disk_path = os.path.join(config.workers.virtualmachines.disk_root, self.cfg['LOCAL_DISK_ROOT'], vm_base, disk_name)
+            self.log.debug("Adding size of %s" % disk_path)
+            total_snapshot_size += os.stat(disk_path).st_size
+
+        if total_snapshot_size > ramdisk_size:
+            raise ServiceDefinitionException("The total size of the configured VM snapshots (%d) exceeds the"
+                                             "ramdisk_size (%d) for docker" % (total_snapshot_size, ramdisk_size))
+
         # only call this *after* .vmm and is initialized
         # we don't need to 'execute_now', sysprep should have taken care of making sure everything's up to date
         self._register_update_callback(self.cuckoo_update, execute_now=False,
@@ -559,7 +573,7 @@ class Cuckoo(ServiceBase):
                 selected_vm_meta = selected_vm_meta_list[0]
 
                 # Make sure routing matches up
-                if selected_vm_meta.get("routing") != routing:
+                if selected_vm_meta.get("route") != routing:
                     raise NonRecoverableError("The selected routing option %s doesn't match the routing "
                                               "configured for the selected VM %s" % (routing, select_machine))
 
@@ -1255,4 +1269,3 @@ class Cuckoo(ServiceBase):
                     logger.info("Found extra file %s, removing it" %
                                   extra_path)
                     os.unlink(extra_path)
-
