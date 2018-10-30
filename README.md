@@ -116,16 +116,71 @@ configurations.
 
 #### Build Base Virtual Machine
 
-This step will vary slightly depending on whatever operating system you choose. These are examples for Windows 7 and 
-Ubuntu. Cuckoo expects all virtual machine data and metadata to exist under /opt/al/var/support/vm/disks/cuckoo/ 
+This step will vary slightly depending on whatever operating system you choose. We have tried to re-use standard
+tools as much as possible (ie/ [vmcloak](https://github.com/hatching/vmcloak)). 
+
+These are examples for Windows 7/10 and Ubuntu 18.04. 
+
+Cuckoo expects all virtual machine data and metadata to exist under /opt/al/var/support/vm/disks/cuckoo/ 
 which can be modified via the ASSEMBLYLINE configurations.
 
 **NB**: It is highly recommended that you create all base VMs on a host matching the version of the cuckoobox docker
-container (currently ubuntu 16.04).
+container (currently ubuntu 18.04).
 
 Before continuing, make sure the following libraries are installed:
 
-    sudo apt-get install libguestfs-tools python-guestfs
+    sudo apt-get install libguestfs-tools python-guestfs build-essential libssl-dev libffi-dev python-dev genisoimage
+
+##### Windows 7 / 10
+
+For Windows, we make use of [vmcloak](https://github.com/hatching/vmcloak) to generate an unattended .iso file
+which we then build a KVM VM (or 'domain' in KVM speak).
+
+You can check out additional options for building the iso with `vmcloak init --help`, the example below provides 
+the suggested minimum. 
+
+    # Mount the installation media as a loopback device
+    mkdir /mnt/win7x64
+    mount -o loop,ro vms/win7ultimate.iso /mnt/win7x64
+    
+    vmcloak init --win7x64 --iso-mount /mnt/win7x64 --serial-key ... -v --vm iso \
+        --ip 10.1.1.50 --netmask 255.255.255.0 win7vm
+
+    sudo -u al mkdir -p /opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/
+    sudo -u al qemu-img create -f qcow2 /opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/Win7disk.qcow2 20G
+    sudo virt-install --connect qemu:///system --virt-type kvm --name Win7SP1x86 --ram 1024             \
+        --disk path=/opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/Win7disk.qcow2,size=20,format=qcow2  \
+        --vnc --cdrom /path/to/install/CD.iso  --network network=default,mac=00:01:02:16:32:64          \
+        --os-variant win7 --video cirrus
+
+Once the operating system has been installed, perform the following setup.
+
+* Install Python 2.7
+* Optional: Install PIL (Python Image Library) if periodic screenshots are desired
+* Disable Windows Update, Windows Firewall, and UAC(User Access Control)
+* set python.exe and pythonw.exe to "Run as Administrator"
+* Optional: Install Java, .Net, other applications and runtime libraries
+* Make sure no password is required to get to a desktop from boot
+* Notes about specific apps
+    * **Adobe Reader** - Security features of recent version of Adobe Reader cause some 
+    [false positive signature hits](https://github.com/cuckoosandbox/community/issues/421). 
+    For Reader 11, you can turn these off: Go to `Edit -> Preferences` and select `Security (Enhanced)`. 
+    Make sure that `Enabled Protected Mode at Startup` and `Enable Enhanced Security` are unchecked.
+    No workaround is known for Reader DC.
+
+When done, shutdown the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
+guest has completely shut down. Remove the CD drive configuration from the virtual machine by editing the XML. 
+The virtual machine will fail if it contains any references to the install medium.
+
+    sudo virsh edit Win7SP1x86  
+
+Create a snapshot of the virtual machine.
+
+    sudo virsh snapshot-create Win7SP1x86
+
+Verify that there is a "current" snapshot with the following command, it should result in a lot of XML.
+
+    sudo virsh snapshot-current Win7SP1x86
 
 ##### Ubuntu 14.04
 
@@ -182,47 +237,6 @@ Verify that there is a "current" snapshot with the following command, it should 
 
 Then continue from the "Prepare the snapshot for Cuckoo" section.
 
-##### Windows 7
-
-    sudo -u al mkdir -p /opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/
-    sudo -u al qemu-img create -f qcow2 /opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/Win7disk.qcow2 20G
-    sudo virt-install --connect qemu:///system --virt-type kvm --name Win7SP1x86 --ram 1024             \
-        --disk path=/opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/Win7disk.qcow2,size=20,format=qcow2  \
-        --vnc --cdrom /path/to/install/CD.iso  --network network=default,mac=00:01:02:16:32:64          \
-        --os-variant win7 --video cirrus
-
-Once the operating system has been installed, perform the following setup.
-
-* Install Python 2.7
-* Optional: Install PIL (Python Image Library) if periodic screenshots are desired
-* Disable Windows Update, Windows Firewall, and UAC(User Access Control)
-* set python.exe and pythonw.exe to "Run as Administrator"
-* Optional: Install Java, .Net, other applications and runtime libraries
-* Make sure no password is required to get to a desktop from boot
-* Notes about specific apps
-    * **Adobe Reader** - Security features of recent version of Adobe Reader cause some 
-    [false positive signature hits](https://github.com/cuckoosandbox/community/issues/421). 
-    For Reader 11, you can turn these off: Go to `Edit -> Preferences` and select `Security (Enhanced)`. 
-    Make sure that `Enabled Protected Mode at Startup` and `Enable Enhanced Security` are unchecked.
-    No workaround is known for Reader DC.
-
-When done, shutdown the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
-guest has completely shut down. Remove the CD drive configuration from the virtual machine by editing the XML. 
-The virtual machine will fail if it contains any references to the install medium.
-
-    sudo virsh edit Win7SP1x86  
-
-Create a snapshot of the virtual machine.
-
-    sudo virsh snapshot-create Win7SP1x86
-
-Verify that there is a "current" snapshot with the following command, it should result in a lot of XML.
-
-    sudo virsh snapshot-current Win7SP1x86
-
-##### Windows 10
-
-Windows 10 is not *Officially* supported.
 
 ##### Android
 
