@@ -490,6 +490,7 @@ class ExportVm:
             "ip":       self.args.vm_ip.ip.compressed,
             "netmask":  self.args.vm_ip.netmask.compressed,
             "network":  self.args.vm_ip.network.network_address.compressed,
+            "resultserver_ip": self.args.resultserver_ip.compressed,
             "gateway":  self.args.gw_ip.compressed,
             "tags":     self.args.tags,
             "platform": self.args.platform,
