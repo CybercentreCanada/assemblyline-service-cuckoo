@@ -27,7 +27,7 @@ random IPs for DNS requests. By default it will create IPs in the range 10.0.0.0
 * **community_updates** - See EXTENDING section below for details
 * **result_parsers** - See EXTENDING section below for details
 * **cuckoo_image** - The name of the cuckoobox docker container to use
-* **ramdisk_size** - (default 2048M) This is the size of the ramdisk that Cuckoo will use to store VM snapshots and the running virtual machine image. If it's not large enough analysis will fail, see the Troubleshooting section for more information.
+* **ramdisk_size** - DEPRECATED. The snapshot is simple copied into the docker container, the OS level file system cache should take care of keeping the data in RAM.
 * **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.
 
 The following options are available, but shouldn't need to be changed from the defaults:
@@ -334,8 +334,7 @@ If analysis sometimes succeeds and sometimes fails, make sure the tmpfs filesyst
 
 If you find that the Cuckoobox container exists immediately after being launched, this may be an out-of-memory issue on 
 the ram mount inside the container. This directory is limited to 2 gigabytes by default, but can be modified in the 
-ASSEMBLYLINE configurations. It must be large enough to store the snapshot image for all virtual machines with enough 
-room left over for any given virtual machine to run a malware sample.
+ASSEMBLYLINE configurations.
 
 ### DEBUGGING - docker/VM issues (deprecated)
 

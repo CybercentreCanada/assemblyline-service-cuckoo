@@ -1,6 +1,6 @@
 #!/bin/bash
 
-USAGE="Cuckoo Container v0.1 startup/entrypoint script
+USAGE="Cuckoo Container startup/entrypoint script
 
 See the Dockerfile for how to launch the container
 
@@ -13,7 +13,9 @@ export CUCKOO_BASE=/home/sandbox/.cuckoo
 
 # LOCALS
 VM_META=$1
-RAM_VOLUME=$2
+
+# deprecated use of ram/tmpfs for snapshot images - OS filesystem cache should take care of that
+#RAM_VOLUME=$2
 VM_IMAGES_PATH=/var/lib/libvirt/images
 CONF_PATH=/home/sandbox/conf
 LOG=/home/sandbox/startup.log
@@ -72,12 +74,10 @@ service libvirtd start
 # Adjust ownership of mounted volumes
 chown -R sandbox:www-data /opt/sandbox
 
-echo "Creating ramdisk" >> $LOG
-# Create the tmpfs directory for the snapshot
+echo "Creating local directory to store copy of snapshot" >> $LOG
 TMPFS_DIR=/opt/tmpfs
-echo "tmpfs  $TMPFS_DIR  tmpfs   nodev,nosuid,noexec,nodiratime,size=${RAM_VOLUME}  0   0" >> /etc/fstab
 mkdir $TMPFS_DIR && chown sandbox: $TMPFS_DIR
-mount $TMPFS_DIR
+
 
 echo "Config file: $CFG_PATH" >> $LOG
 echo "Running bootstrap.py" >> $LOG

@@ -70,8 +70,7 @@ def main():
     parser.add_argument('--no_create', action='store_true', default=False,
                         help="Do not attempt to create the snapshot domain, just export all relevant files. "
                              "This option is useful if you've made additional modifications to an existing snapshot "
-                             "or manually created a snapshot. *NB*: It's important that the snapshot disk be smaller than "
-                             "the configured ramdisk_size option for the Cuckoo AssemblyLine service")
+                             "or manually created a snapshot.")
     parser.add_argument('--no_boot', action='store_true', default=False,
                         help="Don't boot snapshot_domain VM. Use this if you already have it running and just want to "
                              "dump a snapshot of its current state")
@@ -118,10 +117,9 @@ def main():
                                                "what you're doing")
     advanced_group.add_argument('--max_running_snapshots', type=int, default=1,
                                 help="The max amount of running snapshots allowed in 'snapshot_domain'. "
-                                     "The snapshot_domain child disk is copied into each instance of docker "
-                                     "so must be kept smaller than 'ramdisk_size'. It's not possible to shrink "
-                                     "a qcow2 disk containing a running snapshot, so just avoid having more than "
-                                     "one running snapshot.")
+                                     "The snapshot_domain child disk is copied into each instance of docker, "
+                                     "so larger snapshot image means longer service startup time. "
+                                     "It's not possible to shrink a qcow2 disk containing a running snapshot.")
 
     args = parser.parse_args()
 
@@ -305,9 +303,20 @@ class ExportVm:
         disk_name.text = self.args.snapshot_domain
         disk_uuid.text = str(uuid.uuid4())
         disk_root.attrib['file'] = snapshot_disk
+
+        # Make sure to remove any reference to a mounted CD drive
+        cd_device = domain_root.find("./devices/disk[@device='cdrom']")
+        cd_iso = cd_device.find("./source")
+        if cd_iso is not None:
+            self.log.info("Found CD device with mounted iso, ejecting it...")
+            # this should modify the main domain_root object
+            cd_device.remove(cd_iso)
+
+        # Dump the lxml object back to an XML string
         snapshot_xml = lxml.etree.tostring(domain_root)
+
+        # Finally, create the domain
         snapshot_domain = self.lv.defineXML(snapshot_xml)
-        # snapshot_xml_filename = "%s.xml" % self.args.snapshot_domain
 
     def boot_snapshot(self):
         """
@@ -516,7 +525,7 @@ class ExportVm:
 
         for img_file in [x.get("filename") for x in img_info]:
             self.log.info("Copying files %s to %s. This may take awhile..." % (img_file, disk_output_dir))
-            # shutil.copy(img_file, disk_output_dir)
+            shutil.copy(img_file, disk_output_dir)
 
         shutil.copy("import-vm.py", self.args.output)
         self.log.info("VM is ready to be imported. Copy %s to your support server and run import-vm.py" % self.args.output)

@@ -161,11 +161,13 @@ class Cuckoo(ServiceBase):
 
     SERVICE_DEFAULT_CONFIG = {
         "cuckoo_image": "cuckoo/cuckoobox:latest",
+        # deprecated
         #"vm_meta": "cuckoo.config",
         "REMOTE_DISK_ROOT": "vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
-        "ramdisk_size": "2048M",
+        # deprecated
+        #"ramdisk_size": "2048M",
         "ram_limit": "5120m",
         "dedup_similar_percent": 80,
         "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz"],
@@ -333,18 +335,6 @@ class Cuckoo(ServiceBase):
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
 
-        # Check here to make sure that tmpfs is big enough to hold the configured snapshots
-        ramdisk_size = humanfriendly.parse_size(self.cfg["ramdisk_size"], binary=True)
-        total_snapshot_size = 0
-        config = forge.get_config()
-        for vm_base, disk_name  in [(x["base"], x["disk"]) for x in self.vmm.vm_meta]:
-            disk_path = os.path.join(config.workers.virtualmachines.disk_root, self.cfg['LOCAL_DISK_ROOT'], vm_base, disk_name)
-            self.log.debug("Adding size of %s" % disk_path)
-            total_snapshot_size += os.stat(disk_path).st_size
-
-        if total_snapshot_size > ramdisk_size:
-            raise ServiceDefinitionException("The total size of the configured VM snapshots (%d) exceeds the"
-                                             "ramdisk_size (%d) for docker" % (total_snapshot_size, ramdisk_size))
 
         # only call this *after* .vmm and is initialized
         # we don't need to 'execute_now', sysprep should have taken care of making sure everything's up to date

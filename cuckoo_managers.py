@@ -28,7 +28,7 @@ class CuckooContainerManager(DockerManager):
                     (vmm.local_meta_root, "/opt/vm_meta", "ro"),
                     (vmm.local_vm_root, "/var/lib/libvirt/images", "ro")
                 ],
-            'commandline': ["cuckoo.config", cfg['ramdisk_size']]
+            'commandline': ["cuckoo.config"]
         }
         self.name = self.add_container(ctx)
         self.tag_map = self.parse_vm_meta(vmm.vm_meta)
