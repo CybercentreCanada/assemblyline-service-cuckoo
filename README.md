@@ -354,15 +354,16 @@ make sure to include the `--force` option
 * `--vmcloak_name` - The name used in the vmcloak step. If vmcloak wasn't used (ie/ for Linux or a custom Windows build),
 then you must specify the static IP and gateway used by your VM, eg/ `--vm_ip 10.1.1.10/24` and `--gw_ip 10.1.1.1`
 
-
-    sudo ./vmprep.py -v \
-        --in_domain win7vm \
-        --snapshot_domain inetsim_win7 \
-        --route inetsim \
-        --platform windows \
-        --tags pe32,pe64,default \
-        --guest_profile Win7SP1x64 \
-        --vmcloak_name win7vm
+```
+sudo ./vmprep.py -v \
+    --in_domain win7vm \
+    --snapshot_domain inetsim_win7 \
+    --route inetsim \
+    --platform windows \
+    --tags pe32,pe64,default \
+    --guest_profile Win7SP1x64 \
+    --vmcloak_name win7vm
+```
 
 This should create a new directory (default: al_cuckoo_vms) in your current directory. Transfer this over to your AL
 support server and run the included `import-vm.py` script to copy data into the appropriate locations.
