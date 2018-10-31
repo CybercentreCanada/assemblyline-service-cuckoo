@@ -148,14 +148,15 @@ subscription, these don't work out of the box with vmcloak (as of 0.4.6). There 
 but until then you can use the forked repo: `sudo pip install git+https://github.com/jdval/vmcloak.git`. If you install this
 you will need to add `--serial-key-type mak` as an argument as well.
 
+```
+# Mount the installation media as a loopback device
+sudo mkdir /mnt/win7x64
+sudo mount -o loop,ro vms/win7ultimate.iso /mnt/win7x64
 
-    # Mount the installation media as a loopback device
-    sudo mkdir /mnt/win7x64
-    sudo mount -o loop,ro vms/win7ultimate.iso /mnt/win7x64
-    
-    # Run vmcloak. You can safely ignore any warnings about 'vboxmanage' or VirtualBox not being installed.
-    vmcloak init --win7x64 --iso-mount /mnt/win7x64 --serial-key ... -v --vm iso \
-        --ip 10.1.1.50 --netmask 255.255.255.0 --gateway 10.1.1.1 win7vm
+# Run vmcloak. You can safely ignore any warnings about 'vboxmanage' or VirtualBox not being installed.
+vmcloak init --win7x64 --iso-mount /mnt/win7x64 --serial-key ... -v --vm iso \
+    --ip 10.1.1.50 --netmask 255.255.255.0 --gateway 10.1.1.1 win7vm
+```
         
 If this goes well, it will generate a file in `~/.vmcloak/iso/win7vm.iso`. You can unmount the origianl ISO file now:
 
