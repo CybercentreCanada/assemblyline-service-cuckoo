@@ -28,30 +28,35 @@ random IPs for DNS requests. By default it will create IPs in the range 10.0.0.0
 * **result_parsers** - See EXTENDING section below for details
 * **cuckoo_image** - The name of the cuckoobox docker container to use
 * **ramdisk_size** - DEPRECATED. The snapshot is simple copied into the docker container, the OS level file system cache should take care of keeping the data in RAM.
-* **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.
+* **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. 
+It should be at least 1G greater than the largest amount of RAM configured for any one of your VMs.
 
 The following options are available, but shouldn't need to be changed from the defaults:
 
-* **LOCAL_DISK_ROOT** - Local path to disk images on worker, appended to ``workers.virtualmachines.disk_root`` from your seed.
-* **LOCAL_VM_META_ROOT** - Local path to XML files describing
+* **LOCAL_DISK_ROOT** - Local path to disk images on worker, appended to ``workers.virtualmachines.disk_root`` 
+from your seed. Default full path: ``/opt/al/vmm/disks/cuckoo_vms/``
+* **LOCAL_VM_META_ROOT** - Local path to XML configuration used by KVM to define the analysis VMs. 
+Appending to ``system.root`` from your seed, default full path: ``/opt/al/var/cuckoo/``
 * **REMOTE_DISK_ROOT** - Path to disk images and XML files for cuckoo virtual machines on your support server.
 * **dedup_similar_percent** - (default 80) If a file is X% similar (as measured using ssdeep) it's not reported/extracted by AssemblyLine.
 
-**NB**: In order for any changes to virtual machines (new VM, changed ``vm_meta`` file, etc) to be picked up, hostagent will need to be restarted.
+**NB**: In order for any changes to virtual machines to be picked up, the hostagent on each worker will need to be restarted.
 
 ### SUBMISSION OPTIONS
 
 The following options are available for submissions to the Cuckoo service (accessible via the hidden pane on the left of the screen on the "Submit" page):
 
-* **analysis_vm** - The name of the virtual machine to use for this submission. The list of options must contain the VM names you want to make available, where 'auto' is a special value.
+* **analysis_vm** - The name of the virtual machine to use for this submission. The list of options must contain 
+the VM names you want to make available, where 'auto' is a special value that will try and automatically pick the correct VM.
 * **analysis_timeout** - Maximum amount of time to wait for analysis to complete. NB: The analysis job may complete faster
+than this if the process being monitored exits.
 * **generate_report** - Generate a full report (cuckoo_report.tar.gz) and attach it as a supplementary file
 * **dump_processes** - Dump process memory. These would be available in the cuckoo_report.tar.gz supplementary file
 * **dll_function** - If a DLL file is submitted, manually select the function within it to execute
 * **arguments** - command line arguments to pass to the sample being analyzed
 * **custom_options** - Custom options to pass to the cuckoo submission. Same as the `--options` command line option [here](https://cuckoo.sh/docs/usage/submit.html)
 * **pull_memory** - DEPRECATED
-* **dump_memory** - Dump full VM memory. *NB*: This is very slow!
+* **dump_memory** - Dump full VM memory and run volatility plugins on it. *NB*: This is very slow!
 * **no_monitor** - Run analysis without injecting the Cuckoo monitoring agent. Equivalent to passing `--options free=yes` (see [here](https://cuckoo.sh/docs/usage/packages.html) for more information)
 * **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or simulated services (`inetsim`) using [INetSim](https://www.inetsim.org/).
 
@@ -69,8 +74,8 @@ Refer to the following website for registry deployment options.
 
     https://docs.docker.com/registry/deploying/
 
-To simply start up a local registry, run the following command. This is most useful in an appliance or dev-vm 
-deployment.
+To simply start up a local registry, run the following command. This is most useful in an appliance or development
+deployment. For a production appliance configuration you should configure this docker image to start on boot.
 
     sudo docker run -d -p 127.0.0.1:5000:5000 --name registry registry:2
 
@@ -132,10 +137,10 @@ Before continuing, make sure the following libraries are installed:
 ##### Windows 7 / 8 / 10
 
 For Windows, we make use of [vmcloak](https://github.com/hatching/vmcloak) to generate an unattended .iso file
-which we then build a KVM VM (or 'domain' in KVM terminology). 
+which we then use to build a KVM VM (or 'domain' in KVM terminology). 
 
-You can check out additional options for building the iso with `vmcloak init --help`, the example below provides 
-the suggested minimal options:
+You can check out additional options for building the iso with `vmcloak init --help` (ignore anything VirtualBox 
+related), the example below provides the suggested minimal options:
  
 * `--vm iso` to just generate an ISO and *not* build the full VM using VirtualBox
 * `--ip`/`--netmask`/`--gateway` to define the subnet you want the VM to use.
@@ -154,7 +159,7 @@ you will need to add `--serial-key-type mak` as an argument as well.
     vmcloak init --win7x64 --iso-mount /mnt/win7x64 --serial-key ... -v --vm iso \
         --ip 10.1.1.50 --netmask 255.255.255.0 --gateway 10.1.1.1 win7vm
         
-If this goes well, this should generate a file in `~/.vmcloak/iso/win7vm.iso`. You can unmount the origianl ISO file now:
+If this goes well, it will generate a file in `~/.vmcloak/iso/win7vm.iso`. You can unmount the origianl ISO file now:
 
     sudo umount /mnt/win7x64
     
@@ -172,9 +177,10 @@ Now build the VM. You may do this using the `virt-manager` GUI tool as well, jus
 Some important options for virt-install:
 
 * `--name` - The name of the VM / domain
-* `--ram` - Amount of RAM. Windows 8/10 will likely need more
-* `--os-variant` - The specific OS variant being used. For more options, see output for command `osinfo-query os`
-* `--cdrom` - The path to the iso you created in the previous step
+* `--ram` - Amount of RAM. Windows 8/10 will likely need more.
+* `--os-variant` - The specific OS variant being used. For more options, see output of command `osinfo-query os`
+* `--cdrom` - The path to the iso you created in the previous step (or the regular ISO for a manual Windows or Linux 
+base VM)
 
 
     sudo virt-install --connect qemu:///system --virt-type kvm \
@@ -186,10 +192,12 @@ Some important options for virt-install:
     --vnc --network network=default --video cirrus
 
 
-At this point, Windows should be setup and ready for Cuckoo. You may now customize it with additional applications (Office,
-Adobe, .net libraries, etc). You will likely need to configure a new virtual network connection based on the static
-IP configuration you used in vmcloak if you want to connect to the internet from within your VM. Using `virt-manager`,
-go to Edit->Connection Details->Virtual Networks.
+At this point, Windows should be setup and ready for Cuckoo (login without password, cuckoo agent running). 
+You may now customize it with additional applications (Office, Adobe, .net libraries, etc). 
+If you want to connect to the internet from within your VM, you will likely need to 
+configure a new virtual network connection based on the static IP configuration you used in vmcloak. 
+Using `virt-manager`, go to Edit->Connection Details->Virtual Networks and add a new virtual network with a subnet
+matching your static IP configuration, then modify the NIC for your VM to use the new virtual network.
 
 * Notes about specific apps
     * **Adobe Reader** - Security features of recent version of Adobe Reader cause some 
@@ -472,7 +480,7 @@ configurations. The REMOTE_DISK_ROOT should be relative to the support hosts FTP
 
 ### DEBUGGING - docker/VM issues with cuckoo_tests.py
 
-If the logs don't provide any clues about what may be going wrong, there is a 'cuckoo_test.py' script included in the 
+If the logs don't provide any clues about what may be going wrong, there is a 'cuckoo_tests.py' script included in the 
 service repository. This is meant to be run on the workers, as the `al` user (or another user who can run docker containers)
 
     source /etc/default/al
