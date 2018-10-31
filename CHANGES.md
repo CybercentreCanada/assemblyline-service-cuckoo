@@ -17,3 +17,10 @@ This is meant to be a relatively simply place to keep track of significant chang
 
 * [Issue 25 vm better](https://bitbucket.org/cse-assemblyline/alsvc_cuckoo/pull-requests/88/issue-25-vm-better/diff)
     * Creation of `cuckoo_tests.py` script to be used on workers to help diagnose issues with docker & virtual machines
+    
+* [Issue 11 inetsim128 and dns](https://bitbucket.org/cse-assemblyline/alsvc_cuckoo/pull-requests/86)
+    * Dynamically patching a couple of inetsim .pm files to support returning random IPs for domain lookups instead of 
+    always returning the same IP
+    * Leveraging Linux network namespaces to 'separate' analysis VM from it's gateway IP. This lets us apply DNAT'ing on the
+    'remote' namespace, so that the PCAP cuckoo captures is more realistic and works with different IPs.
+
