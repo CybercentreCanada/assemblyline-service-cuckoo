@@ -82,7 +82,9 @@ def main():
     parser.add_argument('--output', action='store', default="al_cuckoo_vms",
                         help="Root output directory")
     parser.add_argument('--vm_timeout', action='store', type=int, default=60,
-                        help="Max timeout to wait for VM to come up.")
+                        help="Max timeout to wait for VM to come up (until we can communicate with the cuckoo agent")
+    parser.add_argument('--snap_wait_time', action='store', type=int, default=30,
+                        help="How long to wait after we can talk to the agent to take the running snapshot.")
     parser.add_argument('--guest_profile', action='store', help="Volatility guest profile, i.e. Win7SP1x86",
                         dest='guest_profile', required=True)
     parser.add_argument('--route', action='store', choices=["inetsim","gateway"], default="inetsim",
@@ -94,17 +96,19 @@ def main():
     vmcloak_group = parser.add_argument_group("vmcloak",
                                               "vmcloak specific options. This script will attempt to make use of the "
                                               "vmcloak repository, primarily to retrieve network configuration for the VM")
-    vmcloak_group.add_argument('--use_vmcloak', action='store_true', default=True,
-                        help="Try to use vmcloak to lookup network information for VM")
+    vmcloak_group.add_argument('--no_vmcloak', action='store_true', default=False,
+                        help="Don't try to lookup VM information in vmcloak repository")
     vmcloak_group.add_argument('--vmcloak_name', action='store',
                         help="Extract network information from vmcloak for VM with this name")
 
     # IP options, if vmcloak isn't used to provide it
-    ip_group = parser.add_argument_group("IP Configuration", "If vmcloak is not used, then you must provide the IP "
-                                         "network configuration for your VM")
+    ip_group = parser.add_argument_group("IP Configuration",
+                                         "If vmcloak is not used, then you must provide the IP "
+                                         "network configuration for your VM. If these options are provided, then"
+                                         "no_vmcloak is assumed to be 'true'")
     ip_group.add_argument('--vm_ip', action='store', type=_validate_ip_network,
                         help="VM's static IP, in CIDR notation")
-    ip_group.add_argument('--gw_ip', action='store', type=ipaddress.ip_address,
+    ip_group.add_argument('--gw_ip', action='store', type=lambda x: ipaddress.ip_address(unicode(x)),
                         help="Gateway IP to use for this VM")
     # ip_group.add_argument('--dns_ip', action='store', type=ipaddress.ip_address,
     #                       help="DNS server this IP should try to use")
@@ -137,13 +141,17 @@ def main():
 
     logger = logging.getLogger("main")
 
+    if args.vm_ip is not None:
+        logger.debug("--vm_ip argument provided, not using any information from vmcloak")
+        args.no_vmcloak = True
+
     ###
     # Do some base argument validation - we need to get IP info from vmcloak or from args
-    if args.use_vmcloak and not vmcloak:
+    if not args.no_vmcloak and not vmcloak:
         logger.error("vmcloak module can't be found or isn't importable")
         sys.exit(1)
 
-    if args.use_vmcloak:
+    if not args.no_vmcloak:
         # Use vmcloaks 'repository' module to access image data
         vmcloak_session = vmcloak.repository.Session()
         if args.vmcloak_name:
@@ -327,6 +335,8 @@ class ExportVm:
 
         :return:
         """
+
+        logger = self.log.getChild("boot_snapshot")
         snapshot_domain = self.lv.lookupByName(self.args.snapshot_domain)
 
         if not snapshot_domain:
@@ -334,10 +344,14 @@ class ExportVm:
 
         self.network_config()
 
-        self.log.info("Booting snapshot domain: %s (%d second timeout)", self.args.snapshot_domain, self.args.vm_timeout)
+        logger.info("Booting snapshot domain: %s (%d second timeout)", self.args.snapshot_domain, self.args.vm_timeout)
         snapshot_domain.create()
 
         agent_working = self.check_agent_connectivity()
+
+        if agent_working:
+            logger.info("Can communicate with agent, waiting %d seconds to take snapshot" % self.args.snap_wait_time)
+            time.sleep(self.args.snap_wait_time)
 
     def network_config(self):
         """
