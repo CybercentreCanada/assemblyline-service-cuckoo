@@ -27,7 +27,6 @@ random IPs for DNS requests. By default it will create IPs in the range 10.0.0.0
 * **community_updates** - See EXTENDING section below for details
 * **result_parsers** - See EXTENDING section below for details
 * **cuckoo_image** - The name of the cuckoobox docker container to use
-* **ramdisk_size** - DEPRECATED. The snapshot is simple copied into the docker container, the OS level file system cache should take care of keeping the data in RAM.
 * **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. 
 It should be at least 1G greater than the largest amount of RAM configured for any one of your VMs.
 
@@ -55,7 +54,6 @@ than this if the process being monitored exits.
 * **dll_function** - If a DLL file is submitted, manually select the function within it to execute
 * **arguments** - command line arguments to pass to the sample being analyzed
 * **custom_options** - Custom options to pass to the cuckoo submission. Same as the `--options` command line option [here](https://cuckoo.sh/docs/usage/submit.html)
-* **pull_memory** - DEPRECATED
 * **dump_memory** - Dump full VM memory and run volatility plugins on it. *NB*: This is very slow!
 * **no_monitor** - Run analysis without injecting the Cuckoo monitoring agent. Equivalent to passing `--options free=yes` (see [here](https://cuckoo.sh/docs/usage/packages.html) for more information)
 * **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or simulated services (`inetsim`) using [INetSim](https://www.inetsim.org/).
