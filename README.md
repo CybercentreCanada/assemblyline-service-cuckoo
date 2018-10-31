@@ -392,7 +392,7 @@ service will rebase it properly on start up.
 * inetsim_win7.xml - this is the XML configuration for KVM that defines the cloned VM
 * inetsim_win7_snapshot.xml - this is the XML configuration for KVM that defines the running snapshot of the cloned VM
 * inetsim_win7_meta.json - this describes the metadata around the VM so that the AL cuckoo service can properly
-configure networking for it since the cuckoobox docker container.
+configure networking for it inside the cuckoobox docker container.
 
 ##### Multiple routes using the same base VM
 
@@ -422,19 +422,19 @@ specify an internal DNS server to use. Shut down the VM, and then run vm_prep.py
 * You must specify the guest IP (`--vm_ip`) and gateway IP (`--gw_ip`)
 * Don't use the `--vmcloak_name` option - the IP configuration has changed from what vmcloak has in its database 
 
-
-    # If the new IP and gateway you configured is 10.2.2.50 and 10.2.2.1
-    sudo ./vmprep.py -v \
-        --in_domain win7vm \
-        --snapshot_domain gateway_win7 \
-        --route gateway \
-        --platform windows \
-        --tags pe32,pe64 \
-        --guest_profile Win7SP1x64 \
-        --no_create \
-        --vm_ip 10.2.2.50/24 \
-        --gw_ip 10.2.2.1
-
+```
+# If the new IP and gateway you configured is 10.2.2.50 and 10.2.2.1
+sudo ./vmprep.py -v \
+    --in_domain win7vm \
+    --snapshot_domain gateway_win7 \
+    --route gateway \
+    --platform windows \
+    --tags pe32,pe64 \
+    --guest_profile Win7SP1x64 \
+    --no_create \
+    --vm_ip 10.2.2.50/24 \
+    --gw_ip 10.2.2.1
+```
 
 
 #### Deploy all snapshots to Cuckoo
