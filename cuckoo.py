@@ -1046,7 +1046,7 @@ class Cuckoo(ServiceBase):
         if self.check_stop():
             self.log.debug("Service stopped during machine query.")
             return False
-        self.log.debug("Querying for available analysis machines..")
+        self.log.debug("Querying for available analysis machines using url %s.." % self.query_machines_url)
         resp = self.session.get(self.query_machines_url)
         if resp.status_code != 200:
             self.log.debug("Failed to query machines: %s" % resp.status_code)
@@ -1054,6 +1054,8 @@ class Cuckoo(ServiceBase):
         resp_dict = dict(resp.json())
         if not self._all_vms_busy(resp_dict.get('machines')):
             return True
+
+        self.log.debug("_all_vms_busy came back false")
         return False
 
     @staticmethod
