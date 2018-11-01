@@ -1081,6 +1081,7 @@ class Cuckoo(ServiceBase):
                     return ready
             except:
                 # pass, since the api might not even be up yet
+                self.log.debug("Error from cuckoo_query_machines: %s" % traceback.format_exc())
                 pass
             time.sleep(1)
             attempts += 1
