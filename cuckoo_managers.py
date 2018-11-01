@@ -29,7 +29,7 @@ class CuckooContainerManager(DockerManager):
                     (vmm.local_vm_root, "/var/lib/libvirt/images", "ro")
                 ],
             # TODO: ramdisk_size is deprecated. only left here so old docker containers don't stop working
-            'commandline': ["cuckoo.config", cfg.get('ramdisk_size')]
+            'commandline': ["cuckoo.config", cfg.get('ramdisk_size',"2048M")]
         }
         self.name = self.add_container(ctx)
         self.tag_map = self.parse_vm_meta(vmm.vm_meta)

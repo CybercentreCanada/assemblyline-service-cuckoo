@@ -593,7 +593,7 @@ class ExportVm:
             try:
                 with pyroute2.IPDB() as ipdb:
                     with ipdb.interfaces[self.args.net_device] as iface:
-                        iface.del_ip("%s/%s" % self.args.resultserver_ip, self.args.vm_ip.netmask)
+                        iface.del_ip("%s/%s" % (self.args.resultserver_ip, self.args.vm_ip.netmask))
             except:
                 self.log.error("Problem removing IP from interface. Traceback: %s" % traceback.format_exc())
 

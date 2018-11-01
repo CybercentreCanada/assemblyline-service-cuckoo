@@ -98,7 +98,7 @@ The following commands assume a local registry. Change localhost as needed for a
 is configured on all workers, the following commands will only need to be run once.
 
     cd /opt/al/pkg/al_services/alsvc_cuckoo/docker/cuckoobox
-    sudo apt-get install python-dev libffi-dev libfuzzy-dev
+    sudo apt-get install -y python-dev libffi-dev libfuzzy-dev
     sudo -u al PYTHONPATH=$PYTHONPATH python get_libs_for_cuckoo_docker.py
     sudo docker build -t localhost:5000/cuckoo/cuckoobox .
     sudo docker push localhost:5000/cuckoo/cuckoobox
@@ -129,7 +129,7 @@ container (currently ubuntu 18.04).
 
 Before continuing, make sure the following libraries are installed:
 
-    sudo apt-get install libguestfs-tools python-guestfs build-essential libssl-dev libffi-dev python-dev genisoimage
+    sudo apt-get install -y libguestfs-tools python-guestfs build-essential libssl-dev libffi-dev python-dev genisoimage
     sudo pip install vmcloak
 
 ##### Windows 7 / 8 / 10
@@ -145,7 +145,7 @@ related), the example below provides the suggested minimal options:
 * `--serial-key` for your Windows serial key. 
     * If you have a Multiple Activation Key (MAK) from a Visual Studio Pro
 subscription, these don't work out of the box with vmcloak (as of 0.4.6). There is a [PR](https://github.com/hatching/vmcloak/pull/131)
-but until then you can use the forked repo: `sudo pip install git+https://github.com/jdval/vmcloak.git`. If you install this
+but until then you can use the forked repo: `sudo pip install -U --no-deps git+https://github.com/jdval/vmcloak.git`. If you install this
 you will need to add `--serial-key-type mak` as an argument as well.
 
 ```
@@ -182,14 +182,15 @@ Some important options for virt-install:
 base VM)
 
 
-    sudo virt-install --connect qemu:///system --virt-type kvm \
+```
+sudo virt-install --connect qemu:///system --virt-type kvm \
 	--name win7vm \
 	--ram 1024 \
 	--os-variant win7 \
     --disk size=20,format=qcow2  \
 	--cdrom ~/.vmcloak/iso/win7vm.iso \
     --vnc --network network=default --video cirrus
-
+```
 
 At this point, Windows should be setup and ready for Cuckoo (login without password, cuckoo agent running). 
 You may now customize it with additional applications (Office, Adobe, .net libraries, etc). 
@@ -334,7 +335,7 @@ Android is not *Officially* supported.
 
 #### Prepare the snapshot for Cuckoo
 
-Use the `vmprep.py` script included in this repository. It may be copied and used on its own on a separate system
+Use the `vmprep.py` script included in this repository under the `vm/` directory. It may be copied and used on its own on a separate system
 outside of your AL cluster. `vmprep.py` does the following steps:
 
 1. Create a linked clone of the VM
@@ -439,7 +440,12 @@ sudo ./vmprep.py -v \
 
 #### Deploy all snapshots to Cuckoo
 
-Copy the al_cuckoo_vms/ folder over to your support server. A copy of 'import-vm.py' should be included in that directory.
+Copy the al_cuckoo_vms/ folder over to your support server. If you're already on your support server,
+you may need to make the disk images readable:
+
+    sudo chmod -R ugo+r *
+
+A copy of 'import-vm.py' should be included in that directory.
 
 This script does two tasks:
 
