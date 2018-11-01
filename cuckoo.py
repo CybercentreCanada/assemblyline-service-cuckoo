@@ -335,6 +335,10 @@ class Cuckoo(ServiceBase):
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
 
+        # Set this here, normally we don't need until an execute() call
+        # (b/c trigger_cuckoo_reset->set_urls uses the session object)
+        # but when using the cuckoo_tests script we don't call execute
+        self.session = requests.Session()
 
         # only call this *after* .vmm and is initialized
         # we don't need to 'execute_now', sysprep should have taken care of making sure everything's up to date
@@ -440,9 +444,6 @@ class Cuckoo(ServiceBase):
                                "configuration option as well as the 'analysis_vm' submission parameter. "
                                "You should modify your service configuration to use only the 'analysis_vm' "
                                "submission parameter.")
-
-        # Set this here, b/c trigger_cuckoo_reset->set_urls uses the session object
-        self.session = requests.Session()
 
         if (time.time() - self._last_docker_restart) > CUCKOOBOX_MAX_LIFETIME:
             self.log.info("Triggering a container restart due to reaching CUCKOOBOX_MAX_LIFETIME (%d)" % CUCKOOBOX_MAX_LIFETIME)
