@@ -210,36 +210,40 @@ When done, shutdown the virtual machine. Windows may choose to hibernate instead
 guest has completely shut down. 
 
 
-##### Ubuntu 16.04
-
-    sudo -u al mkdir -p /opt/al/var/support/vm/disks/cuckoo/Ubuntu1404/
-    sudo -u al qemu-img create -f qcow2 /opt/al/var/support/vm/disks/cuckoo/Ubuntu1404/Ub14disk.qcow2 20G
-    sudo virt-install --connect qemu:///system --virt-type kvm --name Ubuntu1404 --ram 1024             \
-        --disk path=/opt/al/var/support/vm/disks/cuckoo/Ubuntu1404/Ub14disk.qcow2,size=20,format=qcow2  \
-        --vnc --cdrom /path/to/install/CD.iso  --network network=default,mac=00:01:02:16:32:63          \
-        --os-variant ubuntutrusty
+##### Ubuntu 18.04
         
+Instructions here are for Xubuntu (XFCE) to minimize graphics requirements.
+
+If ubuntu18.04 isn't listed when you run `osinfo-query os`, then run the following commands:
+
+    mkdir -p ~/.config/osinfo/os/ubuntu.com/
+    wget https://gitlab.com/libosinfo/osinfo-db/raw/master/data/os/ubuntu.com/ubuntu-18.04.xml.in -O ~/.config/osinfo/os/ubuntu.com/ubuntu-18.04.xml
+
     sudo virt-install --connect qemu:///system --virt-type kvm \
-        --name ubuntu1604 \
+        --name ubuntu1804 \
         --ram 1024 \
-        --os-variant ubuntu16.04 \
+        --os-variant ubuntu18.04 \
         --disk size=20,format=qcow2  \
-        --cdrom ~/iso/xubuntu-16.04.5-desktop-amd64.iso \
+        --cdrom ~/iso/xubuntu-18.04.1-desktop-amd64.iso \
         --vnc --network network=default --video cirrus
         
 Once the operating system has been installed, perform the following setup.
 
     # These instructions are largely copied from https://cuckoo.sh/docs/installation/guest/linux.html
     
+    # Set NOPASSWD on the user accounts sudoers entry
+    sudo bash -c "echo 'ALL            ALL = (ALL) NOPASSWD: ALL' >> /etc/sudoers.d/allusers"
+    
     # Configure the agent to run at boot
-    sudo wget https://github.com/jbremer/agent/blob/master/agent.py -O /root/agent.py
+    sudo wget https://raw.githubusercontent.com/jbremer/agent/master/agent.py -O /root/agent.py
     sudo chmod +x /root/agent.py
     sudo crontab -e
     @reboot python /root/agent.py
     
     # Install kernel debugging symbols:
     sudo apt-get install systemtap gcc patch linux-headers-$(uname -r)
-    sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys C8CAB6595FDFF622
+    sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F2EDC64DC5AEE1F6B9C621F0C8CAB6595FDFF622
+    # If you have restrictive outbound firewall rules replace keyserver.ubuntu.com with  hkp://keyserver.ubuntu.com:80
 
     codename=$(lsb_release -cs)
     sudo tee /etc/apt/sources.list.d/ddebs.list << EOF
@@ -283,8 +287,7 @@ Once the operating system has been installed, perform the following setup.
     sudo apt-get purge whoopsie ntpdate cups-daemon avahi-autoipd avahi-daemon avahi-utils
     sudo apt-get purge account-plugin-salut libnss-mdns telepathy-salut
 
-    # Set NOPASSWD on the user accounts sudoers entry
-    sudo bash -c "echo 'ALL            ALL = (ALL) NOPASSWD: ALL' >> /etc/sudoers.d/allusers"
+    
     
 * Set the user account to automatically login
 * Set `sudo ~/agent.py` and `bash /bootstrap.sh` to run on login
