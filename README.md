@@ -419,7 +419,9 @@ configurations. The REMOTE_DISK_ROOT should be relative to the support hosts FTP
 ### DEBUGGING - docker/VM issues with cuckoo_tests.py
 
 If the logs don't provide any clues about what may be going wrong, there is a 'cuckoo_tests.py' script included in the 
-service repository. This is meant to be run on the workers, as the `al` user (or another user who can run docker containers)
+service repository. This is meant to be run on the workers, as the `al` user (or another user who can run docker containers).
+
+(you will need to install the `sshtunnel` package with `sudo pip install sshtunnel` to use `cuckoo_tests.py`)
 
     source /etc/default/al
     

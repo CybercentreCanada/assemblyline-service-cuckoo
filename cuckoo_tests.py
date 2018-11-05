@@ -231,6 +231,11 @@ class CuckooTesting:
         # do monkey patching..
         self.monkey_patch()
         self.service = self._SVC_CLASS(self.svc_cfg)  # type: al_services.alsvc_cuckoo.cuckoo.Cuckoo
+        
+        # don't forget to do sysprep
+        self.service.sysprep()
+        
+        # Now start the service
         self.service.start_service()
 
         self.log.info("Service Started. Using docker container '%s'. " 
