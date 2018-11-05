@@ -219,6 +219,9 @@ If ubuntu18.04 isn't listed when you run `osinfo-query os`, then run the followi
     mkdir -p ~/.config/osinfo/os/ubuntu.com/
     wget https://gitlab.com/libosinfo/osinfo-db/raw/master/data/os/ubuntu.com/ubuntu-18.04.xml.in -O ~/.config/osinfo/os/ubuntu.com/ubuntu-18.04.xml
 
+Install the OS. Make sure to select the option that logs the user in at boot without a password. Install any additonal 
+applications or services you'd like at this point.
+
     sudo virt-install --connect qemu:///system --virt-type kvm \
         --name ubuntu1804 \
         --ram 1024 \
@@ -227,9 +230,7 @@ If ubuntu18.04 isn't listed when you run `osinfo-query os`, then run the followi
         --cdrom ~/iso/xubuntu-18.04.1-desktop-amd64.iso \
         --vnc --network network=default --video cirrus
         
-Once the operating system has been installed, perform the following setup.
-
-    # These instructions are largely copied from https://cuckoo.sh/docs/installation/guest/linux.html
+Once the operating system has been installed, perform the following setup:
     
     # Set NOPASSWD on the user accounts sudoers entry
     sudo bash -c "echo 'ALL            ALL = (ALL) NOPASSWD: ALL' >> /etc/sudoers.d/allusers"
@@ -239,97 +240,25 @@ Once the operating system has been installed, perform the following setup.
     sudo chmod +x /root/agent.py
     sudo crontab -e
     @reboot python /root/agent.py
-    
-    # Install kernel debugging symbols:
-    sudo apt-get install systemtap gcc patch linux-headers-$(uname -r)
-    sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F2EDC64DC5AEE1F6B9C621F0C8CAB6595FDFF622
-    # If you have restrictive outbound firewall rules replace keyserver.ubuntu.com with  hkp://keyserver.ubuntu.com:80
-
-    codename=$(lsb_release -cs)
-    sudo tee /etc/apt/sources.list.d/ddebs.list << EOF
-    deb http://ddebs.ubuntu.com/ ${codename}          main restricted universe multiverse
-    deb http://ddebs.ubuntu.com/ ${codename}-updates  main restricted universe multiverse
-    deb http://ddebs.ubuntu.com/ ${codename}-proposed main restricted universe multiverse
-    EOF
-
-    sudo apt-get update
-    sudo apt-get install linux-image-$(uname -r)-dbgsym
-    
-    # Patch SystemTap tapset
-    wget https://raw.githubusercontent.com/cuckoosandbox/cuckoo/master/stuff/systemtap/expand_execve_envp.patch
-    wget https://raw.githubusercontent.com/cuckoosandbox/cuckoo/master/stuff/systemtap/escape_delimiters.patch
-    sudo patch /usr/share/systemtap/tapset/linux/sysc_execve.stp < expand_execve_envp.patch
-    sudo patch /usr/share/systemtap/tapset/uconversions.stp < escape_delimiters.patch
-    
-    # Compile Kernel extension:
-    wget https://raw.githubusercontent.com/cuckoosandbox/cuckoo/master/stuff/systemtap/strace.stp
-    sudo stap -p4 -r $(uname -r) strace.stp -m stap_ -v
-    
-    # Test Kernel extension:
-    sudo staprun -v ./stap_.ko
-    
-    # Output should be something like as follows:
-    staprun:insert_module:x Module stap_ inserted from file path_to_stap_.ko
-    
-    # The stap_.ko file should be placed in /root/.cuckoo:
-    sudo mkdir /root/.cuckoo
-    sudo mv stap_.ko /root/.cuckoo/
+        
     
     # Disable firewall inside of the vm, if exists:
     sudo ufw disable
 
     # Disable NTP inside of the vm:
     sudo timedatectl set-ntp off
-
-
+  
     # Optional - preinstalled remove software and configurations:
-    sudo apt-get purge update-notifier update-manager update-manager-core ubuntu-release-upgrader-core
-    sudo apt-get purge whoopsie ntpdate cups-daemon avahi-autoipd avahi-daemon avahi-utils
-    sudo apt-get purge account-plugin-salut libnss-mdns telepathy-salut
+    sudo apt-get purge -y update-notifier update-manager update-manager-core ubuntu-release-upgrader-core
+    sudo apt-get purge -y whoopsie ntpdate cups-daemon avahi-autoipd avahi-daemon avahi-utils
+    sudo apt-get purge -y account-plugin-salut libnss-mdns telepathy-salut
 
-    
-    
-* Set the user account to automatically login
-* Set `sudo ~/agent.py` and `bash /bootstrap.sh` to run on login
-    * This step will depend on window manager, but the command `gnome-session-manager` works for gnome
-* Install the following packages on the virtual machine: systemtap, gcc, linux-headers-$(uname -r)
-* Copy `data/strace.stp` onto the virtual machine
-* Run `sudo stap -k 4 -r $(uname -r) strace.stp -m stap_ -v`
-* Place stap_.ko into /root/.cuckoo/
-* Uninstall the following packages which cause extraneous network noise:
-    * software-center
-    * update-notifier
-    * oneconf
-    * update-manager
-    * update-manager-core
-    * ubuntu-release-upgrader-core
-    * whoopsie
-    * ntpdate
-    * cups-daemon
-    * avahi-autoipd
-    * avahi-daemon
-    * avahi-utils
-    * account-plugin-salut
-    * libnss-mdns
-    * telepathy-salut
-* Delete `/etc/network/if-up.d/ntpdate`
-* Add `net.ipv6.conf.all.disable_ipv6 = 1` to /etc/sysctl.conf
-* Edit `/etc/init/procps.conf`, changing the "start on" line to `start on runlevel [0123456]`
 
-When done, shutdown the virtual machine. Remove the CD drive configuration from the virtual machine. The virtual 
-machine will fail if it contains any references to the install medium.
+You may also wish to [install the systemtap kernel module](docs/linux_systemtap.md) for however at time of writing, the
+provided instructions did not work for Ubuntu 18.04.
 
-    sudo virsh edit Ubuntu1404
-
-Create a snapshot of the virtual machine.
-
-    sudo virsh snapshot-create Ubuntu1404
-
-Verify that there is a "current" snapshot with the following command, it should result in a lot of XML.
-
-    sudo virsh snapshot-current Ubuntu1404
-
-Then continue from the "Prepare the snapshot for Cuckoo" section.
+**NB**: You must configure a static IP and gateway on the guest, which you will use later with the `vmprep.py`
+script, in particular you will use the `--vm_ip`/`--gw_ip` options and *not* the `--vmcloak_name` option
 
 
 ##### Android
@@ -341,8 +270,8 @@ Android is not *Officially* supported.
 Use the `vmprep.py` script included in this repository under the `vm/` directory. It may be copied and used on its own on a separate system
 outside of your AL cluster. `vmprep.py` does the following steps:
 
-1. Create a linked clone of the VM
-2. Modifies some settings of the new VM 
+1. Creates a linked clone of the VM
+2. Modifies some settings of the new VM (the XML configuration used by KVM)
 3. Boots the VM and confirms connectivity with the cuckoo agent
 4. Takes a running snapshot
 5. Exports all necessary files to a directory specified with `--output` (default: al_cuckoo_vms)
@@ -400,9 +329,9 @@ configure networking for it inside the cuckoobox docker container.
 
 ##### Multiple routes using the same base VM
 
-For the time being, each VM is configured with a static route (either inetsim or gateway).
+Each VM is configured with a static route (either inetsim or gateway).
 
-It is possible to configure multiple routes for the same *base* VM, but will require some manual intervention.
+It is possible to configure multiple routes using the same *base* VM, but will require some manual intervention.
 
 First, create the additional clone, but use the `--only_create` argument:
 
