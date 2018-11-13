@@ -7,7 +7,7 @@ This ASSEMBLYLINE service provides the ability to perform live dynamic analysis 
 ## CUCKOO OVERVIEW
 
 Cuckoo Sandbox supports instrumenting Windows, Linux, Macintosh, and
-Android virtual machines; and can also launch files that may cause unintended execution, like PDF's. The Cuckoo 
+Android virtual machines; and can also launch files that may cause unintended execution, like PDFs. The Cuckoo 
 Sandbox monitors execution, filesystem, and network activity that occurs when a file is opened. This service summarizes 
 these results for the ASSEMBLYLINE UI and provides a links to the full result set. Files that are unpacked and saved to 
 disk are fed back into ASSEMBLYLINE.
@@ -27,14 +27,14 @@ random IPs for DNS requests. By default it will create IPs in the range 10.0.0.0
 * **community_updates** - See EXTENDING section below for details
 * **result_parsers** - See EXTENDING section below for details
 * **cuckoo_image** - The name of the cuckoobox docker container to use
-* **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. 
+* **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox Docker container. It doesn't include memory used by inetsim or the Cuckoo service. 
 It should be at least 1G greater than the largest amount of RAM configured for any one of your VMs.
 
 The following options are available, but shouldn't need to be changed from the defaults:
 
 * **LOCAL_DISK_ROOT** - Local path to disk images on worker, appended to ``workers.virtualmachines.disk_root`` 
 from your seed. Default full path: ``/opt/al/vmm/disks/cuckoo_vms/``
-* **LOCAL_VM_META_ROOT** - Local path to XML configuration used by KVM to define the analysis VMs. 
+* **LOCAL_VM_META_ROOT** - Local path to the XML configuration used by KVM to define the analysis VMs. 
 Appending to ``system.root`` from your seed, default full path: ``/opt/al/var/cuckoo/``
 * **REMOTE_DISK_ROOT** - Path to disk images and XML files for cuckoo virtual machines on your support server.
 * **dedup_similar_percent** - (default 80) If a file is X% similar (as measured using ssdeep) it's not reported/extracted by AssemblyLine.
@@ -46,11 +46,11 @@ Appending to ``system.root`` from your seed, default full path: ``/opt/al/var/cu
 The following options are available for submissions to the Cuckoo service (accessible via the hidden pane on the left of the screen on the "Submit" page):
 
 * **analysis_vm** - The name of the virtual machine to use for this submission. The list of options must contain 
-the VM names you want to make available, where 'auto' is a special value that will try and automatically pick the correct VM.
+the VM names you want to make available, where 'auto' is a special value that will attempt to pick the correct VM automatically.
 * **analysis_timeout** - Maximum amount of time to wait for analysis to complete. NB: The analysis job may complete faster
 than this if the process being monitored exits.
 * **generate_report** - Generate a full report (cuckoo_report.tar.gz) and attach it as a supplementary file
-* **dump_processes** - Dump process memory. These would be available in the cuckoo_report.tar.gz supplementary file
+* **dump_processes** - Dump process memory. This would be available in the cuckoo_report.tar.gz supplementary file
 * **dll_function** - If a DLL file is submitted, manually select the function within it to execute
 * **arguments** - command line arguments to pass to the sample being analyzed
 * **custom_options** - Custom options to pass to the cuckoo submission. Same as the `--options` command line option [here](https://cuckoo.sh/docs/usage/submit.html)
@@ -73,7 +73,7 @@ Refer to the following website for registry deployment options.
     https://docs.docker.com/registry/deploying/
 
 To simply start up a local registry, run the following command. This is most useful in an appliance or development
-deployment. For a production appliance configuration you should configure this docker image to start on boot.
+deployment. For a production appliance configuration you should configure this Docker image to start on boot.
 
     sudo docker run -d -p 127.0.0.1:5000:5000 --name registry registry:2
 
@@ -192,7 +192,7 @@ sudo virt-install --connect qemu:///system --virt-type kvm \
     --vnc --network network=default --video cirrus
 ```
 
-At this point, Windows should be setup and ready for Cuckoo (login without password, cuckoo agent running). 
+At this point, Windows should be set up and ready for Cuckoo (login without password, cuckoo agent running). 
 You may now customize it with additional applications (Office, Adobe, .net libraries, etc). 
 If you want to connect to the internet from within your VM, you will likely need to 
 configure a new virtual network connection based on the static IP configuration you used in vmcloak. 
@@ -206,7 +206,7 @@ matching your static IP configuration, then modify the NIC for your VM to use th
     Make sure that `Enabled Protected Mode at Startup` and `Enable Enhanced Security` are unchecked.
     No workaround is known for Reader DC.
 
-When done, shutdown the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
+When done, shut down the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
 guest has completely shut down. 
 
 
@@ -386,8 +386,7 @@ whatever Cuckoo's service config has configured for REMOTE_DISK_ROOT.
 2. Modifies Cuckoo's submission parameters to make sure this VM is included as an option
 
 In a default appliance configuration, the support server data is located at /opt/al/var/support
-and REMOTE_DISK_ROOT defaults to 'vm/disks/cuckoo/', so you could just copy the directories to
-/opt/al/var/support/vm/disks/cuckoo/
+and REMOTE_DISK_ROOT defaults to 'vm/disks/cuckoo/'.
 
     # Example usage
     # become the 'al' user
@@ -403,7 +402,7 @@ and REMOTE_DISK_ROOT defaults to 'vm/disks/cuckoo/', so you could just copy the 
 
 ## EXTENDING
 
-The Cuckoo service is built to allow you to extend it as required primarily through the use of two service configuration options:
+The Cuckoo service is built to allow you to extend it as required, primarily through the use of two service configuration options:
 
 1. **community_updates** - This may be 0 to many [cuckoo community](https://github.com/cuckoosandbox/community) 
 repositories. These can include any cuckoo customizations. These repositories are checked every hour for updates.
