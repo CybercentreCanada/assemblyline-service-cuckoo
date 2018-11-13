@@ -14,28 +14,32 @@ WHITELIST_APPLICATIONS = {
 
 # These domains may be present due to benign activity on the host
 WHITELIST_DOMAINS = {
-    'Adobe': '.*\.adobe.com',
-    'Android NTP': '.*\.android.pool.ntp.org',
-    'Windows Time Server': 'time\.(microsoft|windows)\.com',
-    'Microsoft IPv4To6': '.*\.?teredo.ipv6.microsoft.com',
-    'Microsoft Watson': 'watson.microsoft.com',
-    'Microsoft DNS Check': 'dms.msftncsi.com',
-    'Microsoft IPv4 Check': 'www.msftncsi.com',
-    'Microsoft IPv6 Check': 'ipv6.msftncsi.com',
-    'Microsoft CRL server': 'crl.microsoft.com',
-    'TCP Local': '.*\.local',
-    'Unix Local': 'local',
-    'Windows': '.*\.windows.com',
-    'Ubuntu Update': 'changelogs.ubuntu.com',
-    'Ubuntu Netmon': 'daisy.ubuntu.com',
-    'Ubuntu NTP': 'ntp.ubuntu.com',
-    "Windows Update": ".*\.windowsupdate.com",
-    "Comodo": ".*\.comodoca.com",
-    "Verisign": ".*\.verisign.com"
+    'Adobe': '.*\.adobe\.com$',
+    'Android NTP': '.*\.android\.pool\.ntp\.org$',
+    'Windows Time Server': 'time\.(microsoft|windows)\.com$',
+    'Microsoft IPv4To6': '.*\.?teredo\.ipv6\.microsoft\.com$',
+    'Microsoft Watson': 'watson\.microsoft\.com$',
+    'Microsoft DNS Check': 'dms\.msftncsi\.com$',
+    'Microsoft IPv4 Check': 'www\.msftncsi\.com$',
+    'Microsoft IPv6 Check': 'ipv6\.msftncsi\.com$',
+    'Microsoft CRL server': 'crl\.microsoft\.com$',
+    # Looks like www.microsoft.com also hosts some kind of CRL - seeing various GETs for /pki/crl/products/WinPCA.crl
+    'Microsoft WWW': '(www|go)\.microsoft\.com$',
+    'TCP Local': '.*\.local$',
+    'Unix Local': 'local$',
+    'Windows': '.*\.windows.com$',
+    'Ubuntu Update': 'changelogs\.ubuntu\.com$',
+    'Ubuntu Netmon': 'daisy\.ubuntu\.com$',
+    'Ubuntu NTP': 'ntp\.ubuntu\.com$',
+    "Windows Update": ".*\.windowsupdate\.com$",
+    "Comodo": ".*\.comodoca\.com$",
+    "Verisign": ".*\.verisign\.com$",
+    "IPv6 Reverse DNS": "[0-9a-f\.]+\.ip6.arpa$"
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
 WHITELIST_IPS = {
+    'Public DNS': '(^1\.1\.1\.1$)|(^8\.8\.8\.8$)',
     'localhost': r'127.0.0.1',
     'Honeynet': r'169.169.169.169',
     'Windows SSDP': r'239.255.255.250',
