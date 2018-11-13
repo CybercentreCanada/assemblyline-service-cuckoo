@@ -152,6 +152,7 @@ class Cuckoo(ServiceBase):
     SERVICE_ACCEPTS = "(document/.*|executable/.*|java/.*|code/.*|archive/(zip|rar)|unknown|android/apk)"
     SERVICE_ENABLED = True
     SERVICE_REVISION = ServiceBase.parse_revision('$Id$')
+    SERVICE_VERSION = '2'
     SERVICE_STAGE = "CORE"
     SERVICE_TIMEOUT = 800
     SERVICE_CATEGORY = "Dynamic Analysis"
