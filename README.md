@@ -219,7 +219,7 @@ If ubuntu18.04 isn't listed when you run `osinfo-query os`, then run the followi
     mkdir -p ~/.config/osinfo/os/ubuntu.com/
     wget https://gitlab.com/libosinfo/osinfo-db/raw/master/data/os/ubuntu.com/ubuntu-18.04.xml.in -O ~/.config/osinfo/os/ubuntu.com/ubuntu-18.04.xml
 
-Install the OS. Make sure to select the option that logs the user in at boot without a password. Install any additonal 
+Install the OS. Make sure to select the option that logs the user in at boot without a password. Install any additional 
 applications or services you'd like at this point.
 
     sudo virt-install --connect qemu:///system --virt-type kvm \
@@ -383,10 +383,8 @@ This script does two tasks:
 
 1. Copies the two directories (per VM) created by vmprep to your support server to 
 whatever Cuckoo's service config has configured for REMOTE_DISK_ROOT.
-2. Modifies Cuckoo's submission parameters to make sure this VM is included as an option
+2. Modifies Cuckoo's submission parameter (`analysis_vm`) to make sure this VM is included as an option
 
-In a default appliance configuration, the support server data is located at /opt/al/var/support
-and REMOTE_DISK_ROOT defaults to 'vm/disks/cuckoo/'.
 
     # Example usage
     # become the 'al' user
