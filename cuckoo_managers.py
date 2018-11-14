@@ -101,10 +101,12 @@ class CuckooVmManager(object):
                              "to use the 'analysis_vm' submission parameter. See the README for more "
                              "details.")
             self._fetch_meta(cfg['vm_meta'], self.local_meta_root)
+
             # We need to move the meta file
             src_config_path = os.path.join(self.local_meta_root, cfg['vm_meta'])
             self.log.info("Moving %s to %s" % (src_config_path, self.vm_meta_path))
             shutil.move(src_config_path, self.vm_meta_path)
+
             with open(self.vm_meta_path, 'r') as fh:
                 self.vm_meta = json.load(fh)
 
