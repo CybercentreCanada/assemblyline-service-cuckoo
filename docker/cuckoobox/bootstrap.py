@@ -100,13 +100,15 @@ def setup_network(eth0_ip_p, networks_p):
     create_inetsim = False
     contexts = []
     counter = 1
-    for vm_name, [vm_ip_p, vm_gateway_p, vm_resultserver_ip, vm_netmask, vm_vrouteip, route_opt, if_name_p] in networks_p.iteritems():
+    #for vm_name, [vm_ip_p, vm_gateway_p, vm_resultserver_ip, vm_netmask, vm_vrouteip, route_opt, if_name_p] in networks_p.iteritems():
+    for vm_name, [vm_ip_p, vm_gateway_p, vm_resultserver_ip, vm_netmask, route_opt,
+                  if_name_p] in networks_p.iteritems():
         ctx = {
             'virt_bridge_name': if_name_p,
             'virt_bridge_ip': vm_gateway_p,
             'virt_bridge_resultserver_ip': vm_resultserver_ip,
             'virt_bridge_netmask': vm_netmask,
-            'virt_route_addr': vm_vrouteip,
+            # 'virt_route_addr': vm_vrouteip,
             'vm_ip': vm_ip_p,
             'route_opt': route_opt,
             'mac': gen_mac_addr(),
@@ -115,7 +117,7 @@ def setup_network(eth0_ip_p, networks_p):
         counter += 1
         if route_opt == "inetsim":
             create_inetsim = True
-            ctx['fake_ip_stub'] = vm_vrouteip
+            # ctx['fake_ip_stub'] = vm_vrouteip
         contexts.append(ctx)
 
     ctx = {"contexts": contexts}
@@ -336,7 +338,7 @@ if __name__ == "__main__":
                                  kvm['gateway'],
                                  resultserver_ip,
                                  kvm['netmask'],
-                                 kvm["fakenet"],
+
                                  kvm['route'],
                                  if_name]
 

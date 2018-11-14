@@ -7,7 +7,7 @@ This ASSEMBLYLINE service provides the ability to perform live dynamic analysis 
 ## CUCKOO OVERVIEW
 
 Cuckoo Sandbox supports instrumenting Windows, Linux, Macintosh, and
-Android virtual machines; and can also launch files that may cause unintended execution, like PDF's. The Cuckoo 
+Android virtual machines; and can also launch files that may cause unintended execution, like PDFs. The Cuckoo 
 Sandbox monitors execution, filesystem, and network activity that occurs when a file is opened. This service summarizes 
 these results for the ASSEMBLYLINE UI and provides a links to the full result set. Files that are unpacked and saved to 
 disk are fed back into ASSEMBLYLINE.
@@ -27,31 +27,34 @@ random IPs for DNS requests. By default it will create IPs in the range 10.0.0.0
 * **community_updates** - See EXTENDING section below for details
 * **result_parsers** - See EXTENDING section below for details
 * **cuckoo_image** - The name of the cuckoobox docker container to use
-* **vm_meta** - The name of the configuration file describing the VM(s) located at ``REMOTE_DISK_ROOT``
-* **ramdisk_size** - (default 2048M) This is the size of the ramdisk that Cuckoo will use to store VM snapshots and the running virtual machine image. If it's not large enough analysis will fail, see the Troubleshooting section for more information.
-* **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox docker container. It doesn't include memory used by inetsim or the Cuckoo service. It should be at least 1G greater than the ramdisk.
+* **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox Docker container. It doesn't include memory used by inetsim or the Cuckoo service. 
+It should be at least 1G greater than the largest amount of RAM configured for any one of your VMs.
 
 The following options are available, but shouldn't need to be changed from the defaults:
 
-* **LOCAL_DISK_ROOT** - Local path to disk images on worker, appended to ``workers.virtualmachines.disk_root`` from your seed.
-* **LOCAL_VM_META_ROOT** - Local path to XML files describing
+* **LOCAL_DISK_ROOT** - Local path to disk images on worker, appended to ``workers.virtualmachines.disk_root`` 
+from your seed. Default full path: ``/opt/al/vmm/disks/cuckoo_vms/``
+* **LOCAL_VM_META_ROOT** - Local path to the XML configuration used by KVM to define the analysis VMs. 
+Appending to ``system.root`` from your seed, default full path: ``/opt/al/var/cuckoo/``
 * **REMOTE_DISK_ROOT** - Path to disk images and XML files for cuckoo virtual machines on your support server.
 * **dedup_similar_percent** - (default 80) If a file is X% similar (as measured using ssdeep) it's not reported/extracted by AssemblyLine.
 
-**NB**: In order for any changes to virtual machines (new VM, changed ``vm_meta`` file, etc) to be picked up, hostagent will need to be restarted.
+**NB**: In order for any changes to virtual machines to be picked up, the hostagent on each worker will need to be restarted.
 
 ### SUBMISSION OPTIONS
 
 The following options are available for submissions to the Cuckoo service (accessible via the hidden pane on the left of the screen on the "Submit" page):
 
+* **analysis_vm** - The name of the virtual machine to use for this submission. The list of options must contain 
+the VM names you want to make available, where 'auto' is a special value that will attempt to pick the correct VM automatically.
 * **analysis_timeout** - Maximum amount of time to wait for analysis to complete. NB: The analysis job may complete faster
+than this if the process being monitored exits.
 * **generate_report** - Generate a full report (cuckoo_report.tar.gz) and attach it as a supplementary file
-* **dump_processes** - Dump process memory. These would be available in the cuckoo_report.tar.gz supplementary file
+* **dump_processes** - Dump process memory. This would be available in the cuckoo_report.tar.gz supplementary file
 * **dll_function** - If a DLL file is submitted, manually select the function within it to execute
 * **arguments** - command line arguments to pass to the sample being analyzed
 * **custom_options** - Custom options to pass to the cuckoo submission. Same as the `--options` command line option [here](https://cuckoo.sh/docs/usage/submit.html)
-* **pull_memory** - DEPRECATED
-* **dump_memory** - Dump full VM memory. *NB*: This is very slow!
+* **dump_memory** - Dump full VM memory and run volatility plugins on it. *NB*: This is very slow!
 * **no_monitor** - Run analysis without injecting the Cuckoo monitoring agent. Equivalent to passing `--options free=yes` (see [here](https://cuckoo.sh/docs/usage/packages.html) for more information)
 * **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or simulated services (`inetsim`) using [INetSim](https://www.inetsim.org/).
 
@@ -69,8 +72,8 @@ Refer to the following website for registry deployment options.
 
     https://docs.docker.com/registry/deploying/
 
-To simply start up a local registry, run the following command. This is most useful in an appliance or dev-vm 
-deployment.
+To simply start up a local registry, run the following command. This is most useful in an appliance or development
+deployment. For a production appliance configuration you should configure this Docker image to start on boot.
 
     sudo docker run -d -p 127.0.0.1:5000:5000 --name registry registry:2
 
@@ -95,7 +98,7 @@ The following commands assume a local registry. Change localhost as needed for a
 is configured on all workers, the following commands will only need to be run once.
 
     cd /opt/al/pkg/al_services/alsvc_cuckoo/docker/cuckoobox
-    sudo apt-get install python-dev libffi-dev libfuzzy-dev
+    sudo apt-get install -y python-dev libffi-dev libfuzzy-dev
     sudo -u al PYTHONPATH=$PYTHONPATH python get_libs_for_cuckoo_docker.py
     sudo docker build -t localhost:5000/cuckoo/cuckoobox .
     sudo docker push localhost:5000/cuckoo/cuckoobox
@@ -109,96 +112,93 @@ By default Cuckoo ships with two routes for network traffic.
 1. **inetsim** - The internet simulator "inetsim", and 
 2. **gateway** - a direct connection to the internet via the ASSEMBLYLINE worker's gateway. 
 
-Either of these can be disabled in the Cuckoo service 
-configurations.
+Either of these can be disabled in the Cuckoo service configurations.
 
-### EPHEMERAL VIRTUAL MACHINE
+### CUCKOO ANALYSIS / GUEST VIRTUAL MACHINE
 
 #### Build Base Virtual Machine
 
-This step will vary slightly depending on whatever operating system you choose. These are examples for Windows 7 and 
-Ubuntu. Cuckoo expects all virtual machine data and metadata to exist under /opt/al/var/support/vm/disks/cuckoo/ 
-which can be modified via the ASSEMBLYLINE configurations.
+This step will vary slightly depending on whatever operating system you choose. We have tried to re-use standard
+tools as much as possible (ie/ [vmcloak](https://github.com/hatching/vmcloak)). 
 
-**NB**: It is highly recommended that you create all base VMs on a host matching the version of the cuckoobox docker
-container (currently ubuntu 16.04).
+These are examples for Windows 7/8/10 and Ubuntu 18.04.
+
+**NB**: This step can be done on a stand alone machine not connected to your AssemblyLine cluster, 
+however the host OS *must* be the same or older version of Ubuntu used for the cuckoobox docker
+container (currently ubuntu 18.04).
 
 Before continuing, make sure the following libraries are installed:
 
-    sudo apt-get install libguestfs-tools python-guestfs
+    sudo apt-get install -y libguestfs-tools python-guestfs build-essential libssl-dev libffi-dev python-dev genisoimage
+    sudo pip install vmcloak
 
-##### Ubuntu 14.04
+##### Windows 7 / 8 / 10
 
-    sudo -u al mkdir -p /opt/al/var/support/vm/disks/cuckoo/Ubuntu1404/
-    sudo -u al qemu-img create -f qcow2 /opt/al/var/support/vm/disks/cuckoo/Ubuntu1404/Ub14disk.qcow2 20G
-    sudo virt-install --connect qemu:///system --virt-type kvm --name Ubuntu1404 --ram 1024             \
-        --disk path=/opt/al/var/support/vm/disks/cuckoo/Ubuntu1404/Ub14disk.qcow2,size=20,format=qcow2  \
-        --vnc --cdrom /path/to/install/CD.iso  --network network=default,mac=00:01:02:16:32:63          \
-        --os-variant ubuntutrusty
+For Windows, we make use of [vmcloak](https://github.com/hatching/vmcloak) to generate an unattended .iso file
+which we then use to build a KVM VM (or 'domain' in KVM terminology). 
+
+You can check out additional options for building the iso with `vmcloak init --help` (ignore anything VirtualBox 
+related), the example below provides the suggested minimal options:
+ 
+* `--vm iso` to just generate an ISO and *not* build the full VM using VirtualBox
+* `--ip`/`--netmask`/`--gateway` to define the subnet you want the VM to use.
+* `--serial-key` for your Windows serial key. 
+    * If you have a Multiple Activation Key (MAK) from a Visual Studio Pro
+subscription, these don't work out of the box with vmcloak (as of 0.4.6). There is a [PR](https://github.com/hatching/vmcloak/pull/131)
+but until then you can use the forked repo: `sudo pip install -U --no-deps git+https://github.com/jdval/vmcloak.git`. If you install this
+you will need to add `--serial-key-type mak` as an argument as well.
+
+```
+# Mount the installation media as a loopback device
+sudo mkdir /mnt/win7x64
+sudo mount -o loop,ro vms/win7ultimate.iso /mnt/win7x64
+
+# Run vmcloak. You can safely ignore any warnings about 'vboxmanage' or VirtualBox not being installed.
+vmcloak init --win7x64 --iso-mount /mnt/win7x64 --serial-key ... -v --vm iso \
+    --ip 10.1.1.50 --netmask 255.255.255.0 --gateway 10.1.1.1 win7vm
+```
         
-Once the operating system has been installed, perform the following setup.
+If this goes well, it will generate a file in `~/.vmcloak/iso/win7vm.iso`. You can unmount the origianl ISO file now:
 
-* Set NOPASSWD on the user accounts sudoers entry
-* Set the user account to automatically login
-* Copy agent.py from the cuckoo repository to the main users home directory in the virtual machine
-* Set `sudo ~/agent.py` and `bash /bootstrap.sh` to run on login
-    * This step will depend on window manager, but the command `gnome-session-manager` works for gnome
-* Install the following packages on the virtual machine: systemtap, gcc, linux-headers-$(uname -r)
-* Copy `data/strace.stp` onto the virtual machine
-* Run `sudo stap -k 4 -r $(uname -r) strace.stp -m stap_ -v`
-* Place stap_.ko into /root/.cuckoo/
-* Uninstall the following packages which cause extraneous network noise:
-    * software-center
-    * update-notifier
-    * oneconf
-    * update-manager
-    * update-manager-core
-    * ubuntu-release-upgrader-core
-    * whoopsie
-    * ntpdate
-    * cups-daemon
-    * avahi-autoipd
-    * avahi-daemon
-    * avahi-utils
-    * account-plugin-salut
-    * libnss-mdns
-    * telepathy-salut
-* Delete `/etc/network/if-up.d/ntpdate`
-* Add `net.ipv6.conf.all.disable_ipv6 = 1` to /etc/sysctl.conf
-* Edit `/etc/init/procps.conf`, changing the "start on" line to `start on runlevel [0123456]`
-
-When done, shutdown the virtual machine. Remove the CD drive configuration from the virtual machine. The virtual 
-machine will fail if it contains any references to the install medium.
-
-    sudo virsh edit Ubuntu1404
-
-Create a snapshot of the virtual machine.
-
-    sudo virsh snapshot-create Ubuntu1404
-
-Verify that there is a "current" snapshot with the following command, it should result in a lot of XML.
-
-    sudo virsh snapshot-current Ubuntu1404
-
-Then continue from the "Prepare the snapshot for Cuckoo" section.
-
-##### Windows 7
-
-    sudo -u al mkdir -p /opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/
-    sudo -u al qemu-img create -f qcow2 /opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/Win7disk.qcow2 20G
-    sudo virt-install --connect qemu:///system --virt-type kvm --name Win7SP1x86 --ram 1024             \
-        --disk path=/opt/al/var/support/vm/disks/cuckoo/Win7SP1x86/Win7disk.qcow2,size=20,format=qcow2  \
-        --vnc --cdrom /path/to/install/CD.iso  --network network=default,mac=00:01:02:16:32:64          \
-        --os-variant win7 --video cirrus
-
-Once the operating system has been installed, perform the following setup.
+    sudo umount /mnt/win7x64
+    
+If vmcloak does not work, then you will need to do the following steps manually *after* installing the VM:
 
 * Install Python 2.7
 * Optional: Install PIL (Python Image Library) if periodic screenshots are desired
-* Disable Windows Update, Windows Firewall, and UAC(User Access Control)
+* Disable Windows Update, Windows Firewall, and UAC (User Access Control)
 * set python.exe and pythonw.exe to "Run as Administrator"
 * Optional: Install Java, .Net, other applications and runtime libraries
-* Make sure no password is required to get to a desktop from boot
+* Enable automatic login and make sure no password is required to get to a desktop from boot
+* Configure [cuckoo agent](https://github.com/jbremer/agent) to start at boot
+
+Now build the VM. You may do this using the `virt-manager` GUI tool as well, just make sure that qcow2 is used as the disk format.
+Some important options for virt-install:
+
+* `--name` - The name of the VM / domain
+* `--ram` - Amount of RAM. Windows 8/10 will likely need more.
+* `--os-variant` - The specific OS variant being used. For more options, see output of command `osinfo-query os`
+* `--cdrom` - The path to the iso you created in the previous step (or the regular ISO for a manual Windows or Linux 
+base VM)
+
+
+```
+sudo virt-install --connect qemu:///system --virt-type kvm \
+	--name win7vm \
+	--ram 1024 \
+	--os-variant win7 \
+    --disk size=20,format=qcow2  \
+	--cdrom ~/.vmcloak/iso/win7vm.iso \
+    --vnc --network network=default --video cirrus
+```
+
+At this point, Windows should be set up and ready for Cuckoo (login without password, cuckoo agent running). 
+You may now customize it with additional applications (Office, Adobe, .net libraries, etc). 
+If you want to connect to the internet from within your VM, you will likely need to 
+configure a new virtual network connection based on the static IP configuration you used in vmcloak. 
+Using `virt-manager`, go to Edit->Connection Details->Virtual Networks and add a new virtual network with a subnet
+matching your static IP configuration, then modify the NIC for your VM to use the new virtual network.
+
 * Notes about specific apps
     * **Adobe Reader** - Security features of recent version of Adobe Reader cause some 
     [false positive signature hits](https://github.com/cuckoosandbox/community/issues/421). 
@@ -206,23 +206,60 @@ Once the operating system has been installed, perform the following setup.
     Make sure that `Enabled Protected Mode at Startup` and `Enable Enhanced Security` are unchecked.
     No workaround is known for Reader DC.
 
-When done, shutdown the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
-guest has completely shut down. Remove the CD drive configuration from the virtual machine by editing the XML. 
-The virtual machine will fail if it contains any references to the install medium.
+When done, shut down the virtual machine. Windows may choose to hibernate instead of shutting down, make sure the
+guest has completely shut down. 
 
-    sudo virsh edit Win7SP1x86  
 
-Create a snapshot of the virtual machine.
+##### Ubuntu 18.04
+        
+Instructions here are for Xubuntu (XFCE) to minimize graphics requirements.
 
-    sudo virsh snapshot-create Win7SP1x86
+If ubuntu18.04 isn't listed when you run `osinfo-query os`, then run the following commands:
 
-Verify that there is a "current" snapshot with the following command, it should result in a lot of XML.
+    mkdir -p ~/.config/osinfo/os/ubuntu.com/
+    wget https://gitlab.com/libosinfo/osinfo-db/raw/master/data/os/ubuntu.com/ubuntu-18.04.xml.in -O ~/.config/osinfo/os/ubuntu.com/ubuntu-18.04.xml
 
-    sudo virsh snapshot-current Win7SP1x86
+Install the OS. Make sure to select the option that logs the user in at boot without a password. Install any additional 
+applications or services you'd like at this point.
 
-##### Windows 10
+    sudo virt-install --connect qemu:///system --virt-type kvm \
+        --name ubuntu1804 \
+        --ram 1024 \
+        --os-variant ubuntu18.04 \
+        --disk size=20,format=qcow2  \
+        --cdrom ~/iso/xubuntu-18.04.1-desktop-amd64.iso \
+        --vnc --network network=default --video cirrus
+        
+Once the operating system has been installed, perform the following setup:
+    
+    # Set NOPASSWD on the user accounts sudoers entry
+    sudo bash -c "echo 'ALL            ALL = (ALL) NOPASSWD: ALL' >> /etc/sudoers.d/allusers"
+    
+    # Configure the agent to run at boot
+    sudo wget https://raw.githubusercontent.com/jbremer/agent/master/agent.py -O /root/agent.py
+    sudo chmod +x /root/agent.py
+    sudo crontab -e
+    @reboot python /root/agent.py
+        
+    
+    # Disable firewall inside of the vm, if exists:
+    sudo ufw disable
 
-Windows 10 is not *Officially* supported.
+    # Disable NTP inside of the vm:
+    sudo timedatectl set-ntp off
+  
+    # Optional - preinstalled remove software and configurations:
+    sudo apt-get purge -y update-notifier update-manager update-manager-core ubuntu-release-upgrader-core
+    sudo apt-get purge -y whoopsie ntpdate cups-daemon avahi-autoipd avahi-daemon avahi-utils
+    sudo apt-get purge -y account-plugin-salut libnss-mdns telepathy-salut
+
+
+You may also wish to [install the systemtap kernel module](docs/linux_systemtap.md) for however at time of writing, the
+provided instructions did not work for Ubuntu 18.04.
+
+**NB**: You must configure a static IP and gateway on the guest, which you will use later with the `vmprep.py`
+script, in particular you will use the `--vm_ip`/`--gw_ip` options and *not* the `--vmcloak_name` option
+
 
 ##### Android
 
@@ -230,69 +267,140 @@ Android is not *Officially* supported.
 
 #### Prepare the snapshot for Cuckoo
 
-The prepare_vm command line will also differ depending on OS, and IP space. A sample for Windows 7 is provided 
-below.
+Use the `vmprep.py` script included in this repository under the `vm/` directory. It may be copied and used on its own on a separate system
+outside of your AL cluster. `vmprep.py` does the following steps:
 
-**NB**: This will create a qcow2 overlay file that references the qcow2 file from your original VM. The overlay is
-linked to the current state of the original qcow2 file, *not* the snapshot. This can lead to problems if you make use of 
-the original base VM that uses (and changes) the original file.
+1. Creates a linked clone of the VM
+2. Modifies some settings of the new VM (the XML configuration used by KVM)
+3. Boots the VM and confirms connectivity with the cuckoo agent
+4. Takes a running snapshot
+5. Exports all necessary files to a directory specified with `--output` (default: al_cuckoo_vms)
 
-    source /etc/default/al
-    cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo -E PYTHONPATH=$PYTHONPATH ./prepare_vm.py --domain Win7SP1x86 --platform windows \
-        --hostname PREPTEST --tags "pe32,default" --force --base Win7SP1x86  --name inetsim_Win7SP1x86 \
-        --guest_profile Win7SP1x86 --template win7 --ordinal 10 --route inetsim
-    
-The parameters for prepare_vm.py are:
+`vmprep.py --help` provides a detailed explanation of usage and options, typical usage is displayed below with
+minimal options:
 
-* domain
-    * The same as the virt-install --name argument
-* platform
-    * The "Cuckoo platform." Either "windows" or "linux" 
-* hostname
-    * A new hostname for the prepared VM 
-* tags
-    * Comma separated list of tags which map to partial or full tags in common/constraints.py
-    * Cuckoo will favour more specific tags
-    * One VM may include the tag "default" to function as a default.
-* force
-    * Overwrite domain name if needed.
-* base
-    * Subdirectory of /opt/al/var/support/vm/disks/cuckoo/ containing the disk.
-* name
-    * Name of the new domain to create.
-* guest_profile
-    * The volatility profile
-    * A list of all possible guest profiles is available on the [Volatility website.](https://github.com/volatilityfoundation/volatility/wiki/Volatility%20Usage#selecting-a-profile)
-* template
-    * The prepare_vm template, valid values are "win7", "win10", or "linux"
-* ordinal
-    * A number between 1 and 32000, each prepared virtual machine needs a unique ordinal
-    * This number is turned into an IP address, so any collision between deployed virtual machines may cause undefined 
-  errors
-* route
-    * Either gateway or inetsim
-    * If gateway is chosen, all traffic from the virtual machine will be routed over the internet
-    * If inetsim is chosen, all traffic from the virtual machine will be routed to an inetsim instance 
+* `--in_domain` - the name of 'input' KVM VM/domain. This domain is not modified, a linked clone is created.
+* `--snapshot_domain` - the name of the clone VM/domain to create. If this already exists and you want to replace it, 
+make sure to include the `--force` option
+* `--tags` - comma separate list of tags that this VM should be used for
+* `--guest_profile` - The volatility profile. A list of all possible guest profiles is available on the [Volatility website](https://github.com/volatilityfoundation/volatility/wiki/Volatility%20Usage#selecting-a-profile).
+* `--vmcloak_name` - The name used in the vmcloak step. If vmcloak wasn't used (ie/ for Linux or a custom Windows build),
+then you must specify the static IP and gateway used by your VM, eg/ `--vm_ip 10.1.1.10/24` and `--gw_ip 10.1.1.1`
+
+```
+sudo ./vmprep.py -v \
+    --in_domain win7vm \
+    --snapshot_domain inetsim_win7 \
+    --route inetsim \
+    --platform windows \
+    --tags pe32,pe64,default \
+    --guest_profile Win7SP1x64 \
+    --vmcloak_name win7vm
+```
+
+This should create a new directory (default: al_cuckoo_vms) in your current directory. Transfer this over to your AL
+support server and run the included `import-vm.py` script to copy data into the appropriate locations.
+
+```
+al_cuckoo_vms/
+│   import-vm.py   
+│
+└───win7vm/
+│      win7vm.qcow2
+│      inetsim_win7.qcow2
+│   
+└───inetsim_win7/
+       inetsim_win7.xml
+       inetsim_win7_snapshot.xml
+       inetsim_win7_meta.json
+```
+
+Detailed description of files
+
+* win7vm.qcow2 - this is the large base disk image
+* inetsim_win7.qcow2 - this is the linked disk image, containing the RAM for the running snapshot. 
+If you run `qemu-img info` and notice that the path for the backing file is incorrect, that's expected. The AL Cuckoo
+service will rebase it properly on start up.
+* **NB**: It's possible to have additional qcow2 files here if there are multiple levels of backing files
+* inetsim_win7.xml - this is the XML configuration for KVM that defines the cloned VM
+* inetsim_win7_snapshot.xml - this is the XML configuration for KVM that defines the running snapshot of the cloned VM
+* inetsim_win7_meta.json - this describes the metadata around the VM so that the AL cuckoo service can properly
+configure networking for it inside the cuckoobox docker container.
+
+##### Multiple routes using the same base VM
+
+Each VM is configured with a static route (either inetsim or gateway).
+
+It is possible to configure multiple routes using the same *base* VM, but will require some manual intervention.
+
+First, create the additional clone, but use the `--only_create` argument:
+
+    sudo ./vmprep.py -v \
+        --in_domain win7vm \
+        --snapshot_domain gateway_win7 \
+        --only_create \
+        --route gateway \
+        --platform windows \
+        --tags pe32,pe64 \
+        --guest_profile Win7SP1x64 \
+        --vmcloak_name win7vm
+        
+This will create a new VM called 'gateway_win7', which you can boot using the virt-manager GUI or virsh command line tool.
+You must boot the VM and at least change the static IP and gateway to a different subnet. In some networks you may also have to
+specify an internal DNS server to use. Shut down the VM, and then run vm_prep.py again. 
+
+**NB**: 
+
+* You must use the `--no_create` option to use the existing snapshot_domain that you have made changes to
+* You must specify the guest IP (`--vm_ip`) and gateway IP (`--gw_ip`)
+* Don't use the `--vmcloak_name` option - the IP configuration has changed from what vmcloak has in its database 
+
+```
+# If the new IP and gateway you configured is 10.2.2.50 and 10.2.2.1
+sudo ./vmprep.py -v \
+    --in_domain win7vm \
+    --snapshot_domain gateway_win7 \
+    --route gateway \
+    --platform windows \
+    --tags pe32,pe64 \
+    --guest_profile Win7SP1x64 \
+    --no_create \
+    --vm_ip 10.2.2.50/24 \
+    --gw_ip 10.2.2.1
+```
+
 
 #### Deploy all snapshots to Cuckoo
 
-Once you've prepared all the virtual machines, there should be a number of .tar.gz files containing virtual machine
-metadata. The prepare_cuckoo.py overwrites the current cuckoo configuration, so it's recommended to keep these files
-handy in case you want to deploy new virtual machines in future. The prepare_cuckoo.py script will automatically
-retrieve Cuckoo service configurations including metadata paths and enabled routes. If you change these configurations 
-you will also need to run prepare_cuckoo.py again.
+Copy the al_cuckoo_vms/ folder over to your support server. If you're already on your support server,
+you may need to make the disk images readable:
 
-    source /etc/default/al
-    cd /opt/al/pkg/al_services/alsvc_cuckoo/vm
-    sudo -u al PYTHONPATH=$PYTHONPATH ./prepare_cuckoo.py *.tar.gz
+    sudo chmod -R ugo+r *
+
+A copy of 'import-vm.py' should be included in that directory.
+
+This script does two tasks:
+
+1. Copies the two directories (per VM) created by vmprep to your support server to 
+whatever Cuckoo's service config has configured for REMOTE_DISK_ROOT.
+2. Modifies Cuckoo's submission parameter (`analysis_vm`) to make sure this VM is included as an option
+
+
+    # Example usage
+    # become the 'al' user
+    sudo su al
     
-This is all that's needed for ASSEMBLYLINE deployments on single node appliances. To deploy ASSEMBLYLINE in a cluster, 
-Move all the files in /opt/al/var/support/vm/disks/cuckoo/ to the vm/disks/cuckoo folder on the support server.
+    # set environment variables
+    source /etc/default/al
+    
+    # Run the script. You can specify a specific _meta.json file using the --json_meta argument,
+    # otherwise it will try and find all _meta.json files in all subdirectories 
+    ./import-vm.py -v
+    
 
 ## EXTENDING
 
-The Cuckoo service is built to allow you to extend it as required primarily through the use of two service configuration options:
+The Cuckoo service is built to allow you to extend it as required, primarily through the use of two service configuration options:
 
 1. **community_updates** - This may be 0 to many [cuckoo community](https://github.com/cuckoosandbox/community) 
 repositories. These can include any cuckoo customizations. These repositories are checked every hour for updates.
@@ -307,8 +415,10 @@ configurations. The REMOTE_DISK_ROOT should be relative to the support hosts FTP
 
 ### DEBUGGING - docker/VM issues with cuckoo_tests.py
 
-If the logs don't provide any clues about what may be going wrong, there is a 'cuckoo_test.py' script included in the 
-service repository. This is meant to be run on the workers, as the `al` user (or another user who can run docker containers)
+If the logs don't provide any clues about what may be going wrong, there is a 'cuckoo_tests.py' script included in the 
+service repository. This is meant to be run on the workers, as the `al` user (or another user who can run docker containers).
+
+(you will need to install the `sshtunnel` package with `sudo pip install sshtunnel` to use `cuckoo_tests.py`)
 
     source /etc/default/al
     
@@ -334,8 +444,7 @@ If analysis sometimes succeeds and sometimes fails, make sure the tmpfs filesyst
 
 If you find that the Cuckoobox container exists immediately after being launched, this may be an out-of-memory issue on 
 the ram mount inside the container. This directory is limited to 2 gigabytes by default, but can be modified in the 
-ASSEMBLYLINE configurations. It must be large enough to store the snapshot image for all virtual machines with enough 
-room left over for any given virtual machine to run a malware sample.
+ASSEMBLYLINE configurations.
 
 ### DEBUGGING - docker/VM issues (deprecated)
 
