@@ -18,12 +18,13 @@ import datetime
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
 from collections import Counter
+import humanfriendly
 
 from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TEXT_FORMAT, TAG_WEIGHT, SCORE
-from assemblyline.common.exceptions import RecoverableError
-from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType
+from assemblyline.common.exceptions import RecoverableError, NonRecoverableError
+from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType, ServiceDefinitionException
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.al.common import forge
 from assemblyline.common.docker import DockerException
@@ -151,6 +152,7 @@ class Cuckoo(ServiceBase):
     SERVICE_ACCEPTS = "(document/.*|executable/.*|java/.*|code/.*|archive/(zip|rar)|unknown|android/apk)"
     SERVICE_ENABLED = True
     SERVICE_REVISION = ServiceBase.parse_revision('$Id$')
+    SERVICE_VERSION = '2'
     SERVICE_STAGE = "CORE"
     SERVICE_TIMEOUT = 800
     SERVICE_CATEGORY = "Dynamic Analysis"
@@ -160,11 +162,13 @@ class Cuckoo(ServiceBase):
 
     SERVICE_DEFAULT_CONFIG = {
         "cuckoo_image": "cuckoo/cuckoobox:latest",
-        "vm_meta": "cuckoo.config",
+        # deprecated
+        #"vm_meta": "cuckoo.config",
         "REMOTE_DISK_ROOT": "vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
-        "ramdisk_size": "2048M",
+        # deprecated
+        #"ramdisk_size": "2048M",
         "ram_limit": "5120m",
         "dedup_similar_percent": 80,
         "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz"],
@@ -173,6 +177,13 @@ class Cuckoo(ServiceBase):
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
+        {
+            "name": "analysis_vm",
+            "default": "auto",
+            "list": ["auto"],
+            "type": "list",
+            "value": "auto"
+        },
         {
             "default": CUCKOO_TIMEOUT,
             "name": "analysis_timeout",
@@ -244,7 +255,7 @@ class Cuckoo(ServiceBase):
         self.cm = None  # type: CuckooContainerManager
         self.vm_xml = None
         self.vm_snapshot_xml = None
-        self.vm_meta = None
+        # self.vm_meta = None
         self.file_name = None
         self.base_url = None
         self.submit_url = None
@@ -291,7 +302,7 @@ class Cuckoo(ServiceBase):
         self.import_service_deps()
 
         logger.info("Init VMM object and checking for VM updates...")
-        self.vmm = CuckooVmManager(self.cfg)
+        self.vmm = CuckooVmManager(self.cfg, self.SERVICE_NAME)
         self.vmm.download_data()
 
         logger.info("Checking for community updates")
@@ -321,9 +332,14 @@ class Cuckoo(ServiceBase):
         # Set the community mtime dict. sysprep should have already made sure we're up to date
         self._community_mtimes = self._get_community_mtimes()
 
-        self.vmm = CuckooVmManager(self.cfg)
+        self.vmm = CuckooVmManager(self.cfg, self.SERVICE_NAME)
         self.cm = CuckooContainerManager(self.cfg,
                                          self.vmm)
+
+        # Set this here, normally we don't need until an execute() call
+        # (b/c trigger_cuckoo_reset->set_urls uses the session object)
+        # but when using the cuckoo_tests script we don't call execute
+        self.session = requests.Session()
 
         # only call this *after* .vmm and is initialized
         # we don't need to 'execute_now', sysprep should have taken care of making sure everything's up to date
@@ -413,8 +429,22 @@ class Cuckoo(ServiceBase):
             request.set_save_result(False)
             return
 
-        # Set this here, b/c trigger_cuckoo_reset->set_urls uses the session object
-        self.session = requests.Session()
+        # vm_meta is being deprecated - check here and throw out a warning
+        # TODO: actual vm_meta deprecation
+        if "vm_meta" in self.cfg:
+            self.log.warning("The 'vm_meta' service configuration option will be deprecated and ignored "
+                             "in future version. Please see the updated README and use the 'analysis_vm' "
+                             "submission parameter to define what VMs are available for this service")
+
+            # If analysis_vms is in submission params, log an error
+            config = forge.get_config()
+            params_from_seed = [x['name'] for x in
+                                config.services.master_list[request.task.service_name]['submission_params']]
+            if "analysis_vm" in params_from_seed:
+                self.log.error("It appears that you have both the soon to be deprecated 'vm_meta' service "
+                               "configuration option as well as the 'analysis_vm' submission parameter. "
+                               "You should modify your service configuration to use only the 'analysis_vm' "
+                               "submission parameter.")
 
         if (time.time() - self._last_docker_restart) > CUCKOOBOX_MAX_LIFETIME:
             self.log.info("Triggering a container restart due to reaching CUCKOOBOX_MAX_LIFETIME (%d)" % CUCKOOBOX_MAX_LIFETIME)
@@ -517,13 +547,31 @@ class Cuckoo(ServiceBase):
         if routing is None:
             routing = self.enabled_routes[0]
 
-        select_machine = self.find_machine(self.task.tag, routing)
+        if request.get_param("analysis_vm") == "auto":
+            select_machine = self.find_machine(self.task.tag, routing)
+        else:
+            # We need to make sure that the 'routing' option chose is compatible with
+            # the VM selected
+            select_machine = request.get_param("analysis_vm")
+            selected_vm_meta_list = [x for x in self.vmm.vm_meta if x["name"] == select_machine]
+            if len(selected_vm_meta_list) == 0:
+                raise NonRecoverableError("Selected VM name %s not found in configured VMs. "
+                                          "If this was newly added, you may need to restart hostagent" %
+                                          select_machine)
+            else:
+                if len(selected_vm_meta_list) > 1:
+                    self.log.warning("More than one VM found with name %s. Using the first one in the list" %
+                                     select_machine)
+                selected_vm_meta = selected_vm_meta_list[0]
+
+                # Make sure routing matches up
+                if selected_vm_meta.get("route") != routing:
+                    raise NonRecoverableError("The selected routing option %s doesn't match the routing "
+                                              "configured for the selected VM %s" % (routing, select_machine))
 
         if select_machine is None:
             # No matching VM and no default
-            self.log.debug("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)
-            request.set_save_result(False)
-            return
+            raise NonRecoverableError("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)
 
         kwargs['timeout'] = analysis_timeout
         kwargs['options'] = ','.join(task_options)
@@ -1000,7 +1048,7 @@ class Cuckoo(ServiceBase):
         if self.check_stop():
             self.log.debug("Service stopped during machine query.")
             return False
-        self.log.debug("Querying for available analysis machines..")
+        self.log.debug("Querying for available analysis machines using url %s.." % self.query_machines_url)
         resp = self.session.get(self.query_machines_url)
         if resp.status_code != 200:
             self.log.debug("Failed to query machines: %s" % resp.status_code)
@@ -1008,6 +1056,8 @@ class Cuckoo(ServiceBase):
         resp_dict = dict(resp.json())
         if not self._all_vms_busy(resp_dict.get('machines')):
             return True
+
+        self.log.debug("_all_vms_busy came back false")
         return False
 
     @staticmethod
@@ -1033,6 +1083,7 @@ class Cuckoo(ServiceBase):
                     return ready
             except:
                 # pass, since the api might not even be up yet
+                self.log.debug("Error from cuckoo_query_machines: %s" % traceback.format_exc())
                 pass
             time.sleep(1)
             attempts += 1
@@ -1213,4 +1264,3 @@ class Cuckoo(ServiceBase):
                     logger.info("Found extra file %s, removing it" %
                                   extra_path)
                     os.unlink(extra_path)
-

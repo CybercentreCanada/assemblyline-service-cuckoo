@@ -28,7 +28,8 @@ class CuckooContainerManager(DockerManager):
                     (vmm.local_meta_root, "/opt/vm_meta", "ro"),
                     (vmm.local_vm_root, "/var/lib/libvirt/images", "ro")
                 ],
-            'commandline': [os.path.split(cfg['vm_meta'])[1], cfg['ramdisk_size']]
+            # TODO: ramdisk_size is deprecated. only left here so old docker containers don't stop working
+            'commandline': ["cuckoo.config", cfg.get('ramdisk_size',"2048M")]
         }
         self.name = self.add_container(ctx)
         self.tag_map = self.parse_vm_meta(vmm.vm_meta)
@@ -82,20 +83,48 @@ class CuckooVmManager(object):
         self._fetch_meta(join(vm['name'], vm['xml']), local_meta_dir)
         self._fetch_meta(join(vm['name'], vm['snapshot_xml']), local_meta_dir)
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, svc_name):
         self.log = logging.getLogger('assemblyline.svc.cuckoo.vmm')
         self.transport = forge.get_support_filestore()
 
         self.local_vm_root = join(config.workers.virtualmachines.disk_root, cfg['LOCAL_DISK_ROOT'])
         self.local_meta_root = join(config.system.root, cfg['LOCAL_VM_META_ROOT'])
         self.remote_root = cfg['REMOTE_DISK_ROOT']
-        self.vm_meta_path = join(self.local_meta_root, cfg['vm_meta'])
+        self.vm_meta_path = join(self.local_meta_root, "cuckoo.config")
+        self.vm_meta = []
 
         # Download Metadata
-        self._fetch_meta(cfg['vm_meta'], self.local_meta_root)
+        if "vm_meta" in cfg:
+            self.log.warning("Using 'vm_meta' service configuration, but this option "
+                             "will be deprecated soon. You should modify your service configuration "
+                             "to use the 'analysis_vm' submission parameter. See the README for more "
+                             "details.")
+            self._fetch_meta(cfg['vm_meta'], self.local_meta_root)
+            with open(self.vm_meta_path, 'r') as fh:
+                self.vm_meta = json.load(fh)
 
-        with open(self.vm_meta_path, 'r') as fh:
-            self.vm_meta = json.load(fh)
+        else:
+            self.log.info("Building vm_meta from _meta.json files")
+            # Look up the submission parameters for this service
+            submission_params = config.services.master_list[svc_name]['submission_params']
+            vm_list = [x.get("list", []) for x in submission_params if x["name"] == "analysis_vm"][0]
+            # pop auto out of the list if it's there
+            if "auto" in vm_list:
+                vm_list.pop(vm_list.index("auto"))
+
+            for vm_name in vm_list:
+                # Now go get the _meta.json file for each of these VMs
+                remote_json_path = os.path.join(vm_name, "%s_meta.json" % vm_name)
+                local_json_path = self._fetch_meta(remote_json_path, self.local_meta_root)
+
+                with open(local_json_path, 'r') as fh:
+                    self.vm_meta.append(json.load(fh))
+
+            self.log.debug("Writing local vm_meta file %s" % self.vm_meta_path)
+            with open(self.vm_meta_path, "w") as fh:
+                fh.write(json.dumps(self.vm_meta, indent=4))
+
+        self.log.debug("vm_meta configuration: %s" % json.dumps(self.vm_meta, indent=4))
 
     def download_data(self):
         """
