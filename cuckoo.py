@@ -18,7 +18,6 @@ import datetime
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
 from collections import Counter
-import humanfriendly
 
 from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
