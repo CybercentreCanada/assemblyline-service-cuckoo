@@ -28,6 +28,8 @@ from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dro
 from assemblyline.al.common import forge
 from assemblyline.common.docker import DockerException
 from assemblyline.common.importing import class_by_name
+from assemblyline.al.common.heuristics import Heuristic
+from textwrap import dedent
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -44,6 +46,9 @@ CUCKOO_MAX_TIMEOUT = 600
 
 # Max amount of time (seconds) between restarting the docker container
 CUCKOOBOX_MAX_LIFETIME = 86400
+
+# Max number of DLL exports to try and execute
+MAX_DLL_EXPORTS_EXEC = 5
 
 SUPPORTED_EXTENSIONS = [
     "cpl",
@@ -170,7 +175,8 @@ class Cuckoo(ServiceBase):
         #"ramdisk_size": "2048M",
         "ram_limit": "5120m",
         "dedup_similar_percent": 80,
-        "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz"],
+        "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz",
+                              "https://bitbucket.org/cse-assemblyline/al_cuckoo_community/get/master.zip"],
         "result_parsers": []
         # "result_parsers": ["al_services.alsvc_cuckoo.result_parsers.example_parser.ExampleParser"]
     }
@@ -188,6 +194,12 @@ class Cuckoo(ServiceBase):
             "name": "analysis_timeout",
             "type": "int",
             "value": CUCKOO_TIMEOUT,
+        },
+        {
+            "default": False,
+            "name": "enforce_timeout",
+            "type": "bool",
+            "value": False,
         },
         {
             "default": True,
@@ -245,6 +257,10 @@ class Cuckoo(ServiceBase):
             "value": "inetsim",
         }
     ]
+
+    # Heuristic info
+    AL_Cuckoo_001 = Heuristic("AL_Cuckoo_001", "Exec Multiple Exports", "executable/windows/dll",
+                              """Attempted to execute multiple DLL exports""")
 
     def __init__(self, cfg=None):
 
@@ -312,9 +328,10 @@ class Cuckoo(ServiceBase):
 
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
-        global generate_al_result, CuckooVmManager, CuckooContainerManager
+        global generate_al_result, CuckooVmManager, CuckooContainerManager, pefile
         from al_services.alsvc_cuckoo.cuckooresult import generate_al_result
         from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
+        import pefile
 
     def set_urls(self):
         base_url = "http://%s:%s" % (self.cuckoo_ip, CUCKOO_API_PORT)
@@ -521,9 +538,38 @@ class Cuckoo(ServiceBase):
             self.log.debug("Setting procmemdump flag in task options")
             task_options.append('procmemdump=yes')
 
+        # Do DLL specific stuff
         dll_function = request.get_param('dll_function')
         if dll_function:
             task_options.append('function={}'.format(dll_function))
+
+            # Check to see if there's commas in the dll_function
+            if "|" in dll_function:
+                kwargs["package"] = "dll_multi"
+
+        if not dll_function and file_ext == ".dll":
+            # only proceed if it looks like we actually have the al_cuckoo_community repo
+            if "community_updates" in self.cfg:
+                if any("al_cuckoo_community" in x for x in self.cfg.get("community_updates")):
+                    # We have a DLL file, but no user specified function(s) to run. let's try to pick a few...
+                    dll_parsed = pefile.PE(data=file_content)
+
+                    # Do we have any exports?
+                    if dll_parsed.DIRECTORY_ENTRY_EXPORT.struct.TimeDateStamp is not None:
+                        exports_available = []
+                        for export_symbol in dll_parsed.DIRECTORY_ENTRY_EXPORT.symbols:
+                            if export_symbol.name is not None:
+                                exports_available.append(export_symbol.name)
+                            else:
+                                exports_available.append("#%d" % export_symbol.ordinal)
+
+                        if len(exports_available) > 0:
+                            task_options.append("function=%s" % "|".join(exports_available[:MAX_DLL_EXPORTS_EXEC]))
+                            kwargs["package"] = "dll_multi"
+                            self.log.debug("DLL found, trying to run with following functions: %s" % "|".join(exports_available[:MAX_DLL_EXPORTS_EXEC]))
+                            request.result.report_heuristic(Cuckoo.AL_Cuckoo_001)
+                else:
+                    self.log.warning("Missing al_cuckoo_community repo, can't attempt executing various DLL exports")
 
         arguments = request.get_param('arguments')
         if arguments:
@@ -573,6 +619,7 @@ class Cuckoo(ServiceBase):
             raise NonRecoverableError("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)
 
         kwargs['timeout'] = analysis_timeout
+        kwargs['enforce_timeout'] = request.get_param("enforce_timeout")
         kwargs['options'] = ','.join(task_options)
         custom_options = request.get_param("custom_options")
         if custom_options is not None:

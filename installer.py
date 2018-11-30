@@ -7,6 +7,7 @@ def install(alsi):
     alsi.pip_install_all([
         'jinja2',
         'retrying',
+        'pefile'
         ])
 
 if __name__ == '__main__':
