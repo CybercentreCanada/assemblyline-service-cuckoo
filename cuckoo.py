@@ -85,7 +85,8 @@ SUPPORTED_EXTENSIONS = [
     "wsf",
     "elf",
     "bin",
-    "hta"
+    "hta",
+    "zip"
 ]
 
 
