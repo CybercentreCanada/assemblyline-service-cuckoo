@@ -29,6 +29,8 @@ random IPs for DNS requests. By default it will create IPs in the range 10.0.0.0
 * **cuckoo_image** - The name of the cuckoobox docker container to use
 * **ram_limit** - (default 5120m) This is the maximum amount of ram usable by the Cuckoobox Docker container. It doesn't include memory used by inetsim or the Cuckoo service. 
 It should be at least 1G greater than the largest amount of RAM configured for any one of your VMs.
+* **max_dll_exports_exec** - If given a DLL without being told what function(s) to execute, try to execute at most this many of the exported functions. 
+    * **NB** : this functionality relies on having [this](https://bitbucket.org/cse-assemblyline/al_cuckoo_community/get/master.tar.gz) repo present in `community_updates`
 
 The following options are available, but shouldn't need to be changed from the defaults:
 
@@ -49,6 +51,7 @@ The following options are available for submissions to the Cuckoo service (acces
 the VM names you want to make available, where 'auto' is a special value that will attempt to pick the correct VM automatically.
 * **analysis_timeout** - Maximum amount of time to wait for analysis to complete. NB: The analysis job may complete faster
 than this if the process being monitored exits.
+* **enforce_timeout** - Even if Cuckoo thinks the jobs is done before `analysis_timeout`, force the execution to take the full amount of time 
 * **generate_report** - Generate a full report (cuckoo_report.tar.gz) and attach it as a supplementary file
 * **dump_processes** - Dump process memory. This would be available in the cuckoo_report.tar.gz supplementary file
 * **dll_function** - If a DLL file is submitted, manually select the function within it to execute

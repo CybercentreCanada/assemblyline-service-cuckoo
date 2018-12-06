@@ -173,11 +173,11 @@ class Cuckoo(ServiceBase):
         "ram_limit": "5120m",
         "dedup_similar_percent": 80,
         "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz",
-                              "https://bitbucket.org/cse-assemblyline/al_cuckoo_community/get/master.zip"],
+                              "https://bitbucket.org/cse-assemblyline/al_cuckoo_community/get/master.tar.gz"],
         "result_parsers": [],
 
         # If given a DLL without being told what function(s) to execute, try to execute at most this many of the exports
-        "max_dll_exports_exec": 2
+        "max_dll_exports_exec": 5
         # "result_parsers": ["al_services.alsvc_cuckoo.result_parsers.example_parser.ExampleParser"]
     }
 
@@ -493,6 +493,11 @@ class Cuckoo(ServiceBase):
         original_ext = self.file_name.rsplit('.', 1)
         tag_extension = tag_to_extension.get(self.task.tag)
 
+        # Poorly name var to track keyword arguments to pass into cuckoo's 'submit' function
+        kwargs = dict()
+        # the 'options' kwargs
+        task_options = []
+
         # NOTE: Cuckoo still tries to identify files itself, so we only force the extension/package if the user
         # specifies one. However, we go through the trouble of renaming the file because the only way to have
         # certain modules run is to use the appropriate suffix (.jar, .vbs, etc.)
@@ -510,6 +515,8 @@ class Cuckoo(ServiceBase):
                 request.set_save_result(False)
                 return
             else:
+                if submitted_ext == "bin":
+                    kwargs["package"] = "bin"
                 # This is a usable extension. It might not run (if the submitter has lied to us).
                 file_ext = '.' + submitted_ext
         else:
@@ -523,10 +530,8 @@ class Cuckoo(ServiceBase):
             # self.file_name = self.task.sha256 + file_ext
             self.file_name = original_ext[0] + file_ext
 
-        # Parse user-specified options
-        kwargs = dict()
-        task_options = []
 
+        # Parse user args
         analysis_timeout = request.get_param('analysis_timeout')
 
         generate_report = request.get_param('generate_report')
