@@ -28,6 +28,7 @@ from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dro
 from assemblyline.al.common import forge
 from assemblyline.common.docker import DockerException
 from assemblyline.common.importing import class_by_name
+from assemblyline.al.common.heuristics import Heuristic
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -80,7 +81,8 @@ SUPPORTED_EXTENSIONS = [
     "wsf",
     "elf",
     "bin",
-    "hta"
+    "hta",
+    "zip"
 ]
 
 
@@ -170,8 +172,12 @@ class Cuckoo(ServiceBase):
         #"ramdisk_size": "2048M",
         "ram_limit": "5120m",
         "dedup_similar_percent": 80,
-        "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz"],
-        "result_parsers": []
+        "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz",
+                              "https://bitbucket.org/cse-assemblyline/al_cuckoo_community/get/master.tar.gz"],
+        "result_parsers": [],
+
+        # If given a DLL without being told what function(s) to execute, try to execute at most this many of the exports
+        "max_dll_exports_exec": 5
         # "result_parsers": ["al_services.alsvc_cuckoo.result_parsers.example_parser.ExampleParser"]
     }
 
@@ -188,6 +194,12 @@ class Cuckoo(ServiceBase):
             "name": "analysis_timeout",
             "type": "int",
             "value": CUCKOO_TIMEOUT,
+        },
+        {
+            "default": False,
+            "name": "enforce_timeout",
+            "type": "bool",
+            "value": False,
         },
         {
             "default": True,
@@ -245,6 +257,10 @@ class Cuckoo(ServiceBase):
             "value": "inetsim",
         }
     ]
+
+    # Heuristic info
+    AL_Cuckoo_001 = Heuristic("AL_Cuckoo_001", "Exec Multiple Exports", "executable/windows/dll",
+                              """Attempted to execute multiple DLL exports""")
 
     def __init__(self, cfg=None):
 
@@ -312,9 +328,10 @@ class Cuckoo(ServiceBase):
 
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
-        global generate_al_result, CuckooVmManager, CuckooContainerManager
+        global generate_al_result, CuckooVmManager, CuckooContainerManager, pefile
         from al_services.alsvc_cuckoo.cuckooresult import generate_al_result
         from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
+        import pefile
 
     def set_urls(self):
         base_url = "http://%s:%s" % (self.cuckoo_ip, CUCKOO_API_PORT)
@@ -476,6 +493,11 @@ class Cuckoo(ServiceBase):
         original_ext = self.file_name.rsplit('.', 1)
         tag_extension = tag_to_extension.get(self.task.tag)
 
+        # Poorly name var to track keyword arguments to pass into cuckoo's 'submit' function
+        kwargs = dict()
+        # the 'options' kwargs
+        task_options = []
+
         # NOTE: Cuckoo still tries to identify files itself, so we only force the extension/package if the user
         # specifies one. However, we go through the trouble of renaming the file because the only way to have
         # certain modules run is to use the appropriate suffix (.jar, .vbs, etc.)
@@ -493,6 +515,8 @@ class Cuckoo(ServiceBase):
                 request.set_save_result(False)
                 return
             else:
+                if submitted_ext == "bin":
+                    kwargs["package"] = "bin"
                 # This is a usable extension. It might not run (if the submitter has lied to us).
                 file_ext = '.' + submitted_ext
         else:
@@ -506,10 +530,8 @@ class Cuckoo(ServiceBase):
             # self.file_name = self.task.sha256 + file_ext
             self.file_name = original_ext[0] + file_ext
 
-        # Parse user-specified options
-        kwargs = dict()
-        task_options = []
 
+        # Parse user args
         analysis_timeout = request.get_param('analysis_timeout')
 
         generate_report = request.get_param('generate_report')
@@ -521,9 +543,41 @@ class Cuckoo(ServiceBase):
             self.log.debug("Setting procmemdump flag in task options")
             task_options.append('procmemdump=yes')
 
+        # Do DLL specific stuff
         dll_function = request.get_param('dll_function')
         if dll_function:
             task_options.append('function={}'.format(dll_function))
+
+            # Check to see if there's commas in the dll_function
+            if "|" in dll_function:
+                kwargs["package"] = "dll_multi"
+
+        exports_available = []
+        if not dll_function and file_ext == ".dll":
+            # only proceed if it looks like we actually have the al_cuckoo_community repo
+            if "community_updates" in self.cfg:
+                if any("al_cuckoo_community" in x for x in self.cfg.get("community_updates")):
+                    # We have a DLL file, but no user specified function(s) to run. let's try to pick a few...
+                    dll_parsed = pefile.PE(data=file_content)
+
+                    # Do we have any exports?
+                    if dll_parsed.DIRECTORY_ENTRY_EXPORT.struct.TimeDateStamp is not None:
+                        for export_symbol in dll_parsed.DIRECTORY_ENTRY_EXPORT.symbols:
+                            if export_symbol.name is not None:
+                                exports_available.append(export_symbol.name)
+                            else:
+                                exports_available.append("#%d" % export_symbol.ordinal)
+
+                        if len(exports_available) > 0:
+                            max_dll_exports = self.cfg.get("max_dll_exports_exec",
+                                                           self.SERVICE_DEFAULT_CONFIG["max_dll_exports_exec"])
+                            task_options.append("function=%s" %
+                                                "|".join(exports_available[:max_dll_exports]))
+                            kwargs["package"] = "dll_multi"
+                            self.log.debug("DLL found, trying to run with following functions: %s" % "|".join(exports_available[:max_dll_exports]))
+                            request.result.report_heuristic(Cuckoo.AL_Cuckoo_001)
+                else:
+                    self.log.warning("Missing al_cuckoo_community repo, can't attempt executing various DLL exports")
 
         arguments = request.get_param('arguments')
         if arguments:
@@ -573,6 +627,7 @@ class Cuckoo(ServiceBase):
             raise NonRecoverableError("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)
 
         kwargs['timeout'] = analysis_timeout
+        kwargs['enforce_timeout'] = request.get_param("enforce_timeout")
         kwargs['options'] = ','.join(task_options)
         custom_options = request.get_param("custom_options")
         if custom_options is not None:
@@ -720,6 +775,19 @@ class Cuckoo(ServiceBase):
                             self.log.exception(
                                 "Unable to extra file(s) for task %s. Exception: %s" % (self.cuckoo_task.id, traceback.format_exc()))
 
+                if len(exports_available) > 0 and kwargs.get("package","") == "dll_multi":
+                    max_dll_exports = self.cfg.get("max_dll_exports_exec", self.SERVICE_DEFAULT_CONFIG["max_dll_exports_exec"])
+                    dll_multi_section = ResultSection(
+                        SCORE.NULL,
+                        title_text="Executed multiple DLL exports",
+                        body="Executed the following exports from the DLL: %s" % ",".join(exports_available[:max_dll_exports])
+                    )
+                    if len(exports_available) > max_dll_exports:
+                        dll_multi_section.add_line("There were %d other exports: %s" %
+                                                   ((len(exports_available) - max_dll_exports),
+                                                    ",".join(exports_available[max_dll_exports:])))
+
+                    self.file_res.add_section(dll_multi_section)
 
                 # Run extra result parsers
                 for rp in self.result_parsers:
