@@ -29,7 +29,6 @@ from assemblyline.al.common import forge
 from assemblyline.common.docker import DockerException
 from assemblyline.common.importing import class_by_name
 from assemblyline.al.common.heuristics import Heuristic
-from textwrap import dedent
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -46,9 +45,6 @@ CUCKOO_MAX_TIMEOUT = 600
 
 # Max amount of time (seconds) between restarting the docker container
 CUCKOOBOX_MAX_LIFETIME = 86400
-
-# Max number of DLL exports to try and execute
-MAX_DLL_EXPORTS_EXEC = 5
 
 SUPPORTED_EXTENSIONS = [
     "cpl",
@@ -178,7 +174,10 @@ class Cuckoo(ServiceBase):
         "dedup_similar_percent": 80,
         "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz",
                               "https://bitbucket.org/cse-assemblyline/al_cuckoo_community/get/master.zip"],
-        "result_parsers": []
+        "result_parsers": [],
+
+        # If given a DLL without being told what function(s) to execute, try to execute at most this many of the exports
+        "max_dll_exports_exec": 2
         # "result_parsers": ["al_services.alsvc_cuckoo.result_parsers.example_parser.ExampleParser"]
     }
 
@@ -548,6 +547,7 @@ class Cuckoo(ServiceBase):
             if "|" in dll_function:
                 kwargs["package"] = "dll_multi"
 
+        exports_available = []
         if not dll_function and file_ext == ".dll":
             # only proceed if it looks like we actually have the al_cuckoo_community repo
             if "community_updates" in self.cfg:
@@ -557,7 +557,6 @@ class Cuckoo(ServiceBase):
 
                     # Do we have any exports?
                     if dll_parsed.DIRECTORY_ENTRY_EXPORT.struct.TimeDateStamp is not None:
-                        exports_available = []
                         for export_symbol in dll_parsed.DIRECTORY_ENTRY_EXPORT.symbols:
                             if export_symbol.name is not None:
                                 exports_available.append(export_symbol.name)
@@ -565,9 +564,12 @@ class Cuckoo(ServiceBase):
                                 exports_available.append("#%d" % export_symbol.ordinal)
 
                         if len(exports_available) > 0:
-                            task_options.append("function=%s" % "|".join(exports_available[:MAX_DLL_EXPORTS_EXEC]))
+                            max_dll_exports = self.cfg.get("max_dll_exports_exec",
+                                                           self.SERVICE_DEFAULT_CONFIG["max_dll_exports_exec"])
+                            task_options.append("function=%s" %
+                                                "|".join(exports_available[:max_dll_exports]))
                             kwargs["package"] = "dll_multi"
-                            self.log.debug("DLL found, trying to run with following functions: %s" % "|".join(exports_available[:MAX_DLL_EXPORTS_EXEC]))
+                            self.log.debug("DLL found, trying to run with following functions: %s" % "|".join(exports_available[:max_dll_exports]))
                             request.result.report_heuristic(Cuckoo.AL_Cuckoo_001)
                 else:
                     self.log.warning("Missing al_cuckoo_community repo, can't attempt executing various DLL exports")
@@ -768,6 +770,19 @@ class Cuckoo(ServiceBase):
                             self.log.exception(
                                 "Unable to extra file(s) for task %s. Exception: %s" % (self.cuckoo_task.id, traceback.format_exc()))
 
+                if len(exports_available) > 0 and kwargs.get("package","") == "dll_multi":
+                    max_dll_exports = self.cfg.get("max_dll_exports_exec", self.SERVICE_DEFAULT_CONFIG["max_dll_exports_exec"])
+                    dll_multi_section = ResultSection(
+                        SCORE.NULL,
+                        title_text="Executed multiple DLL exports",
+                        body="Executed the following exports from the DLL: %s" % ",".join(exports_available[:max_dll_exports])
+                    )
+                    if len(exports_available) > max_dll_exports:
+                        dll_multi_section.add_line("There were %d other exports: %s" %
+                                                   ((len(exports_available) - max_dll_exports),
+                                                    ",".join(exports_available[max_dll_exports:])))
+
+                    self.file_res.add_section(dll_multi_section)
 
                 # Run extra result parsers
                 for rp in self.result_parsers:
