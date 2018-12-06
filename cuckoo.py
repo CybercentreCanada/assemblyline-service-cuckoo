@@ -561,7 +561,7 @@ class Cuckoo(ServiceBase):
                     dll_parsed = pefile.PE(data=file_content)
 
                     # Do we have any exports?
-                    if dll_parsed.DIRECTORY_ENTRY_EXPORT.struct.TimeDateStamp is not None:
+                    if hasattr(dll_parsed, "DIRECTORY_ENTRY_EXPORT"):
                         for export_symbol in dll_parsed.DIRECTORY_ENTRY_EXPORT.symbols:
                             if export_symbol.name is not None:
                                 exports_available.append(export_symbol.name)
