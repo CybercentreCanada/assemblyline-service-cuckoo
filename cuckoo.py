@@ -1030,6 +1030,13 @@ class Cuckoo(ServiceBase):
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.error("Task or report not found for task: %s" % task_id)
+
+                # try dumping the cuckoo.log
+                stdout, stderr = self.cm._run_cmd("docker exec -ti %(container_name)s cat /home/sandbox/.cuckoo/log/cuckoo.log" %
+                                 {
+                                     "container_name": self.cm.name
+                                 }, raise_on_error=False, log=self.log)
+                self.log.error("Cuckoo.log dump: %s" % stdout)
                 return None
             else:
                 self.log.error("Failed to query report %s. Status code: %d" % (task_id, resp.status_code))
