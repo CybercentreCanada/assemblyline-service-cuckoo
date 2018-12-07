@@ -1030,6 +1030,8 @@ class Cuckoo(ServiceBase):
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.error("Task or report not found for task %s in container %s" % (task_id, self.cm.name))
+                # TODO:  pretty sure that if we get to this point, it's dead. need to follow up. made issue AL-126.
+                # most common cause of getting to here seems to be odd/non-ascii filenames
 
                 return None
             else:
