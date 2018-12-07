@@ -1021,7 +1021,7 @@ class Cuckoo(ServiceBase):
                     return None
             return task_id
 
-    @retry(wait_fixed=1000, stop_max_attempt_number=20)
+    @retry(wait_fixed=1000, stop_max_attempt_number=5)
     def cuckoo_query_report(self, task_id, fmt="json", params=None):
         if self.check_stop():
             return None
