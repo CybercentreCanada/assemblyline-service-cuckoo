@@ -1281,7 +1281,13 @@ class Cuckoo(ServiceBase):
             for url in self.cfg["community_updates"]:
                 bn = "%s-%s" % (hashlib.md5(url).hexdigest(), os.path.basename(url))
                 local_path = os.path.join(local_community_root, bn)
-                mtimes[bn] = datetime.datetime.fromtimestamp(os.stat(local_path).st_mtime)
+                if os.path.exists(local_path):
+                    mtimes[bn] = datetime.datetime.fromtimestamp(os.stat(local_path).st_mtime)
+                else:
+                    self.log.warning("Local file %s (for community update from %s) not found. Check logs for output "
+                                     "from 'cuckoo_community_updates' to determine why the community update "
+                                     "hasn't been downloaded. This may affect the intended functionality of the"
+                                     "Cuckoo service." % (local_path, url))
 
         return mtimes
 
