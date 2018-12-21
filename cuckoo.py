@@ -679,8 +679,8 @@ class Cuckoo(ServiceBase):
 
                         raise CuckooProcessingException("Cuckoo was unable to process this file. %s",
                                                         err_str)
-                except RecoverableError:
-                    self.log.info("Recoverable error, triggering cuckoobox container restart")
+                except RecoverableError as e:
+                    self.log.info("Recoverable error, triggering cuckoobox container restart. Error message: %s" % e.message)
                     self.trigger_cuckoo_reset(5)
                     raise
                 except Exception as e:
