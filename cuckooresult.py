@@ -196,10 +196,10 @@ def process_debug(debug, al_result, classification):
                 # Start Error - probably a corrupt file..
                 # Initialization Error - restart the docker container
                 error_res.add_line(error)
-                if "analysis hit the critical timeout" not in err_str and \
-                    "Unable to execute the initial process" not in err_str:
-                    raise RecoverableError("An error prevented cuckoo from "
-                                           "generating complete results: %s" % safe_str(error))
+                # if "analysis hit the critical timeout" not in err_str and \
+                #     "Unable to execute the initial process" not in err_str:
+                #     raise RecoverableError("An error prevented cuckoo from "
+                #                            "generating complete results: %s" % safe_str(error))
         if len(error_res.body) > 0:
             al_result.add_section(error_res)
     return failed

@@ -82,7 +82,8 @@ SUPPORTED_EXTENSIONS = [
     "elf",
     "bin",
     "hta",
-    "zip"
+    "zip",
+    "lnk"
 ]
 
 
@@ -150,7 +151,7 @@ class CuckooTask(dict):
 # noinspection PyBroadException
 # noinspection PyGlobalUndefined
 class Cuckoo(ServiceBase):
-    SERVICE_ACCEPTS = "(document/.*|executable/.*|java/.*|code/.*|archive/(zip|rar)|unknown|android/apk)"
+    SERVICE_ACCEPTS = "(document/.*|executable/.*|java/.*|code/.*|archive/(zip|rar)|unknown|android/apk|meta/.*|)"
     SERVICE_ENABLED = True
     SERVICE_REVISION = ServiceBase.parse_revision('$Id$')
     SERVICE_VERSION = '2'
@@ -678,8 +679,8 @@ class Cuckoo(ServiceBase):
 
                         raise CuckooProcessingException("Cuckoo was unable to process this file. %s",
                                                         err_str)
-                except RecoverableError:
-                    self.log.info("Recoverable error, triggering cuckoobox container restart")
+                except RecoverableError as e:
+                    self.log.info("Recoverable error, triggering cuckoobox container restart. Error message: %s" % e.message)
                     self.trigger_cuckoo_reset(5)
                     raise
                 except Exception as e:
