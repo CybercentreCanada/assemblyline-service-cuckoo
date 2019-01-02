@@ -14,6 +14,8 @@ import json
 import traceback
 import filecmp
 import datetime
+import re
+import email.header
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -489,6 +491,22 @@ class Cuckoo(ServiceBase):
 
         full_memdump = False
         pull_memdump = False
+
+        ##
+        # Check the filename to see if it's mime encoded
+        mime_re = re.compile("^=\?.*\?=$")
+        if mime_re.match(self.file_name):
+            self.log.debug("Found a mime encoded filename, will try and decode")
+            try:
+                decoded_filename = email.header.decode_header(self.file_name)
+                new_filename = decoded_filename[0][0].decode(decoded_filename[0][1])
+                self.log.info("Using decoded filename %s" % new_filename)
+                self.file_name = new_filename
+            except:
+                new_filename = generate_random_words(1)
+                self.log.error("Problem decoding filename. Using randomly generated filename %s. Error: %s " %
+                               (new_filename, traceback.format_exc()))
+                self.file_name = new_filename
 
         # Check the file extension
         original_ext = self.file_name.rsplit('.', 1)
@@ -999,7 +1017,7 @@ class Cuckoo(ServiceBase):
 
         return None
 
-    @retry(wait_fixed=2000)
+    @retry(wait_fixed=2000, stop_max_attempt_number=3)
     def cuckoo_submit_file(self, file_content):
         if self.check_stop():
             return None
@@ -1009,6 +1027,15 @@ class Cuckoo(ServiceBase):
         resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task)
         if resp.status_code != 200:
             self.log.debug("Failed to submit file %s. Status code: %s" % (self.cuckoo_task.file, resp.status_code))
+
+            if resp.status_code == 500:
+                new_filename = generate_random_words(1)
+                file_ext = self.cuckoo_task.file.rsplit(".", 1)[-1]
+                self.cuckoo_task.file = new_filename + "." + file_ext
+                self.log.warning("Got 500 error from Cuckoo API. This is often caused by non-ascii filenames. "
+                                 "Renaming file to %s and retrying" % self.cuckoo_task.file)
+                # Raise an exception to force a retry
+                raise Exception("Retrying after 500 error")
             return None
         else:
             resp_dict = dict(resp.json())
@@ -1341,3 +1368,10 @@ class Cuckoo(ServiceBase):
                     logger.info("Found extra file %s, removing it" %
                                   extra_path)
                     os.unlink(extra_path)
+
+ALPHA_NUMS = [chr(x + 65) for x in xrange(26)] + [chr(x + 97) for x in xrange(26)] + [str(x) for x in xrange(10)]
+
+def generate_random_words(num_words):
+    return " ".join(["".join([random.choice(ALPHA_NUMS)
+                              for _ in xrange(int(random.random() * 10) + 2)])
+                     for _ in xrange(num_words)])
