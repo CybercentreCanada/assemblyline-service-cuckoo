@@ -14,6 +14,8 @@ import json
 import traceback
 import filecmp
 import datetime
+import re
+import email.header
 
 from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
@@ -22,7 +24,7 @@ from collections import Counter
 from assemblyline.common.charset import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TEXT_FORMAT, TAG_WEIGHT, SCORE
-from assemblyline.common.exceptions import RecoverableError, NonRecoverableError
+from assemblyline.common.exceptions import RecoverableError, NonRecoverableError, ChainException
 from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType, ServiceDefinitionException
 from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.al.common import forge
@@ -91,6 +93,10 @@ class CuckooTimeoutException(Exception):
     pass
 
 
+class MissingCuckooReportException(Exception):
+    pass
+
+
 class CuckooProcessingException(Exception):
     pass
 
@@ -98,6 +104,10 @@ class CuckooProcessingException(Exception):
 class CuckooVMBusyException(Exception):
     pass
 
+def _exclude_chain_ex(ex):
+    """Use this with some of the @retry decorators to only retry if the exception
+    ISN'T a RecoverableException or NonRecoverableException"""
+    return not isinstance(ex, ChainException)
 
 def _retry_on_conn_error(exception):
     do_retry = isinstance(exception, ConnectionError) or isinstance(exception, CuckooVMBusyException)
@@ -441,6 +451,7 @@ class Cuckoo(ServiceBase):
 
     # noinspection PyTypeChecker
     def execute(self, request):
+
         if request.task.depth > 3:
             self.log.warning("Cuckoo is exiting because it currently does not execute on great great grand children.")
             request.set_save_result(False)
@@ -489,6 +500,22 @@ class Cuckoo(ServiceBase):
 
         full_memdump = False
         pull_memdump = False
+
+        ##
+        # Check the filename to see if it's mime encoded
+        mime_re = re.compile("^=\?.*\?=$")
+        if mime_re.match(self.file_name):
+            self.log.debug("Found a mime encoded filename, will try and decode")
+            try:
+                decoded_filename = email.header.decode_header(self.file_name)
+                new_filename = decoded_filename[0][0].decode(decoded_filename[0][1])
+                self.log.info("Using decoded filename %s" % new_filename)
+                self.file_name = new_filename
+            except:
+                new_filename = generate_random_words(1)
+                self.log.error("Problem decoding filename. Using randomly generated filename %s. Error: %s " %
+                               (new_filename, traceback.format_exc()))
+                self.file_name = new_filename
 
         # Check the file extension
         original_ext = self.file_name.rsplit('.', 1)
@@ -874,6 +901,8 @@ class Cuckoo(ServiceBase):
             return True
         return False
 
+    @retry(wait_fixed=1000, retry_on_exception=_exclude_chain_ex,
+           stop_max_attempt_number=3)
     def cuckoo_submit(self, file_content):
         try:
             """ Submits a new file to Cuckoo for analysis """
@@ -918,9 +947,19 @@ class Cuckoo(ServiceBase):
             err_msg = "Task went missing while waiting for cuckoo to analyze file."
         elif status == "stopped":
             err_msg = "Service has been stopped while waiting for cuckoo to analyze file."
+        elif status == "missing_report":
+            # this most often happens due to some sort of messed up filename that
+            # the cuckoo agent inside the VM died on.
+            new_filename = generate_random_words(1)
+            file_ext = self.cuckoo_task.file.rsplit(".", 1)[-1]
+            self.cuckoo_task.file = new_filename + "." + file_ext
+            self.log.warning("Got missing_report status. This is often caused by invalid filenames. "
+                             "Renaming file to %s and retrying" % self.cuckoo_task.file)
+            # Raise an exception to force a retry
+            raise Exception("Retrying after missing_report status")
 
         if err_msg:
-            self.log.debug(err_msg)
+            self.log.error(err_msg)
             raise RecoverableError(err_msg)
 
     def stop(self):
@@ -958,7 +997,8 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
            stop_max_attempt_number=CUCKOO_MAX_TIMEOUT / CUCKOO_POLL_DELAY,
-           retry_on_result=_retry_on_none)
+           retry_on_result=_retry_on_none,
+           retry_on_exception = _exclude_chain_ex)
     def cuckoo_poll_report(self):
 
         # Bail if we were stopped
@@ -991,7 +1031,10 @@ class Cuckoo(ServiceBase):
                     return
                 time.sleep(1)   # wait a few seconds in case report isn't actually ready
 
-            self.cuckoo_task.report = self.cuckoo_query_report(self.cuckoo_task.id)
+            try:
+                self.cuckoo_task.report = self.cuckoo_query_report(self.cuckoo_task.id)
+            except MissingCuckooReportException as e:
+                return "missing_report"
             if self.cuckoo_task.report and isinstance(self.cuckoo_task.report, dict):
                 return status
         else:
@@ -999,7 +1042,7 @@ class Cuckoo(ServiceBase):
 
         return None
 
-    @retry(wait_fixed=2000)
+    @retry(wait_fixed=2000, stop_max_attempt_number=3)
     def cuckoo_submit_file(self, file_content):
         if self.check_stop():
             return None
@@ -1009,6 +1052,15 @@ class Cuckoo(ServiceBase):
         resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task)
         if resp.status_code != 200:
             self.log.debug("Failed to submit file %s. Status code: %s" % (self.cuckoo_task.file, resp.status_code))
+
+            if resp.status_code == 500:
+                new_filename = generate_random_words(1)
+                file_ext = self.cuckoo_task.file.rsplit(".", 1)[-1]
+                self.cuckoo_task.file = new_filename + "." + file_ext
+                self.log.warning("Got 500 error from Cuckoo API. This is often caused by non-ascii filenames. "
+                                 "Renaming file to %s and retrying" % self.cuckoo_task.file)
+                # Raise an exception to force a retry
+                raise Exception("Retrying after 500 error")
             return None
         else:
             resp_dict = dict(resp.json())
@@ -1022,7 +1074,8 @@ class Cuckoo(ServiceBase):
                     return None
             return task_id
 
-    @retry(wait_fixed=1000, stop_max_attempt_number=5)
+    @retry(wait_fixed=1000, stop_max_attempt_number=5,
+           retry_on_exception=lambda x: not isinstance(x, MissingCuckooReportException))
     def cuckoo_query_report(self, task_id, fmt="json", params=None):
         if self.check_stop():
             return None
@@ -1030,11 +1083,11 @@ class Cuckoo(ServiceBase):
         resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {})
         if resp.status_code != 200:
             if resp.status_code == 404:
-                self.log.error("Task or report not found for task %s in container %s" % (task_id, self.cm.name))
-                # TODO:  pretty sure that if we get to this point, it's dead. need to follow up. made issue AL-126.
-                # most common cause of getting to here seems to be odd/non-ascii filenames
+                self.log.error("Task or report not found for task %s in container %s." % (task_id, self.cm.name))
+                # most common cause of getting to here seems to be odd/non-ascii filenames, where the cuckoo agent
+                # inside the VM dies
 
-                return None
+                raise MissingCuckooReportException("Task or report not found")
             else:
                 self.log.error("Failed to query report %s. Status code: %d" % (task_id, resp.status_code))
                 self.log.error(resp.text)
@@ -1128,7 +1181,7 @@ class Cuckoo(ServiceBase):
         if not self._all_vms_busy(resp_dict.get('machines')):
             return True
 
-        self.log.debug("_all_vms_busy came back false")
+        self.log.debug("_all_vms_busy came back true")
         return False
 
     @staticmethod
@@ -1341,3 +1394,11 @@ class Cuckoo(ServiceBase):
                     logger.info("Found extra file %s, removing it" %
                                   extra_path)
                     os.unlink(extra_path)
+
+ALPHA_NUMS = [chr(x + 65) for x in xrange(26)] + [chr(x + 97) for x in xrange(26)] + [str(x) for x in xrange(10)]
+
+def generate_random_words(num_words):
+    return " ".join(["".join([random.choice(ALPHA_NUMS)
+                              for _ in xrange(int(random.random() * 10) + 2)])
+                     for _ in xrange(num_words)])
+
