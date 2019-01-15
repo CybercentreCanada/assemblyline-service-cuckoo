@@ -27,10 +27,10 @@ COPY libs/volatility-2.6.zip /tmp/
 RUN apt-get update &&\
 #  touch /etc/init/cgroup-lite.conf && ln /etc/init/cgroup-lite.conf /etc/init.d/cgroup-lite  &&\
   yes | apt-get install -y --force-yes --no-install-recommends  cgroup-lite &&\
-  xargs apt-get install -y --force-yes --no-install-recommends < /tmp/packages.txt &&\
+  apt-get install -y --force-yes --no-install-recommends $(cat /tmp/packages.txt) &&\
   dpkg -i /tmp/inetsim_1.2.8-1_all.deb &&\
   rm /tmp/inetsim_1.2.8-1_all.deb &&\
-  xargs -n 1 pip install --upgrade < /tmp/requirements.txt &&\
+  pip install --upgrade -r /tmp/requirements.txt &&\
   pip install /tmp/volatility-2.6.zip &&\
   # These packages are helpful for testing
   apt-get install -y --force-yes openssh-server vim less &&\
