@@ -308,6 +308,7 @@ class Cuckoo(ServiceBase):
         # Keep track of the mtime on the community files
         self._community_mtimes = {}
 
+
     def __del__(self):
         if self.cm is not None:
             try:
@@ -355,6 +356,9 @@ class Cuckoo(ServiceBase):
         self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
 
     def start(self):
+
+        global CUCKOO_MAX_TIMEOUT
+        CUCKOO_MAX_TIMEOUT = self.service_timeout
 
         # Set the community mtime dict. sysprep should have already made sure we're up to date
         self._community_mtimes = self._get_community_mtimes()
@@ -451,6 +455,7 @@ class Cuckoo(ServiceBase):
 
     # noinspection PyTypeChecker
     def execute(self, request):
+        # self.log.debug("Using max timeout %d" % CUCKOO_MAX_TIMEOUT)
 
         if request.task.depth > 3:
             self.log.warning("Cuckoo is exiting because it currently does not execute on great great grand children.")
@@ -996,7 +1001,7 @@ class Cuckoo(ServiceBase):
         return "started"
 
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
-           stop_max_attempt_number=CUCKOO_MAX_TIMEOUT / CUCKOO_POLL_DELAY,
+           # stop_max_attempt_number= CUCKOO_MAX_TIMEOUT / CUCKOO_POLL_DELAY,
            retry_on_result=_retry_on_none,
            retry_on_exception = _exclude_chain_ex)
     def cuckoo_poll_report(self):
