@@ -21,3 +21,4 @@ idna==2.6
 requests==2.13.0
 requests[security]==2.13.0
 libmagic
+git+https://github.com/danielplohmann/apiscout
