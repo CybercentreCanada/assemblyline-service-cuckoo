@@ -42,7 +42,7 @@ CUCKOO_API_QUERY_PCAP = "pcap/get/%s"
 CUCKOO_API_QUERY_MACHINES = "machines/list"
 CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
 CUCKOO_POLL_DELAY = 2
-GUEST_VM_START_TIMEOUT = 20
+GUEST_VM_START_TIMEOUT = 40
 CUCKOO_MAX_TIMEOUT = 600
 
 # Max amount of time (seconds) between restarting the docker container
