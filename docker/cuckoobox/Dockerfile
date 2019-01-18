@@ -115,9 +115,9 @@ RUN chown -R sandbox: /home/sandbox &&\
 
 # FOR DEV
 # Install customized cuckoo
-RUN pip uninstall -y cuckoo
-COPY cuckoo/ /opt/cuckoo/
-RUN cd /opt/cuckoo && python stuff/monitor.py && python setup.py sdist develop
+#RUN pip uninstall -y cuckoo
+#COPY cuckoo/ /opt/cuckoo/
+#RUN cd /opt/cuckoo && python stuff/monitor.py && python setup.py sdist develop
 
 # Run this portion of the build as the sandbox user
 USER sandbox
