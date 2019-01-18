@@ -809,7 +809,7 @@ class Cuckoo(ServiceBase):
                                         self.task.add_extracted(mem_file_path, memdesc,
                                                                 display_name=f,
                                                                 submission_tag={
-                                                                    "cuckoo_vm": select_machine
+                                                                    "vm_name": select_machine
                                                                 })
 
                             # Extract buffers and anything extracted
