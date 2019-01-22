@@ -17,7 +17,7 @@ config = forge.get_config()
 
 class CuckooContainerManager(DockerManager):
     def __init__(self, cfg, vmm):
-        super(CuckooContainerManager, self).__init__('cuckoo', 'assemblyline.al.service.cuckoo.cm')
+        super(CuckooContainerManager, self).__init__('cuckoo', 'assemblyline.svc.cuckoo.cm')
 
         ctx = {
             'image': cfg['cuckoo_image'],
