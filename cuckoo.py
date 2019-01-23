@@ -771,42 +771,37 @@ class Cuckoo(ServiceBase):
                                                             display_name=f)
 
                             # process memory dump related
-                            # Check if dump_processes is set - cuckoo does process memory dumps
-                            # even if procememdump isn't set - not sure if this is a feature or a bug
-                            # in any case, we dont' want to extract the process memory dump artifacts unless
-                            # the user has asked for process mem dumps
-                            if dump_processes:
-                                memdesc_lookup = {
-                                    "py": "IDA script to load process memory",
-                                    "dmp": "Process Memory Dump",
-                                    "exe_": "EXE Extracted from Memory Dump"
-                                }
-                                for f in [x.name for x in tar_obj.getmembers() if
-                                          x.name.startswith("memory") and x.isfile()]:
-                                    mem_file_path = os.path.join(self.working_directory, f)
-                                    tar_obj.extract(f, path=self.working_directory)
-                                    # Lookup a more descriptive name, depending the filename suffix
-                                    filename_suffix = f.split(".")[-1]
-                                    memdesc = memdesc_lookup.get(filename_suffix, "Process Memory Artifact")
-                                    if filename_suffix == "py":
-                                        self.task.add_supplementary(mem_file_path, memdesc,
-                                                                display_name=f)
-                                    else:
-                                        mem_filesize = os.stat(mem_file_path).st_size
-                                        if mem_filesize > max_extracted_size:
-                                            self.file_res.add_section(ResultSection(
-                                                SCORE.NULL,
-                                                title_text="Extracted file too large to add",
-                                                body="Extracted file %s is %d bytes, which is larger than the maximum size "
-                                                "allowed for extracted files (%d). You can still access this file "
-                                                "by downloading the 'cuckoo_report.tar.gz' supplementary file" %
-                                                     (f, mem_filesize, max_extracted_size)
-                                            ))
-                                        self.task.add_extracted(mem_file_path, memdesc,
-                                                                display_name=f,
-                                                                submission_tag={
-                                                                    "vm_name": select_machine
-                                                                })
+                            memdesc_lookup = {
+                                "py": "IDA script to load process memory",
+                                "dmp": "Process Memory Dump",
+                                "exe_": "EXE Extracted from Memory Dump"
+                            }
+                            for f in [x.name for x in tar_obj.getmembers() if
+                                      x.name.startswith("memory") and x.isfile()]:
+                                mem_file_path = os.path.join(self.working_directory, f)
+                                tar_obj.extract(f, path=self.working_directory)
+                                # Lookup a more descriptive name, depending the filename suffix
+                                filename_suffix = f.split(".")[-1]
+                                memdesc = memdesc_lookup.get(filename_suffix, "Process Memory Artifact")
+                                if filename_suffix == "py":
+                                    self.task.add_supplementary(mem_file_path, memdesc,
+                                                            display_name=f)
+                                else:
+                                    mem_filesize = os.stat(mem_file_path).st_size
+                                    if mem_filesize > max_extracted_size:
+                                        self.file_res.add_section(ResultSection(
+                                            SCORE.NULL,
+                                            title_text="Extracted file too large to add",
+                                            body="Extracted file %s is %d bytes, which is larger than the maximum size "
+                                            "allowed for extracted files (%d). You can still access this file "
+                                            "by downloading the 'cuckoo_report.tar.gz' supplementary file" %
+                                                 (f, mem_filesize, max_extracted_size)
+                                        ))
+                                    self.task.add_extracted(mem_file_path, memdesc,
+                                                            display_name=f,
+                                                            submission_tag={
+                                                                "vm_name": select_machine
+                                                            })
 
                             # Extract buffers and anything extracted
                             for f in [x.name for x in tar_obj.getmembers() if
