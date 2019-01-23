@@ -43,7 +43,6 @@ CUCKOO_API_QUERY_MACHINES = "machines/list"
 CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
 CUCKOO_POLL_DELAY = 2
 GUEST_VM_START_TIMEOUT = 40
-CUCKOO_MAX_TIMEOUT = 600
 
 # Max amount of time (seconds) between restarting the docker container
 CUCKOOBOX_MAX_LIFETIME = 86400
@@ -356,9 +355,6 @@ class Cuckoo(ServiceBase):
         self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
 
     def start(self):
-
-        global CUCKOO_MAX_TIMEOUT
-        CUCKOO_MAX_TIMEOUT = self.service_timeout
 
         # Set the community mtime dict. sysprep should have already made sure we're up to date
         self._community_mtimes = self._get_community_mtimes()
