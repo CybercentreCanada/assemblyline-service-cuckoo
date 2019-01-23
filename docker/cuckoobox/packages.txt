@@ -33,3 +33,4 @@ libnet-libidn-perl
 liburi-perl
 libmagic-dev
 nfqueue-bindings-perl
+git
