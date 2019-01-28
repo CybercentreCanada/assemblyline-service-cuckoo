@@ -54,7 +54,9 @@ the VM names you want to make available, where 'auto' is a special value that wi
 than this if the process being monitored exits.
 * **enforce_timeout** - Even if Cuckoo thinks the jobs is done before `analysis_timeout`, force the execution to take the full amount of time 
 * **generate_report** - Generate a full report (cuckoo_report.tar.gz) and attach it as a supplementary file
-* **dump_processes** - Dump process memory. This would be available in the cuckoo_report.tar.gz supplementary file
+* **dump_processes** - Dump process memory. These are also added to the submission as extracted files. 
+**NB**: In recent versions of the cuckoo monitor (~Jan 2019), process memory dumps may be triggered even if this 
+option isn't set. It's not clear if this is intended or not.
 * **dll_function** - If a DLL file is submitted, manually select the function within it to execute
 * **arguments** - command line arguments to pass to the sample being analyzed
 * **custom_options** - Custom options to pass to the cuckoo submission. Same as the `--options` command line option [here](https://cuckoo.sh/docs/usage/submit.html)

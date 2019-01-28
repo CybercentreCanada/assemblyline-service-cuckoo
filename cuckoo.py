@@ -43,7 +43,6 @@ CUCKOO_API_QUERY_MACHINES = "machines/list"
 CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
 CUCKOO_POLL_DELAY = 2
 GUEST_VM_START_TIMEOUT = 40
-CUCKOO_MAX_TIMEOUT = 600
 
 # Max amount of time (seconds) between restarting the docker container
 CUCKOOBOX_MAX_LIFETIME = 86400
@@ -308,6 +307,7 @@ class Cuckoo(ServiceBase):
         # Keep track of the mtime on the community files
         self._community_mtimes = {}
 
+
     def __del__(self):
         if self.cm is not None:
             try:
@@ -451,6 +451,7 @@ class Cuckoo(ServiceBase):
 
     # noinspection PyTypeChecker
     def execute(self, request):
+        # self.log.debug("Using max timeout %d" % CUCKOO_MAX_TIMEOUT)
 
         if request.task.depth > 3:
             self.log.warning("Cuckoo is exiting because it currently does not execute on great great grand children.")
@@ -797,7 +798,24 @@ class Cuckoo(ServiceBase):
                                                  (f, mem_filesize, max_extracted_size)
                                         ))
                                     self.task.add_extracted(mem_file_path, memdesc,
-                                                            display_name=f)
+                                                            display_name=f,
+                                                            submission_tag={
+                                                                "vm_name": select_machine
+                                                            })
+
+                            # Extract buffers and anything extracted
+                            for f in [x.name for x in tar_obj.getmembers() if
+                                      x.name.startswith("buffer") and x.isfile()]:
+                                buffer_file_path = os.path.join(self.working_directory, f)
+                                tar_obj.extract(f, path=self.working_directory)
+                                self.task.add_extracted(buffer_file_path, "Extracted buffer",
+                                                        display_name=f)
+                            for f in [x.name for x in tar_obj.getmembers() if
+                                      x.name.startswith("extracted") and x.isfile()]:
+                                extracted_file_path = os.path.join(self.working_directory, f)
+                                tar_obj.extract(f, path=self.working_directory)
+                                self.task.add_extracted(extracted_file_path, "Cuckoo extracted file",
+                                                        display_name=f)
                             tar_obj.close()
                         except:
                             self.log.exception(
@@ -996,7 +1014,7 @@ class Cuckoo(ServiceBase):
         return "started"
 
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
-           stop_max_attempt_number=CUCKOO_MAX_TIMEOUT / CUCKOO_POLL_DELAY,
+           # stop_max_attempt_number= CUCKOO_MAX_TIMEOUT / CUCKOO_POLL_DELAY,
            retry_on_result=_retry_on_none,
            retry_on_exception = _exclude_chain_ex)
     def cuckoo_poll_report(self):
