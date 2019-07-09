@@ -1111,8 +1111,12 @@ class Cuckoo(ServiceBase):
                 self.log.error(resp.text)
                 return None
         if fmt == "json":
-            resp_dict = dict(resp.json())
-            report_data = resp_dict
+            try:
+                resp_dict = dict(resp.json())
+                report_data = resp_dict
+            except Exception as e:
+                url = self.query_report_url % task_id + '/' + fmt
+                self.log.exception("Exception converting cuckoo report http response into json: report url: %s, file_name: %s", url, self.file_name)
         else:
             report_data = resp.content
 
