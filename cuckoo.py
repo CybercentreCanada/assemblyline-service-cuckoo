@@ -1390,7 +1390,10 @@ class Cuckoo(ServiceBase):
                 local_path = os.path.join(local_community_root, bn)
 
                 logger.info("Downloading %s to %s" % (url, local_temp_path))
-                urllib.urlretrieve(url, filename=local_temp_path)
+                
+                r = requests.get(url)
+                with open(local_temp_path, 'wb') as f:  
+                    f.write(r.content)
 
                 if os.path.exists(local_path):
                     # Compare this file against the existing file
