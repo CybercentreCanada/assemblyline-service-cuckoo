@@ -1111,8 +1111,12 @@ class Cuckoo(ServiceBase):
                 self.log.error(resp.text)
                 return None
         if fmt == "json":
-            resp_dict = dict(resp.json())
-            report_data = resp_dict
+            try:
+                resp_dict = dict(resp.json())
+                report_data = resp_dict
+            except Exception as e:
+                url = self.query_report_url % task_id + '/' + fmt
+                self.log.exception("Exception converting cuckoo report http response into json: report url: %s, file_name: %s", url, self.file_name)
         else:
             report_data = resp.content
 
@@ -1390,7 +1394,10 @@ class Cuckoo(ServiceBase):
                 local_path = os.path.join(local_community_root, bn)
 
                 logger.info("Downloading %s to %s" % (url, local_temp_path))
-                urllib.urlretrieve(url, filename=local_temp_path)
+                
+                r = requests.get(url)
+                with open(local_temp_path, 'wb') as f:  
+                    f.write(r.content)
 
                 if os.path.exists(local_path):
                     # Compare this file against the existing file
