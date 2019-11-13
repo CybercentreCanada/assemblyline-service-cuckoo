@@ -388,7 +388,7 @@ class Cuckoo(ServiceBase):
         # certain modules run is to use the appropriate suffix (.jar, .vbs, etc.)
 
         # Check for a valid tag
-        if tag_extension is not None and 'unknown' not in self.task.tag:
+        if tag_extension is not None and 'unknown' not in self.task.file_type:
             file_ext = tag_extension
         # Check if the file was submitted with an extension
         elif len(original_ext) == 2:
@@ -407,7 +407,7 @@ class Cuckoo(ServiceBase):
         else:
             # This is unknown without an extension that we accept/recognize.. no scan!
             self.log.info("Cuckoo is exiting because the file type could not be identified. %s %s" %
-                           (tag_extension, self.task.tag))
+                           (tag_extension, self.task.file_type))
             return
 
         # Rename based on the found extension.
