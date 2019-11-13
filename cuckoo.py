@@ -1,36 +1,24 @@
-import hashlib
 import io
 import os
 import requests
 import tarfile
 import time
-import shlex
 import random
 import ssdeep
-import urllib
-import shutil
 import hashlib
-import json
 import traceback
-import filecmp
-import datetime
 import re
 import email.header
 
-from requests.exceptions import ConnectionError
 from retrying import retry, RetryError
-from collections import Counter
 
-from assemblyline.common.charset import safe_str
+from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
-from assemblyline.al.common.result import Result, ResultSection, TAG_TYPE, TEXT_FORMAT, TAG_WEIGHT, SCORE
-from assemblyline.common.exceptions import RecoverableError, NonRecoverableError, ChainException
-from assemblyline.al.service.base import ServiceBase, UpdaterFrequency, UpdaterType, ServiceDefinitionException
-from al_services.alsvc_cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
-from assemblyline.al.common import forge
-from assemblyline.common.docker import DockerException
-from assemblyline.common.importing import class_by_name
-from assemblyline.al.common.heuristics import Heuristic
+from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT, Heuristic
+from assemblyline.common.exceptions import RecoverableError, ChainException
+from assemblyline_v4_service.common.base import ServiceBase
+from whitelist import wlist_check_hash, wlist_check_dropped
+from assemblyline.common.importing import load_module_by_path
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -41,11 +29,9 @@ CUCKOO_API_QUERY_REPORT = "tasks/report/%s"
 CUCKOO_API_QUERY_PCAP = "pcap/get/%s"
 CUCKOO_API_QUERY_MACHINES = "machines/list"
 CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
+CUCKOO_API_QUERY_HOST_STATUS = "cuckoo/status"
 CUCKOO_POLL_DELAY = 2
 GUEST_VM_START_TIMEOUT = 40
-
-# Max amount of time (seconds) between restarting the docker container
-CUCKOOBOX_MAX_LIFETIME = 86400
 
 SUPPORTED_EXTENSIONS = [
     "cpl",
@@ -103,14 +89,15 @@ class CuckooProcessingException(Exception):
 class CuckooVMBusyException(Exception):
     pass
 
+
+class MaxFileSizeExceeded(Exception):
+    pass
+
+
 def _exclude_chain_ex(ex):
     """Use this with some of the @retry decorators to only retry if the exception
     ISN'T a RecoverableException or NonRecoverableException"""
     return not isinstance(ex, ChainException)
-
-def _retry_on_conn_error(exception):
-    do_retry = isinstance(exception, ConnectionError) or isinstance(exception, CuckooVMBusyException)
-    return do_retry
 
 
 def _retry_on_none(result):
@@ -162,7 +149,6 @@ class CuckooTask(dict):
 class Cuckoo(ServiceBase):
     SERVICE_ACCEPTS = "(document/.*|executable/.*|java/.*|code/.*|archive/(zip|rar)|unknown|android/apk|meta/.*)"
     SERVICE_ENABLED = True
-    SERVICE_REVISION = ServiceBase.parse_revision('$Id$')
     SERVICE_VERSION = '2'
     SERVICE_STAGE = "CORE"
     SERVICE_TIMEOUT = 800
@@ -170,16 +156,13 @@ class Cuckoo(ServiceBase):
     SERVICE_CPU_CORES = 1.1
     SERVICE_RAM_MB = 5120
     SERVICE_SAFE_START = True
+    SERVICE_CLASSIFICATION = ""  # will default to unrestricted
 
     SERVICE_DEFAULT_CONFIG = {
         "cuckoo_image": "cuckoo/cuckoobox:latest",
-        # deprecated
-        #"vm_meta": "cuckoo.config",
         "REMOTE_DISK_ROOT": "vm/disks/cuckoo/",
         "LOCAL_DISK_ROOT": "cuckoo_vms/",
         "LOCAL_VM_META_ROOT": "var/cuckoo/",
-        # deprecated
-        #"ramdisk_size": "2048M",
         "ram_limit": "5120m",
         "dedup_similar_percent": 80,
         "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz",
@@ -269,18 +252,14 @@ class Cuckoo(ServiceBase):
     ]
 
     # Heuristic info
-    AL_Cuckoo_001 = Heuristic("AL_Cuckoo_001", "Exec Multiple Exports", "executable/windows/dll",
-                              """Attempted to execute multiple DLL exports""")
+    AL_Cuckoo_001 = Heuristic(heur_id=1, attack_id="Exec Multiple Exports", signature="executable/windows/dll")
 
-    def __init__(self, cfg=None):
+    def __init__(self, config=None):
 
-        super(Cuckoo, self).__init__(cfg)
-        self.cfg = cfg
-        self.vmm = None
-        self.cm = None  # type: CuckooContainerManager
+        super(Cuckoo, self).__init__(config)
+        self.cfg = config
         self.vm_xml = None
         self.vm_snapshot_xml = None
-        # self.vm_meta = None
         self.file_name = None
         self.base_url = None
         self.submit_url = None
@@ -290,6 +269,7 @@ class Cuckoo(ServiceBase):
         self.query_pcap_url = None
         self.query_machines_url = None
         self.query_machine_info_url = None
+        self.query_host_url = None
         self.task = None
         self.file_res = None
         self.cuckoo_task = None
@@ -300,48 +280,12 @@ class Cuckoo(ServiceBase):
         self.ssdeep_match_pct = 0
         self.restart_interval = 0
         self.result_parsers = []
-
-        # track the last time docker was restarted
-        self._last_docker_restart = 0
-
-        # Keep track of the mtime on the community files
-        self._community_mtimes = {}
-
-
-    def __del__(self):
-        if self.cm is not None:
-            try:
-                self.cm.stop()
-            except DockerException:
-                pass
-
-    def sysprep(self):
-        """
-        This function checks for VM config and disk updates, and then checks for 'cuckoo community' updates
-        if they're configured
-        :return:
-        """
-        logger = self.log.getChild("sysprep")
-        logger.info("Running sysprep...")
-
-        logger.info("Importing dependencies...")
-        self.import_service_deps()
-
-        logger.info("Init VMM object and checking for VM updates...")
-        self.vmm = CuckooVmManager(self.cfg, self.SERVICE_NAME)
-        self.vmm.download_data()
-
-        logger.info("Checking for community updates")
-        self._cuckoo_community_updates()
-        self._community_mtimes = self._get_community_mtimes()
-
-        logger.info("Done")
+        self.machines = None
 
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
-        global generate_al_result, CuckooVmManager, CuckooContainerManager, pefile
-        from al_services.alsvc_cuckoo.cuckooresult import generate_al_result
-        from al_services.alsvc_cuckoo.cuckoo_managers import CuckooVmManager, CuckooContainerManager
+        global generate_al_result, pefile
+        from cuckooresult import generate_al_result
         import pefile
 
     def set_urls(self):
@@ -353,46 +297,19 @@ class Cuckoo(ServiceBase):
         self.query_pcap_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_PCAP)
         self.query_machines_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINES)
         self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
+        self.query_host_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_HOST_STATUS)
 
     def start(self):
 
-        # Set the community mtime dict. sysprep should have already made sure we're up to date
-        self._community_mtimes = self._get_community_mtimes()
-
-        self.vmm = CuckooVmManager(self.cfg, self.SERVICE_NAME)
-        self.cm = CuckooContainerManager(self.cfg,
-                                         self.vmm)
+        self.import_service_deps()
 
         # Set this here, normally we don't need until an execute() call
-        # (b/c trigger_cuckoo_reset->set_urls uses the session object)
         # but when using the cuckoo_tests script we don't call execute
         self.session = requests.Session()
 
-        # only call this *after* .vmm and is initialized
-        # we don't need to 'execute_now', sysprep should have taken care of making sure everything's up to date
-        self._register_update_callback(self.cuckoo_update, execute_now=False,
-                                       blocking=False,
-                                       utype=UpdaterType.BOX,
-                                       freq=UpdaterFrequency.HOUR)
-
-        self._register_cleanup_op({
-            'type': 'shell',
-            'args': shlex.split("docker rm --force %s" % self.cm.name)
-        })
-
-        self.log.debug("VMM and CM started!")
-        # Start the container
-        self.cuckoo_ip = self.cm.start_container(self.cm.name)
-        self.restart_interval = random.randint(45, 55)
-        self.file_name = None
-        self.set_urls()
-
-        # Set the 'last restart' time
-        self._last_docker_restart = time.time()
-
         self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent", 80))
 
-        for param in forge.get_datastore().get_service(self.SERVICE_NAME)['submission_params']:
+        for param in self.SERVICE_DEFAULT_SUBMISSION_PARAMS:
             if param['name'] == "routing":
                 self.enabled_routes = param['list']
                 if self.enabled_routes[0] != param['default']:
@@ -403,101 +320,40 @@ class Cuckoo(ServiceBase):
             raise ValueError("No routing submission_parameter.")
 
         # initialize any extra result parsers
-        if "result_parsers" in self.cfg:
-            for parser_path in self.cfg.get("result_parsers"):
+        if self.result_parsers:
+            for parser_path in self.result_parsers:
                 self.log.info("Adding result_parser %s" % parser_path)
-                parser_class = class_by_name(parser_path)
+                parser_class = load_module_by_path(parser_path)
                 self.result_parsers.append(parser_class())
         else:
             self.log.error("Missing 'result_parsers' service configuration.")
         self.log.debug("Cuckoo started!")
 
-    def find_machine(self, full_tag, route):
-        # substring search
-        vm_list = Counter()
-        if route not in self.cm.tag_map or route not in self.enabled_routes:
-            self.log.debug("Invalid route selected for Cuckoo submission. Chosen: %s, permitted: %s, enabled: %s" %
-                           (route, self.enabled_routes, self.cm.tag_map.keys()))
-            return None
-
-        for tag, vm_name in self.cm.tag_map[route].iteritems():
-            if tag == "default":
-                vm_list[vm_name] += 0
-                continue
-            try:
-                vm_list[vm_name] += full_tag.index(tag) + len(tag)
-            except ValueError:
-                continue
-
-        if len(vm_list) == 0:
-            pick = None
-        else:
-            pick = vm_list.most_common(1)[0][0]
-
-        return pick
-
-    def trigger_cuckoo_reset(self, retry_cnt=30):
-        self.log.info("Restarting cuckoobox container")
-        try:
-            self.cm.stop()
-        except DockerException:
-            pass
-        self.cuckoo_ip = self.cm.start_container(self.cm.name)
-        self.restart_interval = random.randint(45, 55)
-        self.set_urls()
-
-        self._last_docker_restart = time.time()
-        return self.is_cuckoo_ready(retry_cnt)
-
     # noinspection PyTypeChecker
     def execute(self, request):
+        # TODO: Inherit this parameter from assemblyline
+        self.cuckoo_ip = self.config["remote_host_ip"]
+
         # self.log.debug("Using max timeout %d" % CUCKOO_MAX_TIMEOUT)
 
-        if request.task.depth > 3:
-            self.log.warning("Cuckoo is exiting because it currently does not execute on great great grand children.")
-            request.set_save_result(False)
-            return
+        # if request.task.depth > 3:
+        #     self.log.warning("Cuckoo is exiting because it currently does not execute on great great grand children.")
+        #     request.set_save_result(False)
+        #     return
 
-        # vm_meta is being deprecated - check here and throw out a warning
-        # TODO: actual vm_meta deprecation
-        if "vm_meta" in self.cfg:
-            self.log.warning("The 'vm_meta' service configuration option will be deprecated and ignored "
-                             "in future version. Please see the updated README and use the 'analysis_vm' "
-                             "submission parameter to define what VMs are available for this service")
-
-            # If analysis_vms is in submission params, log an error
-            config = forge.get_config()
-            params_from_seed = [x['name'] for x in
-                                config.services.master_list[request.task.service_name]['submission_params']]
-            if "analysis_vm" in params_from_seed:
-                self.log.error("It appears that you have both the soon to be deprecated 'vm_meta' service "
-                               "configuration option as well as the 'analysis_vm' submission parameter. "
-                               "You should modify your service configuration to use only the 'analysis_vm' "
-                               "submission parameter.")
-
-        if (time.time() - self._last_docker_restart) > CUCKOOBOX_MAX_LIFETIME:
-            self.log.info("Triggering a container restart due to reaching CUCKOOBOX_MAX_LIFETIME (%d)" % CUCKOOBOX_MAX_LIFETIME)
-            self.trigger_cuckoo_reset()
-
-        # Check to see if the community repos have been updated
-        if self._get_community_mtimes() != self._community_mtimes:
-            # The updater must have run, trigger a restart
-            self.log.info("Changes to cuckoo community repos found, triggering container restart")
-            self.trigger_cuckoo_reset()
-            self._community_mtimes = self._get_community_mtimes()
+        self.set_urls()
 
         self.task = request.task
         request.result = Result()
-        request.set_service_context("Cuckoo Image:%(container_name)s; Community Repos:%(repos)s" %
-                                    {
-                                        "container_name": self.cfg.get("cuckoo_image"),
-                                        "repos": ",".join(["%s_%s" % (k,v.date().isoformat()) for k, v in self._community_mtimes.iteritems()])
-                                    })
+
+        # Setting working directory for request
+        request._working_directory = self.working_directory
+
         self.file_res = request.result
-        file_content = request.get()
+        file_content = request.file_contents
         self.cuckoo_task = None
         self.al_report = None
-        self.file_name = os.path.basename(request.path)
+        self.file_name = os.path.basename(request.file_name)
 
         full_memdump = False
         pull_memdump = False
@@ -520,7 +376,7 @@ class Cuckoo(ServiceBase):
 
         # Check the file extension
         original_ext = self.file_name.rsplit('.', 1)
-        tag_extension = tag_to_extension.get(self.task.tag)
+        tag_extension = tag_to_extension.get(self.task.file_type)
 
         # Poorly name var to track keyword arguments to pass into cuckoo's 'submit' function
         kwargs = dict()
@@ -561,19 +417,46 @@ class Cuckoo(ServiceBase):
 
 
         # Parse user args
-        analysis_timeout = request.get_param('analysis_timeout')
+        analysis_timeout = None
+        generate_report = None
+        dump_processes = None
+        dll_function = None
+        arguments = None
+        dump_memory = None
+        no_monitor = None
+        routing = None
+        custom_options = None
 
-        generate_report = request.get_param('generate_report')
+        for param in self.SERVICE_DEFAULT_SUBMISSION_PARAMS:
+            if param['name'] == "analysis_timeout":
+                analysis_timeout = param['value']
+            elif param['name'] == "generate_report":
+                generate_report = param['value']
+            elif param['name'] == "dump_processes":
+                dump_processes = param['value']
+            elif param['name'] == "dll_function":
+                dll_function = param['value']
+            elif param['name'] == "arguments":
+                arguments = param['value']
+            elif param['name'] == "dump_memory":
+                dump_memory = param['value']
+            elif param['name'] == "no_monitor":
+                no_monitor = param['value']
+            elif param['name'] == "routing":
+                routing = param['value']
+            elif param['name'] == "enforce_timeout":
+                kwargs['enforce_timeout'] = param['value']
+            elif param['name'] == "custom_options":
+                custom_options = param['value']
+
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
 
-        dump_processes = request.get_param('dump_processes')
         if dump_processes is True:
             self.log.debug("Setting procmemdump flag in task options")
             task_options.append('procmemdump=yes')
 
         # Do DLL specific stuff
-        dll_function = request.get_param('dll_function')
         if dll_function:
             task_options.append('function={}'.format(dll_function))
 
@@ -608,7 +491,6 @@ class Cuckoo(ServiceBase):
                 else:
                     self.log.warning("Missing al_cuckoo_community repo, can't attempt executing various DLL exports")
 
-        arguments = request.get_param('arguments')
         if arguments:
             task_options.append('arguments={}'.format(arguments))
 
@@ -616,67 +498,28 @@ class Cuckoo(ServiceBase):
         # if request.get_param('pull_memory') and request.task.depth == 0:
         #     pull_memdump = True
 
-        if request.get_param('dump_memory') and request.task.depth == 0:
+        if dump_memory and request.task.depth == 0:
             # Full system dump and volatility scan
             pull_memdump = True
             full_memdump = True
             kwargs['memory'] = True
 
-        if request.get_param('no_monitor'):
+        if no_monitor:
             task_options.append("free=yes")
 
-        routing = request.get_param('routing')
         if routing is None:
             routing = self.enabled_routes[0]
 
-        if request.get_param("analysis_vm") == "auto":
-            select_machine = self.find_machine(self.task.tag, routing)
-        else:
-            # We need to make sure that the 'routing' option chose is compatible with
-            # the VM selected
-            select_machine = request.get_param("analysis_vm")
-            selected_vm_meta_list = [x for x in self.vmm.vm_meta if x["name"] == select_machine]
-            if len(selected_vm_meta_list) == 0:
-                raise NonRecoverableError("Selected VM name %s not found in configured VMs. "
-                                          "If this was newly added, you may need to restart hostagent" %
-                                          select_machine)
-            else:
-                if len(selected_vm_meta_list) > 1:
-                    self.log.warning("More than one VM found with name %s. Using the first one in the list" %
-                                     select_machine)
-                selected_vm_meta = selected_vm_meta_list[0]
-
-                # Make sure routing matches up
-                if selected_vm_meta.get("route") != routing:
-                    raise NonRecoverableError("The selected routing option %s doesn't match the routing "
-                                              "configured for the selected VM %s" % (routing, select_machine))
-
-        if select_machine is None:
-            # No matching VM and no default
-            raise NonRecoverableError("No Cuckoo vm matches tag %s and no machine is tagged as default." % select_machine)
-
         kwargs['timeout'] = analysis_timeout
-        kwargs['enforce_timeout'] = request.get_param("enforce_timeout")
         kwargs['options'] = ','.join(task_options)
-        custom_options = request.get_param("custom_options")
         if custom_options is not None:
             kwargs['options'] += ",%s" % custom_options
-        if select_machine:
-            kwargs['machine'] = select_machine
 
         self.cuckoo_task = CuckooTask(self.file_name,
                                       **kwargs)
 
-        if self.restart_interval <= 0 or not self.is_cuckoo_ready():
-            self.log.info("Restart interval reached or cuckoobox still not ready, triggering restart")
-            cuckoo_up = self.trigger_cuckoo_reset()
-            if not cuckoo_up:
-                self.session.close()
-                raise RecoverableError("While restarting Cuckoo, Cuckoo never came back up.")
-        else:
-            self.restart_interval -= 1
-
         try:
+            self.machines = self.cuckoo_query_machines()
             self.cuckoo_submit(file_content)
             if self.cuckoo_task.report:
 
@@ -708,24 +551,19 @@ class Cuckoo(ServiceBase):
                         raise CuckooProcessingException("Cuckoo was unable to process this file. %s",
                                                         err_str)
                 except RecoverableError as e:
-                    self.log.info("Recoverable error, triggering cuckoobox container restart. Error message: %s" % e.message)
-                    self.trigger_cuckoo_reset(5)
+                    self.log.info("Recoverable error. Error message: %s" % e.message)
                     raise
                 except Exception as e:
-                    # This is non-recoverable unless we were stopped during processing
-                    self.log.info("Non-recoverable error, triggering cuckoobox container restart")
-                    self.trigger_cuckoo_reset(1)
-                    if self.should_run:
-                        self.log.exception("Error generating AL report: ")
-                        raise CuckooProcessingException("Unable to generate cuckoo al report for task %s: %s" %
-                                                        (safe_str(self.cuckoo_task.id), safe_str(e)))
+                    self.log.exception("Error generating AL report: ")
+                    raise CuckooProcessingException("Unable to generate cuckoo al report for task %s: %s" %
+                                                    (safe_str(self.cuckoo_task.id), safe_str(e)))
 
                 if self.check_stop():
                     raise RecoverableError("Cuckoo stopped during result processing..")
 
                 # Get the max size for extract files, used a few times after this
-                config = forge.get_config()
-                max_extracted_size = config.get("submissions", {}).get("max", {}).get("size", 0)
+                request.max_file_size = 80000000 #TODO import this
+                max_extracted_size = request.max_file_size
 
                 if generate_report is True:
                     self.log.debug("Generating cuckoo report tar.gz.")
@@ -734,12 +572,13 @@ class Cuckoo(ServiceBase):
                     # TODO: once https://github.com/cuckoosandbox/cuckoo/pull/2533 is accepted, change fmt to 'all_memory'
                     tar_report = self.cuckoo_query_report(self.cuckoo_task.id, fmt='all', params={'tar': 'gz'})
                     if tar_report is not None:
-                        tar_report_path = os.path.join(self.working_directory, "cuckoo_report.tar.gz")
+                        tar_file_name = "cuckoo_report.tar.gz"
+                        tar_report_path = os.path.join(self.working_directory, tar_file_name)
                         try:
-                            report_file = open(tar_report_path, 'w')
+                            report_file = open(tar_report_path, 'wb')
                             report_file.write(tar_report)
                             report_file.close()
-                            self.task.add_supplementary(tar_report_path,
+                            self.task.add_supplementary(tar_report_path, tar_file_name,
                                                         "Cuckoo Sandbox analysis report archive (tar.gz)")
                         except:
                             self.log.exception(
@@ -752,7 +591,7 @@ class Cuckoo(ServiceBase):
                             if "reports/report.json" in tar_obj.getnames():
                                 report_json_path = os.path.join(self.working_directory, "reports", "report.json")
                                 tar_obj.extract("reports/report.json", path=self.working_directory)
-                                self.task.add_supplementary(report_json_path, "Cuckoo Sandbox report (json)", display_name="report.json")
+                                self.task.add_supplementary(report_json_path, "report.json", "Cuckoo Sandbox report (json)")
                             tar_obj.close()
                         except:
                             self.log.exception(
@@ -788,34 +627,28 @@ class Cuckoo(ServiceBase):
                                                             display_name=f)
                                 else:
                                     mem_filesize = os.stat(mem_file_path).st_size
-                                    if mem_filesize > max_extracted_size:
+                                    try:
+                                        self.task.add_extracted(mem_file_path, f, memdesc)
+                                    except MaxFileSizeExceeded:
                                         self.file_res.add_section(ResultSection(
-                                            SCORE.NULL,
                                             title_text="Extracted file too large to add",
                                             body="Extracted file %s is %d bytes, which is larger than the maximum size "
-                                            "allowed for extracted files (%d). You can still access this file "
-                                            "by downloading the 'cuckoo_report.tar.gz' supplementary file" %
+                                                 "allowed for extracted files (%d). You can still access this file "
+                                                 "by downloading the 'cuckoo_report.tar.gz' supplementary file" %
                                                  (f, mem_filesize, max_extracted_size)
                                         ))
-                                    self.task.add_extracted(mem_file_path, memdesc,
-                                                            display_name=f,
-                                                            submission_tag={
-                                                                "vm_name": select_machine
-                                                            })
 
                             # Extract buffers and anything extracted
                             for f in [x.name for x in tar_obj.getmembers() if
                                       x.name.startswith("buffer") and x.isfile()]:
                                 buffer_file_path = os.path.join(self.working_directory, f)
                                 tar_obj.extract(f, path=self.working_directory)
-                                self.task.add_extracted(buffer_file_path, "Extracted buffer",
-                                                        display_name=f)
+                                self.task.add_extracted(buffer_file_path, f, "Extracted buffer")
                             for f in [x.name for x in tar_obj.getmembers() if
                                       x.name.startswith("extracted") and x.isfile()]:
                                 extracted_file_path = os.path.join(self.working_directory, f)
                                 tar_obj.extract(f, path=self.working_directory)
-                                self.task.add_extracted(extracted_file_path, "Cuckoo extracted file",
-                                                        display_name=f)
+                                self.task.add_extracted(extracted_file_path, f, "Cuckoo extracted file")
                             tar_obj.close()
                         except:
                             self.log.exception(
@@ -824,7 +657,6 @@ class Cuckoo(ServiceBase):
                 if len(exports_available) > 0 and kwargs.get("package","") == "dll_multi":
                     max_dll_exports = self.cfg.get("max_dll_exports_exec", self.SERVICE_DEFAULT_CONFIG["max_dll_exports_exec"])
                     dll_multi_section = ResultSection(
-                        SCORE.NULL,
                         title_text="Executed multiple DLL exports",
                         body="Executed the following exports from the DLL: %s" % ",".join(exports_available[:max_dll_exports])
                     )
@@ -845,50 +677,45 @@ class Cuckoo(ServiceBase):
                 self.check_dropped(request, self.cuckoo_task.id)
                 self.check_pcap(self.cuckoo_task.id)
 
-                if full_memdump:
-                    # TODO: temporary hack until cuckoo upstream PR #2533 is merged ... or maybe not. for any
-                    # reasonably sized memdump (~1GB) the default max upload size for AL is too small, so
-                    # that would probably kill the report
-                    # Try to copy the memory dump out of the docker container
-                    memdump_hostpath = os.path.join(self.working_directory, "memory.dmp")
-                    self.cm._run_cmd("docker cp %(container_name)s:%(container_path)s %(host_path)s" %
-                                     {
-                                         "container_name": self.cm.name,
-                                         "container_path": "/home/sandbox/.cuckoo/storage/analyses/%d/memory.dmp" % self.cuckoo_task.id,
-                                         "host_path": memdump_hostpath
-                                     }, raise_on_error=False, log=self.log)
+                # if full_memdump:
+                #     # TODO: temporary hack until cuckoo upstream PR #2533 is merged ... or maybe not. for any
+                #     # reasonably sized memdump (~1GB) the default max upload size for AL is too small, so
+                #     # that would probably kill the report
+                #     # Try to copy the memory dump out of the docker container
+                #     memdump_hostpath = os.path.join(self.working_directory, "memory.dmp")
+                #     self.cm._run_cmd("docker cp %(container_name)s:%(container_path)s %(host_path)s" %
+                #                      {
+                #                          "container_name": self.cm.name,
+                #                          "container_path": "/home/sandbox/.cuckoo/storage/analyses/%d/memory.dmp" % self.cuckoo_task.id,
+                #                          "host_path": memdump_hostpath
+                #                      }, raise_on_error=False, log=self.log)
+                #
+                #     # Check file size, make sure we can actually add it
+                #     memdump_size = os.stat(memdump_hostpath).st_size
+                #     if memdump_size < max_extracted_size:
+                #         # Try to add as an extracted file
+                #         request.add_extracted(memdump_hostpath, "Cuckoo VM Full Memory Dump")
+                #     else:
+                #         self.file_res.add_section(ResultSection(
+                #             title_text="Attempted to re-submit full memory dump, but it's too large",
+                #             body="Memdump size: %d, current max AL size: %d" % (memdump_size, max_extracted_size)
+                #         ))
 
-                    # Check file size, make sure we can actually add it
-                    memdump_size = os.stat(memdump_hostpath).st_size
-                    if memdump_size < max_extracted_size:
-                        # Try to add as an extracted file
-                        request.add_extracted(memdump_hostpath, "Cuckoo VM Full Memory Dump")
-                    else:
-                        self.file_res.add_section(ResultSection(
-                            SCORE.NULL,
-                            title_text="Attempted to re-submit full memory dump, but it's too large",
-                            body="Memdump size: %d, current max AL size: %d" % (memdump_size, max_extracted_size)
-                        ))
-
-                if TEXT_FORMAT.contains_value("JSON") and request.deep_scan:
+                if BODY_FORMAT.contains_value("JSON") and request.task.deep_scan:
                     # Attach report as json as the last result section
                     report_json_section = ResultSection(
-                        SCORE.NULL,
                         'Full Cuckoo report',
                         self.SERVICE_CLASSIFICATION,
-                        body_format=TEXT_FORMAT.JSON,
+                        body_format=BODY_FORMAT.JSON,
                         body=self.cuckoo_task.report
                     )
                     self.file_res.add_section(report_json_section)
 
             else:
                 # We didn't get a report back.. cuckoo has failed us
-                if self.should_run:
-                    self.log.info("No report received, triggering cuckoobox restart")
-                    self.trigger_cuckoo_reset(5)
-                    self.log.info("Raising recoverable error for running job.")
-                    raise RecoverableError("Unable to retrieve cuckoo report. The following errors were detected: %s" %
-                                           safe_str(self.cuckoo_task.errors))
+                self.log.info("Raising recoverable error for running job.")
+                raise RecoverableError("Unable to retrieve cuckoo report. The following errors were detected: %s" %
+                                       safe_str(self.cuckoo_task.errors))
 
         except Exception as e:
             # Delete the task now..
@@ -911,11 +738,13 @@ class Cuckoo(ServiceBase):
         return "Cuckoo"
 
     def check_stop(self):
-        if not self.should_run:
-            try:
-                self.cm.stop()
-            except DockerException:
-                pass
+        resp = self.session.get(self.query_host_url, headers={self.config['auth_header_key']: self.config['auth_header_value']})
+        if resp.status_code != 200:
+            self.log.debug("Failed to check the status of the Cuckoo host. Status code: %s" % resp.status_code)
+            if resp.status_code == 404:
+                self.log.warning("Got 404 error from Cuckoo API. This is because the host machine is not found. "
+                                 "Please check if the REST API is up and running along with Cuckoo")
+                raise Exception("Retrying after 404 error")
             return True
         return False
 
@@ -941,7 +770,7 @@ class Cuckoo(ServiceBase):
         self.log.debug("Submission succeeded. File: %s -- Task ID: %s" % (self.cuckoo_task.file, self.cuckoo_task.id))
 
         # Quick sleep to avoid failing when the API can't get the task yet.
-        for i in xrange(5):
+        for i in range(5):
             if self.check_stop():
                 return
             time.sleep(1)
@@ -983,20 +812,11 @@ class Cuckoo(ServiceBase):
     def stop(self):
         # Need to kill the container; we're about to go down..
         self.log.info("Service is being stopped; removing all running containers and metadata..")
-        try:
-            self.cm.stop()
-        except DockerException:
-            pass
 
     @retry(wait_fixed=1000,
            stop_max_attempt_number=GUEST_VM_START_TIMEOUT,
            retry_on_result=_retry_on_none)
     def cuckoo_poll_started(self):
-
-        # Bail if we were stopped
-        if not self.should_run:
-            return "stopped"
-
         task_info = self.cuckoo_query_task(self.cuckoo_task.id)
         if task_info is None:
             # The API didn't return a task..
@@ -1044,7 +864,7 @@ class Cuckoo(ServiceBase):
             self.log.debug("Analysis has completed, waiting on report to be produced.")
         elif status == "reported":
             self.log.debug("Cuckoo report generation has completed.")
-            for i in xrange(5):
+            for i in range(5):
                 if self.check_stop():
                     return
                 time.sleep(1)   # wait a few seconds in case report isn't actually ready
@@ -1067,7 +887,7 @@ class Cuckoo(ServiceBase):
         self.log.debug("Submitting file: %s to server %s" % (self.cuckoo_task.file, self.submit_url))
         files = {"file": (self.cuckoo_task.file, file_content)}
 
-        resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task)
+        resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task, headers={self.config['auth_header_key']: self.config['auth_header_value']})
         if resp.status_code != 200:
             self.log.debug("Failed to submit file %s. Status code: %s" % (self.cuckoo_task.file, resp.status_code))
 
@@ -1098,10 +918,10 @@ class Cuckoo(ServiceBase):
         if self.check_stop():
             return None
         self.log.debug("Querying report, task_id: %s - format: %s", task_id, fmt)
-        resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {})
+        resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {}, headers={self.config['auth_header_key']: self.config['auth_header_value']})
         if resp.status_code != 200:
             if resp.status_code == 404:
-                self.log.error("Task or report not found for task %s in container %s." % (task_id, self.cm.name))
+                self.log.error("Task or report not found for task %s." % task_id)
                 # most common cause of getting to here seems to be odd/non-ascii filenames, where the cuckoo agent
                 # inside the VM dies
 
@@ -1129,7 +949,7 @@ class Cuckoo(ServiceBase):
     def cuckoo_query_pcap(self, task_id):
         if self.check_stop():
             return None
-        resp = self.session.get(self.query_pcap_url % task_id)
+        resp = self.session.get(self.query_pcap_url % task_id, headers={self.config['auth_header_key']: self.config['auth_header_value']})
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.debug("Task or pcap not found for task: %s" % task_id)
@@ -1145,7 +965,7 @@ class Cuckoo(ServiceBase):
     def cuckoo_query_task(self, task_id):
         if self.check_stop():
             return {}
-        resp = self.session.get(self.query_task_url % task_id)
+        resp = self.session.get(self.query_task_url % task_id, headers={self.config['auth_header_key']: self.config['auth_header_value']})
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.debug("Task not found for task: %s" % task_id)
@@ -1167,7 +987,7 @@ class Cuckoo(ServiceBase):
             self.log.debug("Service stopped during machine info query.")
             return None
 
-        resp = self.session.get(self.query_machine_info_url % machine_name)
+        resp = self.session.get(self.query_machine_info_url % machine_name, headers={self.config['auth_header_key']: self.config['auth_header_value']})
         if resp.status_code != 200:
             self.log.debug("Failed to query machine %s. Status code: %d" % (machine_name, resp.status_code))
             return None
@@ -1180,7 +1000,7 @@ class Cuckoo(ServiceBase):
     def cuckoo_delete_task(self, task_id):
         if self.check_stop():
             return
-        resp = self.session.get(self.delete_task_url % task_id)
+        resp = self.session.get(self.delete_task_url % task_id, headers={self.config['auth_header_key']: self.config['auth_header_value']})
         if resp.status_code != 200:
             self.log.debug("Failed to delete task %s. Status code: %d" % (task_id, resp.status_code))
         else:
@@ -1195,47 +1015,12 @@ class Cuckoo(ServiceBase):
             self.log.debug("Service stopped during machine query.")
             return False
         self.log.debug("Querying for available analysis machines using url %s.." % self.query_machines_url)
-        resp = self.session.get(self.query_machines_url)
+        resp = self.session.get(self.query_machines_url, headers={self.config['auth_header_key']: self.config['auth_header_value']})
         if resp.status_code != 200:
             self.log.debug("Failed to query machines: %s" % resp.status_code)
             raise CuckooVMBusyException()
         resp_dict = dict(resp.json())
-        if not self._all_vms_busy(resp_dict.get('machines')):
-            return True
-
-        self.log.debug("_all_vms_busy came back true")
-        return False
-
-    @staticmethod
-    def _all_vms_busy(result):
-        if result:
-            for sandbox in result:
-                if ((sandbox["status"] == u"poweroff" or sandbox["status"] == u"saved" or sandbox["status"] is None) and
-                        not sandbox["locked"]):
-                    return False
-        return True
-
-    def is_cuckoo_ready(self, retry_cnt=30):
-        # In theory, we should always have a VM available since we're matched 1:1; in practice, we sometimes
-        # have to wait.
-        ready = False
-        attempts = 0
-        while not ready:
-            if self.check_stop():
-                return False
-            try:
-                ready = self.cuckoo_query_machines()
-                if ready:
-                    return ready
-            except:
-                # pass, since the api might not even be up yet
-                self.log.debug("Error from cuckoo_query_machines: %s" % traceback.format_exc())
-                pass
-            time.sleep(1)
-            attempts += 1
-            if attempts >= retry_cnt:
-                return False
-        return ready
+        return resp_dict
 
     def check_dropped(self, request, task_id):
         self.log.debug("Checking dropped files.")
@@ -1256,9 +1041,9 @@ class Cuckoo(ServiceBase):
                         dropped_file_path = os.path.join(self.working_directory, tarobj.name)
 
                         # Check the file hash for whitelisting:
-                        with open(dropped_file_path, 'r') as fh:
+                        with open(dropped_file_path, 'rb') as fh:
                             data = fh.read()
-                            if not request.deep_scan:
+                            if not request.task.deep_scan:
                                 ssdeep_hash = ssdeep.hash(data)
                                 skip_file = False
                                 for seen_hash in added_hashes:
@@ -1266,9 +1051,10 @@ class Cuckoo(ServiceBase):
                                         skip_file = True
                                         break
                                 if skip_file is True:
-                                    request.result.add_tag(tag_type=TAG_TYPE.FILE_SUMMARY,
-                                                           value="Truncated extraction set",
-                                                           weight=TAG_WEIGHT.NULL)
+                                    dropped_sec = ResultSection(title_text='Dropped Files Information',
+                                                                classification=self.SERVICE_CLASSIFICATION)
+                                    dropped_sec.add_tag("file.behavior",
+                                                        "Truncated extraction set")
                                     continue
                                 else:
                                     added_hashes.add(ssdeep_hash)
@@ -1278,10 +1064,12 @@ class Cuckoo(ServiceBase):
                         if not (wlist_check_hash(dropped_hash) or wlist_check_dropped(
                                 dropped_name) or dropped_name.endswith('_info.txt')):
                             # Resubmit
-                            self.task.exclude_service("Dynamic Analysis")
-                            self.task.add_extracted(dropped_file_path, "Dropped file during Cuckoo analysis.")
+                            # self.task.exclude_service("Dynamic Analysis") #TODO
+                            self.task.add_extracted(dropped_file_path,
+                                                    dropped_name,
+                                                    "Dropped file during Cuckoo analysis.")
                             self.log.debug("Submitted dropped file for analysis: %s" % dropped_file_path)
-            except Exception, e_x:
+            except Exception as e_x:
                 self.log.error("Error extracting dropped files: %s" % e_x)
                 return
 
@@ -1318,7 +1106,16 @@ class Cuckoo(ServiceBase):
     def report_machine_info(self, machine_name):
         try:
             self.log.debug("Querying machine info for %s" % machine_name)
-            machine = self.cuckoo_query_machine_info(machine_name)
+            machine_name_exists = False
+            machine = None
+            for machine in self.machines.get('machines'):
+                if machine.get('name') == machine_name:
+                    machine_name_exists = True
+                    break
+
+            if not machine_name_exists:
+                raise Exception
+
             machine_section = ResultSection(title_text='Machine Information',
                                             classification=self.SERVICE_CLASSIFICATION)
             machine_section.add_line('ID: ' + str(machine.get('id')))
@@ -1333,97 +1130,11 @@ class Cuckoo(ServiceBase):
         except Exception as e:
             self.log.error('Unable to retrieve machine information for %s: %s' % (machine_name, safe_str(e)))
 
-    def get_tool_version(self):
-        return hashlib.sha256(str(self._community_mtimes)).hexdigest()
 
-    def cuckoo_update(self, **_):
-        """
-        The updater only checks for new versions of community repos
-        :return:
-        """
-
-        # check for updates
-        self._cuckoo_community_updates()
-
-        # update the mtime dict
-        self._community_mtimes = self._get_community_mtimes()
-
-    def _get_community_mtimes(self):
-        mtimes = {}
-        if "community_updates" in self.cfg:
-            config = forge.get_config()
-            local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
-
-            for url in self.cfg["community_updates"]:
-                bn = "%s-%s" % (hashlib.md5(url).hexdigest(), os.path.basename(url))
-                local_path = os.path.join(local_community_root, bn)
-                if os.path.exists(local_path):
-                    mtimes[bn] = datetime.datetime.fromtimestamp(os.stat(local_path).st_mtime)
-                else:
-                    self.log.warning("Local file %s (for community update from %s) not found. Check logs for output "
-                                     "from 'cuckoo_community_updates' to determine why the community update "
-                                     "hasn't been downloaded. This may affect the intended functionality of the"
-                                     "Cuckoo service." % (local_path, url))
-
-        return mtimes
-
-    def _cuckoo_community_updates(self):
-        """
-        Do "community" updates. This also allows you to configure extra cuckoo specific features
-        if you like
-        :return:
-        """
-
-        logger = self.log.getChild("_cuckoo_community_updates")
-        config = forge.get_config()
-        local_community_root = os.path.join(config.system.root, self.cfg['LOCAL_VM_META_ROOT'], "community")
-
-        if not os.path.exists(local_community_root):
-            os.makedirs(local_community_root)
-
-        if "community_updates" in self.cfg:
-
-            # keep a list of basenames that should exist - then remove any extraneous stuff after
-            community_repo_basenames = []
-            for url in self.cfg["community_updates"]:
-                # prepend a hash of the url to deal with conflicting basenames
-                bn = "%s-%s" % (hashlib.md5(url).hexdigest(), os.path.basename(url))
-                community_repo_basenames.append(bn)
-
-                local_temp_path = os.path.join(self.working_directory, bn)
-                local_path = os.path.join(local_community_root, bn)
-
-                logger.info("Downloading %s to %s" % (url, local_temp_path))
-                
-                r = requests.get(url)
-                with open(local_temp_path, 'wb') as f:  
-                    f.write(r.content)
-
-                if os.path.exists(local_path):
-                    # Compare this file against the existing file
-                    if not filecmp.cmp(local_temp_path, local_path):
-                        logger.info("Local copy exists, but downloaded version is different. Replacing.")
-                        shutil.move(local_temp_path, local_path)
-                    else:
-                        # Cleanup
-                        logger.info("Local copy exists and matches download")
-                        os.unlink(local_temp_path)
-                else:
-                    logger.info("No local copy exists")
-                    shutil.move(local_temp_path, local_path)
-
-            # Check for any extraneous files that shouldn't be here
-            for f in os.listdir(local_community_root):
-                if f not in community_repo_basenames:
-                    extra_path = os.path.join(local_community_root, f)
-                    logger.info("Found extra file %s, removing it" %
-                                  extra_path)
-                    os.unlink(extra_path)
-
-ALPHA_NUMS = [chr(x + 65) for x in xrange(26)] + [chr(x + 97) for x in xrange(26)] + [str(x) for x in xrange(10)]
+ALPHA_NUMS = [chr(x + 65) for x in range(26)] + [chr(x + 97) for x in range(26)] + [str(x) for x in range(10)]
 
 def generate_random_words(num_words):
     return " ".join(["".join([random.choice(ALPHA_NUMS)
-                              for _ in xrange(int(random.random() * 10) + 2)])
-                     for _ in xrange(num_words)])
+                              for _ in range(int(random.random() * 10) + 2)])
+                     for _ in range(num_words)])
 

@@ -200,7 +200,7 @@ WHITELIST_COMMON_PATTERNS = {
 
 
 def match(data, sigs):
-    for name, sig in sigs.iteritems():
+    for name, sig in sigs.items():
         if re.match(sig, data):
             return name
     return None

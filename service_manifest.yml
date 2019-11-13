@@ -1,0 +1,78 @@
+name: Cuckoo
+version: 1
+description: Provides dynamic malware analysis through sandboxing.
+
+accepts: .*
+rejects: empty|metadata/.*
+
+stage: CORE
+category: Dynamic Analysis
+
+file_required: true
+timeout: 300
+disable_cache: false
+
+enabled: true
+is_external: true
+licence_count: 0
+
+config:
+  # Cuckoo host specifications
+  remote_host_ip: 20.43.8.200
+  remote_host_port: 8090
+  auth_header_key: Authorization
+  auth_header_value: Bearer testing
+
+heuristics:
+  - heur_id: 1
+    name: SMS Activity
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected SMS activity.
+
+  - heur_id: 2
+    name: Crypto Keys
+    score: 10
+    filetype: '*'
+    description: Cuckoo detected Cypto Keys.
+
+  - heur_id: 3
+    name: Signatures
+    score: 0
+    filetype: '*'
+    description: Cuckoo detected Cypto Keys.
+
+  - heur_id: 4
+    name: Signatures
+    score: 100
+    filetype: '*'
+    description: Cuckoo detected Cypto Keys.
+
+  - heur_id: 5
+    name: Signatures
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Cypto Keys.
+
+  - heur_id: 6
+    name: Signatures
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Cypto Keys.
+
+  - heur_id: 7
+    name: Signatures
+    score: 400
+    filetype: '*'
+    description: Cuckoo detected Cypto Keys.
+
+  - heur_id: 8
+    name: Signatures
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Cypto Keys.
+
+docker_config:
+  image: cccs/assemblyline-service-cuckoo:latest
+  cpu_cores: 0.25
+  ram_mb: 256

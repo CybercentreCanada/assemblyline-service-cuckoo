@@ -8,14 +8,12 @@ import traceback
 from collections import defaultdict
 from pprint import pprint
 
-from assemblyline.common.charset import safe_str
+from assemblyline.common.str_utils import safe_str
 from assemblyline.common.context import Context
-from assemblyline.al.common import forge
-from assemblyline.al.common.classification import InvalidClassification
-from assemblyline.al.common.result import Result, ResultSection, SCORE, TAG_TYPE, TAG_WEIGHT, TEXT_FORMAT
+from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, InvalidClassification
 from assemblyline.common.exceptions import RecoverableError
-from al_services.alsvc_cuckoo.clsids import clsids
-from al_services.alsvc_cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
+from clsids import clsids
+from whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
 import os
 
 try:
@@ -26,29 +24,25 @@ except ImportError:
     # we don't care if this isn't here at runtime...
     pass
 
-CLASSIFICATION = forge.get_classification()
-
 UUID_RE = re.compile(r"{([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\}")
 USER_SID_RE = re.compile(r"S-1-5-21-\d+-\d+-\d+-\d+")
 WIN_FILE_RE = re.compile(r"Added new file to list with path: (\w:(?:\\[a-zA-Z0-9_\-. $]+)+)")
 DROIDMON_CONN_RE = re.compile(r"([A-Z]{3,5}) (https?://([a-zA-Z0-9.\-]+):?([0-9]{2,5})?([^ ]+)) HTTP/([0-9.]+)")
 log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
-country_code_map = None
 
 
 # noinspection PyBroadException
-def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, service_classification=CLASSIFICATION.UNRESTRICTED):
+def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, service_classification=Classification.UNRESTRICTED):
     log.debug("Generating AL Result.")
     try:
-        classification = CLASSIFICATION.max_classification(CLASSIFICATION.UNRESTRICTED, service_classification)
+        classification = Classification.max_classification(Classification.UNRESTRICTED, service_classification)
     except InvalidClassification as e:
         log.warning("Could not get the service classification: %s" % e.message)
         return False
 
     info = api_report.get('info')
     if info is not None:
-        info_res = ResultSection(score=SCORE.NULL,
-                                 title_text='Analysis Information',
+        info_res = ResultSection(title_text='Analysis Information',
                                  classification=classification)
         info_res.add_line('Cuckoo Version:\t%s' % info.get('version'))
         info_res.add_line('Analysis ID:\t%s' % info.get('id'))
@@ -108,6 +102,7 @@ def process_clsid(key, result_map):
 
 
 def process_droidmon(droidmon, network, al_result, classification):
+    droidmon_res = ResultSection(title_text="Droidmon", classification=classification)
 
     if 'raw' in droidmon:
         classes = set()
@@ -117,11 +112,8 @@ def process_droidmon(droidmon, network, al_result, classification):
         if len(classes) > 0:
             sorted_classes = sorted(safe_str(x) for x in classes)
             _, cls_hash_one, cls_hash_two = ssdeep.hash(''.join(sorted_classes)).split(':')
-            al_result.add_tag(tag_type=TAG_TYPE.ANDROID_DYNAMIC_CLASSES_SSDEEP, value=cls_hash_one,
-                              weight=TAG_WEIGHT.NULL, classification=classification)
-            al_result.add_tag(tag_type=TAG_TYPE.ANDROID_DYNAMIC_CLASSES_SSDEEP, value=cls_hash_two,
-                              weight=TAG_WEIGHT.NULL, classification=classification)
-
+            droidmon_res.add_tag("dynamic.ssdeep.dynamic_classes", cls_hash_one)
+            droidmon_res.add_tag("dynamic.ssdeep.dynamic_classes", cls_hash_two)
     if 'httpConnections' in droidmon:
         # Add this http information to the main network map:
         for req in droidmon['httpConnections']:
@@ -158,29 +150,25 @@ def process_droidmon(droidmon, network, al_result, classification):
     if 'sms' in droidmon:
         sms_res = ResultSection(title_text='SMS Activity',
                                 classification=classification,
-                                body_format=TEXT_FORMAT.MEMORY_DUMP,
-                                score=SCORE.VHIGH)
+                                body_format=BODY_FORMAT.MEMORY_DUMP)
+        sms_res.set_heuristic(1)
         sms_lines = dict_list_to_fixedwidth_str_list(droidmon['sms'])
         for sms_line in sms_lines:
             sms_res.add_line(sms_line)
         for sms in droidmon['sms']:
-            al_result.add_tag(tag_type=TAG_TYPE.NET_PHONE_NUMBER, value=sms['dest_number'],
-                              weight=TAG_WEIGHT.VHIGH, classification=classification,
-                              context=Context.DYNAMIC)
+            droidmon_res.add_tag("info.phone_number", sms['dest_number'])
         al_result.add_section(sms_res)
 
     if 'crypto_keys' in droidmon:
         crypto_res = ResultSection(title_text='Crypto Keys',
                                    classification=classification,
-                                   body_format=TEXT_FORMAT.MEMORY_DUMP,
-                                   score=SCORE.MED)
+                                   body_format=BODY_FORMAT.MEMORY_DUMP)
+        crypto_res.set_heuristic(2)
         crypto_key_lines = dict_list_to_fixedwidth_str_list(droidmon['crypto_keys'])
         for crypto_key_line in crypto_key_lines:
             crypto_res.add_line(crypto_key_line)
         for crypto_key in droidmon['crypto_keys']:
-            al_result.add_tag(tag_type=TAG_TYPE.TECHNIQUE_CRYPTO, value=crypto_key['type'],
-                              weight=TAG_WEIGHT.NULL, classification=classification,
-                              context=Context.DYNAMIC)
+            droidmon_res.add_tag("technique.crypto", crypto_key['type'])
         al_result.add_section(crypto_res)
 
 
@@ -200,7 +188,7 @@ def process_debug(debug, al_result, classification):
                 #     "Unable to execute the initial process" not in err_str:
                 #     raise RecoverableError("An error prevented cuckoo from "
                 #                            "generating complete results: %s" % safe_str(error))
-        if len(error_res.body) > 0:
+        if error_res.body and len(error_res.body) > 0:
             al_result.add_section(error_res)
     return failed
 
@@ -232,6 +220,8 @@ def process_behavior(behavior, al_result, al_request, classification):
     log.debug("Processing behavior results.")
     executed = True
     result_map = {}
+    res_sec = None
+
     # Spender
     for key in behavior.get("summary", {}).get("keys", []):
         process_key(key, result_map)
@@ -261,11 +251,11 @@ def process_behavior(behavior, al_result, al_request, classification):
                       "regkey_written":     ["Registry Keys Written", result_limit, None],
                       "command_line":       ["Commands", None, None],
                       "downloads_file":     ["Files Downloads", None, None],
-                      "file_written":       ["Files Written", None, TAG_TYPE.DYNAMIC_DROP_PATH],
+                      "file_written":       ["Files Written", None, "file.path"],
                       "wmi_query":          ["WMI Queries", None, None],
-                      "mutex":              ["Mutexes", None, TAG_TYPE.DYNAMIC_MUTEX_NAME],
+                      "mutex":              ["Mutexes", None, "dynamic.mutex"],
                       }
-    for q_name, [title, limit, tag_type] in result_queries.iteritems():
+    for q_name, [title, limit, tag_type] in result_queries.items():
         q_res = behavior.get("summary", {}).get(q_name, [])
         if q_res:
             if limit is not None:
@@ -276,17 +266,17 @@ def process_behavior(behavior, al_result, al_request, classification):
             for ln in map(safe_str, q_res):
                 res_sec.add_line(ln)
                 if tag_type is not None:
-                    al_result.add_tag(tag_type=tag_type, value=ln,
-                                      weight=TAG_WEIGHT.NULL, classification=classification,
-                                      context=Context.DYNAMIC)
+                    res_sec.add_tag(tag_type, ln)
             # Dump out contents to a temporary file and add as an extracted file
             if q_name == "command_line":
                 for raw_ln in q_res:
-                    cli_hash = hashlib.sha256(raw_ln).hexdigest()
-                    temp_filepath = os.path.join(al_request._svc.working_directory, "command_%s" % cli_hash[:10])
+                    cli_hash = hashlib.sha256(raw_ln.encode('utf-8')).hexdigest()
+                    temp_filepath = os.path.join(al_request._working_directory, "command_%s" % cli_hash[:10])
                     with open(temp_filepath, 'wb') as temp_fh:
-                        temp_fh.write(raw_ln)
-                    al_request.add_extracted(temp_filepath, "Extracted command_line from Cuckoo")
+                        temp_fh.write(raw_ln.encode())
+                    al_request.add_extracted(temp_filepath,
+                                             "command_line_dump.txt",
+                                             "Extracted command_line from Cuckoo")
             al_result.add_section(res_sec)
 
     if len(guids) > 0:
@@ -297,13 +287,10 @@ def process_behavior(behavior, al_result, al_request, classification):
     if result_map.get('clsids', {}) != {}:
         # Hash
         sorted_clsids = sorted([safe_str(x) for x in result_map['clsids'].values()])
-        _, clsid_hash_one, clsid_hash_two = ssdeep.hash(''.join(sorted_clsids)).split(':')
-        al_result.add_tag(tag_type=TAG_TYPE.DYNAMIC_CLSIDS_SSDEEP, value=clsid_hash_one,
-                          weight=TAG_WEIGHT.NULL, classification=classification)
-        al_result.add_tag(tag_type=TAG_TYPE.DYNAMIC_CLSIDS_SSDEEP, value=clsid_hash_two,
-                          weight=TAG_WEIGHT.NULL, classification=classification)
+        ssdeep_clsid_hash = ssdeep.hash(''.join(sorted_clsids))
+        res_sec.add_tag("dynamic.ssdeep.cls_ids", ssdeep_clsid_hash)
 
-        clsids_hash = hashlib.sha1(','.join(sorted_clsids)).hexdigest()
+        clsids_hash = hashlib.sha1((','.join(sorted_clsids)).encode('utf-8')).hexdigest()
         if wlist_check_hash(clsids_hash):
             # Benign activity
             executed = False
@@ -317,16 +304,8 @@ def process_behavior(behavior, al_result, al_request, classification):
     if len(result_map.get('regkeys', [])) > 0:
         sorted_regkeys = sorted([safe_str(x) for x in result_map['regkeys']])
         _, regkey_hash_one, regkey_hash_two = ssdeep.hash(''.join(sorted_regkeys)).split(':')
-        al_result.add_tag(tag_type=TAG_TYPE.DYNAMIC_REGKEYS_SSDEEP, value=regkey_hash_one,
-                          weight=TAG_WEIGHT.NULL, classification=classification)
-        al_result.add_tag(tag_type=TAG_TYPE.DYNAMIC_REGKEYS_SSDEEP, value=regkey_hash_two,
-                          weight=TAG_WEIGHT.NULL, classification=classification)
-
-        # Printing all keys appears to be a bad idea.
-        # reg_res = ResultSection(title_text="Registry Keys",classification=classification)
-        # for key in result_map['regkeys']:
-        #     reg_res.add_line(key)
-        # al_result.add_section(reg_res)
+        res_sec.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash_one)
+        res_sec.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash_two)
 
     log.debug("Behavior processing completed. Looks like valid execution: %s" % str(executed))
     return executed
@@ -335,16 +314,26 @@ def process_behavior(behavior, al_result, al_request, classification):
 def process_signatures(sigs, al_result, classification):
     log.debug("Processing signature results.")
     if len(sigs) > 0:
-        sigs_score = 0
         sigs_res = ResultSection(title_text="Signatures", classification=classification)
         skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
         print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities',
                       'persistence_autorun']
         # Severity is 0-5ish with 0 being least severe.
         for sig in sigs:
-            severity = float(sig.get('severity', 0))
+            severity = round(float(sig.get('severity', 0)))
             actor = sig.get('actor', '')
-            sig_classification = sig.get('classification', CLASSIFICATION.UNRESTRICTED)
+            sig_classification = sig.get('classification', Classification.UNRESTRICTED)
+            sig_res = ResultSection(title_text="Signature subsection", classification=classification)
+            switcher = {
+                0: sig_res.set_heuristic(3),
+                1: sig_res.set_heuristic(4),
+                2: sig_res.set_heuristic(5),
+                3: sig_res.set_heuristic(6),
+                4: sig_res.set_heuristic(7),
+                5: sig_res.set_heuristic(8)
+            }
+            switcher.get(severity, lambda: "Invalid Signature Severity")
+            sigs_res.add_subsection(sig_res)
             sig_score = int(severity * 100)
             sig_name = sig.get('name', 'unknown')
             sig_categories = sig.get('categories', [])
@@ -355,48 +344,34 @@ def process_signatures(sigs, al_result, classification):
             if sig_name in skipped_sigs:
                 continue
 
-            sigs_score += sig_score
-
             sigs_res.add_line(sig_name + ' [' + str(sig_score) + ']')
             sigs_res.add_line('\tDescription: ' + sig.get('description'))
             if len(sig_categories) > 0:
                 sigs_res.add_line('\tCategories: ' + ','.join([safe_str(x) for x in sig_categories]))
                 for category in sig_categories:
-                    al_result.add_tag(tag_type=TAG_TYPE.DYNAMIC_SIGNATURE_CATEGORY,
-                                      value=category,
-                                      weight=TAG_WEIGHT.HIGH,
-                                      classification=sig_classification)
+                    sigs_res.add_tag("dynamic.signature.category",
+                                     category)
 
             if len(sig_families) > 0:
                 sigs_res.add_line('\tFamilies: ' + ','.join([safe_str(x) for x in sig_families]))
                 for family in sig_families:
-                    al_result.add_tag(tag_type=TAG_TYPE.DYNAMIC_SIGNATURE_FAMILY,
-                                      value=family,
-                                      weight=TAG_WEIGHT.VHIGH,
-                                      classification=sig_classification)
+                    sigs_res.add_tag("dynamic.signature.category",
+                                     family)
 
             if sig_name != 'unknown' and sig_name != '':
-                al_result.add_tag(tag_type=TAG_TYPE.DYNAMIC_SIGNATURE_NAME,
-                                  value=sig_name,
-                                  weight=TAG_WEIGHT.VHIGH,
-                                  classification=sig_classification)
+                sigs_res.add_tag("dynamic.signature.name",
+                                 sig_name)
 
             sigs_res.add_line('')
             if actor and actor != '':
-                al_result.add_tag(tag_type=TAG_TYPE.THREAT_ACTOR,
-                                  value=actor,
-                                  weight=TAG_WEIGHT.VHIGH,
-                                  classification=sig_classification)
+                sigs_res.add_tag("attribution.actor",
+                                  actor)
             if sig_name in print_iocs:
                 for mark in sig_marks:
                     if mark.get('type') == 'ioc' and mark.get('category') in ['url', 'file', 'cmdline', 'request']:
                         sigs_res.add_line('\tIOC: %s' % mark['ioc'])
                     elif mark.get('type') == 'generic' and 'reg_key' in mark and 'reg_value' in mark:
                         sigs_res.add_line('\tIOC: %s = %s' % (mark['reg_key'], mark['reg_value']))
-
-        # We don't want to get carried away..
-        sigs_res.score = min(1000, sigs_score)
-        al_result.add_section(sigs_res)
 
 
 def parse_protocol_data(flow_data, group_by='dst', group_fields=list()):
@@ -416,7 +391,7 @@ def dict_list_to_fixedwidth_str_list(dict_list, print_keys=True):
     lens = {}
     max_lens = {}
     for in_dict in dict_list:
-        for k, v in in_dict.iteritems():
+        for k, v in in_dict.items():
             k_len = len(str(k))
             v_len = len(str(v))
             max_lens[k] = max(max_lens.get(k, 0), v_len+4)
@@ -462,16 +437,12 @@ def _add_ex_data(proto_data, proto_ex_data, protocol, port):
 
 
 def process_network(network, al_result, guest_ip, classification):
-    global country_code_map
-    if not country_code_map:
-        country_code_map = forge.get_country_code_map()
-
     log.debug("Processing network results.")
     result_map = {}
 
     network_res = ResultSection(title_text="Network Activity",
                                 classification=classification,
-                                body_format=TEXT_FORMAT.MEMORY_DUMP)
+                                body_format=BODY_FORMAT.MEMORY_DUMP)
     network_score = 0
 
     # IP activity
@@ -545,20 +516,16 @@ def process_network(network, al_result, guest_ip, classification):
         for host in sorted(result_map['host_flows']):
             network_score += 100
             protocols = result_map['host_flows'].get(host, [])
-            host_cc = country_code_map[host] or '??'
+            host_cc = '??'
             host_cc = '('+host_cc+')'
-            al_result.add_tag(tag_type=TAG_TYPE.NET_IP, value=host,
-                              weight=TAG_WEIGHT.VHIGH, classification=classification,
-                              usage="CORRELATION", context=Context.CONNECTS_TO)
+            network_res.add_tag("network.ip", host)
             for protocol in sorted(protocols):
                 flows = protocols[protocol]
                 if 'http' in protocol:
                     for flow in flows:
                         uri = flow.get('uri', None)
                         if uri:
-                            al_result.add_tag(tag_type=TAG_TYPE.NET_FULL_URI, value=uri,
-                                              weight=TAG_WEIGHT.VHIGH, classification=classification,
-                                              usage="CORRELATION", context=Context.CONNECTS_TO)
+                            network_res.add_tag("network.uri", uri)
                 flow_lines = dict_list_to_fixedwidth_str_list(flows)
                 for line in flow_lines:
                     proto_line = "{0:<8}{1:<19}{2:<8}{3}".format(protocol, host, host_cc, line)
@@ -581,17 +548,14 @@ def process_network(network, al_result, guest_ip, classification):
         network_score += 100
         for domain in sorted(result_map['domain_flows']):
             protocols = result_map['domain_flows'][domain]
-            al_result.add_tag(tag_type=TAG_TYPE.NET_DOMAIN_NAME, value=domain,
-                              weight=TAG_WEIGHT.VHIGH, classification=classification, context=Context.CONNECTS_TO)
+            network_res.add_tag("network.domain", domain)
             for protocol in sorted(protocols):
                 flows = protocols[protocol]
                 if 'http' in protocol:
                     for flow in flows:
                         uri = flow.get('uri', None)
                         if uri:
-                            al_result.add_tag(tag_type=TAG_TYPE.NET_FULL_URI, value=uri,
-                                              weight=TAG_WEIGHT.VHIGH, classification=classification,
-                                              usage="CORRELATION", context=Context.CONNECTS_TO)
+                            network_res.add_tag("network.uri", uri)
                 flow_lines = dict_list_to_fixedwidth_str_list(flows)
                 for line in flow_lines:
                     proto_line = proto_fmt.format(protocol, domain, line)
@@ -601,7 +565,7 @@ def process_network(network, al_result, guest_ip, classification):
         network_res.add_lines(domain_lines)
         network_score = min(500, network_score)
     
-    if len(network_res.body) > 0:
+    if network_res.body and len(network_res.body) > 0:
         network_res.score = network_score
         al_result.add_section(network_res)
     log.debug("Network processing complete.")
@@ -634,7 +598,7 @@ if __name__ == "__main__":
     res = Result()
     # noinspection PyBroadException
     try:
-        generate_al_result(data, res, '.js', CLASSIFICATION.UNRESTRICTED)
-    except:
+        generate_al_result(data, res, '.js', Classification.UNRESTRICTED)
+    except Exception:
         traceback.print_exc()
     pprint(res)
