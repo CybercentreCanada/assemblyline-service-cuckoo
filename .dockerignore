@@ -2,3 +2,5 @@ Dockerfile
 venv
 .idea
 .git
+docs
+examples

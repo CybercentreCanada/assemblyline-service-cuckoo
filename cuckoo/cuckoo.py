@@ -17,7 +17,7 @@ from assemblyline.common.identify import tag_to_extension
 from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT, Heuristic
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline_v4_service.common.base import ServiceBase
-from whitelist import wlist_check_hash, wlist_check_dropped
+from cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 from assemblyline.common.importing import load_module_by_path
 
 CUCKOO_API_PORT = "8090"

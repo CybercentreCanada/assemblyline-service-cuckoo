@@ -12,8 +12,8 @@ from assemblyline.common.str_utils import safe_str
 from assemblyline.common.context import Context
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, InvalidClassification
 from assemblyline.common.exceptions import RecoverableError
-from clsids import clsids
-from whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
+from cuckoo.clsids import clsids
+from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
 import os
 
 try:
