@@ -8,10 +8,9 @@ import traceback
 from collections import defaultdict
 from pprint import pprint
 
+from assemblyline_v4_service.common.task import MaxExtractedExceeded
 from assemblyline.common.str_utils import safe_str
-from assemblyline.common.context import Context
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, InvalidClassification
-from assemblyline.common.exceptions import RecoverableError
 from cuckoo.clsids import clsids
 from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
 import os
@@ -274,9 +273,12 @@ def process_behavior(behavior, al_result, al_request, classification):
                     temp_filepath = os.path.join(al_request._working_directory, "command_%s" % cli_hash[:10])
                     with open(temp_filepath, 'wb') as temp_fh:
                         temp_fh.write(raw_ln.encode())
-                    al_request.add_extracted(temp_filepath,
-                                             "command_line_dump.txt",
-                                             "Extracted command_line from Cuckoo")
+                    try:
+                        al_request.add_extracted(temp_filepath, "command_line_dump.txt",
+                                                 "Extracted command_line from Cuckoo")
+                    except MaxExtractedExceeded:
+                        log.debug("The maximum amount of files to be extracted is 501, "
+                                  "which has been exceeded in this submission")
             al_result.add_section(res_sec)
 
     if len(guids) > 0:
@@ -303,9 +305,8 @@ def process_behavior(behavior, al_result, al_request, classification):
 
     if len(result_map.get('regkeys', [])) > 0:
         sorted_regkeys = sorted([safe_str(x) for x in result_map['regkeys']])
-        _, regkey_hash_one, regkey_hash_two = ssdeep.hash(''.join(sorted_regkeys)).split(':')
-        res_sec.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash_one)
-        res_sec.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash_two)
+        regkey_hash = ssdeep.hash(''.join(sorted_regkeys))
+        res_sec.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash)
 
     log.debug("Behavior processing completed. Looks like valid execution: %s" % str(executed))
     return executed
@@ -314,6 +315,7 @@ def process_behavior(behavior, al_result, al_request, classification):
 def process_signatures(sigs, al_result, classification):
     log.debug("Processing signature results.")
     if len(sigs) > 0:
+        sigs_score = 0
         sigs_res = ResultSection(title_text="Signatures", classification=classification)
         skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
         print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities',
@@ -322,20 +324,18 @@ def process_signatures(sigs, al_result, classification):
         for sig in sigs:
             severity = round(float(sig.get('severity', 0)))
             actor = sig.get('actor', '')
-            sig_classification = sig.get('classification', Classification.UNRESTRICTED)
             sig_res = ResultSection(title_text="Signature subsection", classification=classification)
-            switcher = {
-                0: sig_res.set_heuristic(3),
-                1: sig_res.set_heuristic(4),
-                2: sig_res.set_heuristic(5),
-                3: sig_res.set_heuristic(6),
-                4: sig_res.set_heuristic(7),
-                5: sig_res.set_heuristic(8)
-            }
-            switcher.get(severity, lambda: "Invalid Signature Severity")
+            # Mapping the signature severity to it's corresponding heuristic ID in the .yaml
+            severity_heuristic_map = {1: 3,
+                                      2: 4,
+                                      3: 5,
+                                      4: 6}
+            heuristic = severity_heuristic_map.get(severity)
+            # defaulting to the highest severity since outside normal cuckoo range
+            sig_name = sig.get('name', 4)
+            sig_res.set_heuristic(heuristic, signature=sig_name)
             sigs_res.add_subsection(sig_res)
             sig_score = int(severity * 100)
-            sig_name = sig.get('name', 'unknown')
             sig_categories = sig.get('categories', [])
             sig_families = sig.get('families', [])
             sig_marks = sig.get('marks', [])
@@ -344,34 +344,36 @@ def process_signatures(sigs, al_result, classification):
             if sig_name in skipped_sigs:
                 continue
 
+            sigs_score += sig_score
+
             sigs_res.add_line(sig_name + ' [' + str(sig_score) + ']')
             sigs_res.add_line('\tDescription: ' + sig.get('description'))
             if len(sig_categories) > 0:
                 sigs_res.add_line('\tCategories: ' + ','.join([safe_str(x) for x in sig_categories]))
                 for category in sig_categories:
-                    sigs_res.add_tag("dynamic.signature.category",
-                                     category)
+                    sigs_res.add_tag("dynamic.signature.category", category)
 
             if len(sig_families) > 0:
                 sigs_res.add_line('\tFamilies: ' + ','.join([safe_str(x) for x in sig_families]))
                 for family in sig_families:
-                    sigs_res.add_tag("dynamic.signature.category",
-                                     family)
+                    sigs_res.add_tag("dynamic.signature.category", family)
 
             if sig_name != 'unknown' and sig_name != '':
-                sigs_res.add_tag("dynamic.signature.name",
-                                 sig_name)
+                sigs_res.add_tag("dynamic.signature.name", sig_name)
 
             sigs_res.add_line('')
             if actor and actor != '':
-                sigs_res.add_tag("attribution.actor",
-                                  actor)
+                sigs_res.add_tag("attribution.actor", actor)
             if sig_name in print_iocs:
                 for mark in sig_marks:
                     if mark.get('type') == 'ioc' and mark.get('category') in ['url', 'file', 'cmdline', 'request']:
                         sigs_res.add_line('\tIOC: %s' % mark['ioc'])
                     elif mark.get('type') == 'generic' and 'reg_key' in mark and 'reg_value' in mark:
                         sigs_res.add_line('\tIOC: %s = %s' % (mark['reg_key'], mark['reg_value']))
+
+        # We don't want to get carried away..
+        sigs_res.score = min(1000, sigs_score)
+        al_result.add_section(sigs_res)
 
 
 def parse_protocol_data(flow_data, group_by='dst', group_fields=list()):

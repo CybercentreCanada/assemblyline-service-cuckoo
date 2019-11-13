@@ -9,16 +9,17 @@ import hashlib
 import traceback
 import re
 import email.header
+import sys
 
 from retrying import retry, RetryError
 
+from assemblyline_v4_service.common.task import MaxExtractedExceeded
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT, Heuristic
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline_v4_service.common.base import ServiceBase
 from cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
-from assemblyline.common.importing import load_module_by_path
 
 CUCKOO_API_PORT = "8090"
 CUCKOO_TIMEOUT = "120"
@@ -167,11 +168,9 @@ class Cuckoo(ServiceBase):
         "dedup_similar_percent": 80,
         "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz",
                               "https://bitbucket.org/cse-assemblyline/al_cuckoo_community/get/master.tar.gz"],
-        "result_parsers": [],
 
         # If given a DLL without being told what function(s) to execute, try to execute at most this many of the exports
         "max_dll_exports_exec": 5
-        # "result_parsers": ["al_services.alsvc_cuckoo.result_parsers.example_parser.ExampleParser"]
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
@@ -224,12 +223,6 @@ class Cuckoo(ServiceBase):
             "type": "str",
             "value": "",
         },
-        # {
-        #     "default": False,
-        #     "name": "pull_memory",
-        #     "type": "bool",
-        #     "value": False,
-        # },
         {
             "default": False,
             "name": "dump_memory",
@@ -279,13 +272,13 @@ class Cuckoo(ServiceBase):
         self.cuckoo_ip = None
         self.ssdeep_match_pct = 0
         self.restart_interval = 0
-        self.result_parsers = []
         self.machines = None
+        self.auth_header = {'Authorization': self.cfg['auth_header_value']}
 
     # noinspection PyUnresolvedReferences
     def import_service_deps(self):
         global generate_al_result, pefile
-        from cuckooresult import generate_al_result
+        from cuckoo.cuckooresult import generate_al_result
         import pefile
 
     def set_urls(self):
@@ -319,27 +312,12 @@ class Cuckoo(ServiceBase):
         if self.enabled_routes is None:
             raise ValueError("No routing submission_parameter.")
 
-        # initialize any extra result parsers
-        if self.result_parsers:
-            for parser_path in self.result_parsers:
-                self.log.info("Adding result_parser %s" % parser_path)
-                parser_class = load_module_by_path(parser_path)
-                self.result_parsers.append(parser_class())
-        else:
-            self.log.error("Missing 'result_parsers' service configuration.")
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
     def execute(self, request):
         # TODO: Inherit this parameter from assemblyline
         self.cuckoo_ip = self.config["remote_host_ip"]
-
-        # self.log.debug("Using max timeout %d" % CUCKOO_MAX_TIMEOUT)
-
-        # if request.task.depth > 3:
-        #     self.log.warning("Cuckoo is exiting because it currently does not execute on great great grand children.")
-        #     request.set_save_result(False)
-        #     return
 
         self.set_urls()
 
@@ -358,7 +336,6 @@ class Cuckoo(ServiceBase):
         full_memdump = False
         pull_memdump = False
 
-        ##
         # Check the filename to see if it's mime encoded
         mime_re = re.compile("^=\?.*\?=$")
         if mime_re.match(self.file_name):
@@ -397,7 +374,6 @@ class Cuckoo(ServiceBase):
                 # This is the case where the submitted file was NOT identified, and  the provided extension
                 # isn't in the list of extensions that we explicitly support.
                 self.log.debug("Cuckoo is exiting because it doesn't support the provided file type.")
-                request.set_save_result(False)
                 return
             else:
                 if submitted_ext == "bin":
@@ -412,9 +388,7 @@ class Cuckoo(ServiceBase):
 
         # Rename based on the found extension.
         if file_ext and self.task.sha256:
-            # self.file_name = self.task.sha256 + file_ext
             self.file_name = original_ext[0] + file_ext
-
 
         # Parse user args
         analysis_timeout = None
@@ -667,39 +641,10 @@ class Cuckoo(ServiceBase):
 
                     self.file_res.add_section(dll_multi_section)
 
-                # Run extra result parsers
-                for rp in self.result_parsers:
-                    self.log.debug("Running result parser %s" % rp.__module__)
-                    rp.parse(request, self.file_res)
-
                 self.log.debug("Checking for dropped files and pcap.")
                 # Submit dropped files and pcap if available:
                 self.check_dropped(request, self.cuckoo_task.id)
                 self.check_pcap(self.cuckoo_task.id)
-
-                # if full_memdump:
-                #     # TODO: temporary hack until cuckoo upstream PR #2533 is merged ... or maybe not. for any
-                #     # reasonably sized memdump (~1GB) the default max upload size for AL is too small, so
-                #     # that would probably kill the report
-                #     # Try to copy the memory dump out of the docker container
-                #     memdump_hostpath = os.path.join(self.working_directory, "memory.dmp")
-                #     self.cm._run_cmd("docker cp %(container_name)s:%(container_path)s %(host_path)s" %
-                #                      {
-                #                          "container_name": self.cm.name,
-                #                          "container_path": "/home/sandbox/.cuckoo/storage/analyses/%d/memory.dmp" % self.cuckoo_task.id,
-                #                          "host_path": memdump_hostpath
-                #                      }, raise_on_error=False, log=self.log)
-                #
-                #     # Check file size, make sure we can actually add it
-                #     memdump_size = os.stat(memdump_hostpath).st_size
-                #     if memdump_size < max_extracted_size:
-                #         # Try to add as an extracted file
-                #         request.add_extracted(memdump_hostpath, "Cuckoo VM Full Memory Dump")
-                #     else:
-                #         self.file_res.add_section(ResultSection(
-                #             title_text="Attempted to re-submit full memory dump, but it's too large",
-                #             body="Memdump size: %d, current max AL size: %d" % (memdump_size, max_extracted_size)
-                #         ))
 
                 if BODY_FORMAT.contains_value("JSON") and request.task.deep_scan:
                     # Attach report as json as the last result section
@@ -738,7 +683,7 @@ class Cuckoo(ServiceBase):
         return "Cuckoo"
 
     def check_stop(self):
-        resp = self.session.get(self.query_host_url, headers={self.config['auth_header_key']: self.config['auth_header_value']})
+        resp = self.session.get(self.query_host_url, headers=self.auth_header)
         if resp.status_code != 200:
             self.log.debug("Failed to check the status of the Cuckoo host. Status code: %s" % resp.status_code)
             if resp.status_code == 404:
@@ -887,7 +832,7 @@ class Cuckoo(ServiceBase):
         self.log.debug("Submitting file: %s to server %s" % (self.cuckoo_task.file, self.submit_url))
         files = {"file": (self.cuckoo_task.file, file_content)}
 
-        resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task, headers={self.config['auth_header_key']: self.config['auth_header_value']})
+        resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task, headers=self.auth_header)
         if resp.status_code != 200:
             self.log.debug("Failed to submit file %s. Status code: %s" % (self.cuckoo_task.file, resp.status_code))
 
@@ -918,7 +863,7 @@ class Cuckoo(ServiceBase):
         if self.check_stop():
             return None
         self.log.debug("Querying report, task_id: %s - format: %s", task_id, fmt)
-        resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {}, headers={self.config['auth_header_key']: self.config['auth_header_value']})
+        resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {}, headers=self.auth_header)
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.error("Task or report not found for task %s." % task_id)
@@ -932,6 +877,7 @@ class Cuckoo(ServiceBase):
                 return None
         if fmt == "json":
             try:
+                sys.setrecursionlimit(10000)  # TODO: Arbitrary value set for very large JSON results
                 resp_dict = dict(resp.json())
                 report_data = resp_dict
             except Exception as e:
@@ -949,7 +895,7 @@ class Cuckoo(ServiceBase):
     def cuckoo_query_pcap(self, task_id):
         if self.check_stop():
             return None
-        resp = self.session.get(self.query_pcap_url % task_id, headers={self.config['auth_header_key']: self.config['auth_header_value']})
+        resp = self.session.get(self.query_pcap_url % task_id, headers=self.auth_header)
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.debug("Task or pcap not found for task: %s" % task_id)
@@ -965,7 +911,7 @@ class Cuckoo(ServiceBase):
     def cuckoo_query_task(self, task_id):
         if self.check_stop():
             return {}
-        resp = self.session.get(self.query_task_url % task_id, headers={self.config['auth_header_key']: self.config['auth_header_value']})
+        resp = self.session.get(self.query_task_url % task_id, headers=self.auth_header)
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.debug("Task not found for task: %s" % task_id)
@@ -987,7 +933,7 @@ class Cuckoo(ServiceBase):
             self.log.debug("Service stopped during machine info query.")
             return None
 
-        resp = self.session.get(self.query_machine_info_url % machine_name, headers={self.config['auth_header_key']: self.config['auth_header_value']})
+        resp = self.session.get(self.query_machine_info_url % machine_name, headers=self.auth_header)
         if resp.status_code != 200:
             self.log.debug("Failed to query machine %s. Status code: %d" % (machine_name, resp.status_code))
             return None
@@ -1000,7 +946,7 @@ class Cuckoo(ServiceBase):
     def cuckoo_delete_task(self, task_id):
         if self.check_stop():
             return
-        resp = self.session.get(self.delete_task_url % task_id, headers={self.config['auth_header_key']: self.config['auth_header_value']})
+        resp = self.session.get(self.delete_task_url % task_id, headers=self.auth_header)
         if resp.status_code != 200:
             self.log.debug("Failed to delete task %s. Status code: %d" % (task_id, resp.status_code))
         else:
@@ -1015,7 +961,7 @@ class Cuckoo(ServiceBase):
             self.log.debug("Service stopped during machine query.")
             return False
         self.log.debug("Querying for available analysis machines using url %s.." % self.query_machines_url)
-        resp = self.session.get(self.query_machines_url, headers={self.config['auth_header_key']: self.config['auth_header_value']})
+        resp = self.session.get(self.query_machines_url, headers=self.auth_header)
         if resp.status_code != 200:
             self.log.debug("Failed to query machines: %s" % resp.status_code)
             raise CuckooVMBusyException()
@@ -1094,14 +1040,18 @@ class Cuckoo(ServiceBase):
 
         pcap_data = self.cuckoo_query_pcap(task_id)
         if pcap_data:
-            pcap_path = os.path.join(self.working_directory, "cuckoo_traffic.pcap")
+            pcap_file_name = "cuckoo_traffic.pcap"
+            pcap_path = os.path.join(self.working_directory, pcap_file_name)
             pcap_file = open(pcap_path, 'wb')
             pcap_file.write(pcap_data)
             pcap_file.close()
 
             # Resubmit analysis pcap file
-            self.task.exclude_service("Dynamic Analysis")
-            self.task.add_extracted(pcap_path, "PCAP from Cuckoo analysis")
+            try:
+                self.task.add_extracted(pcap_path, pcap_file_name, "PCAP from Cuckoo analysis")
+            except MaxExtractedExceeded:
+                self.log.debug("The maximum amount of files to be extracted is 501, "
+                               "which has been exceeded in this submission")
 
     def report_machine_info(self, machine_name):
         try:

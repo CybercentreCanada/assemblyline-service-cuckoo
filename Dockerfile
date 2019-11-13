@@ -1,6 +1,6 @@
 FROM cccs/assemblyline-v4-service-base:latest
 
-ENV SERVICE_PATH cuckoo.Cuckoo
+ENV SERVICE_PATH cuckoo.cuckoo.Cuckoo
 
 # Get required apt packages
 RUN apt-get update && apt-get install -y \

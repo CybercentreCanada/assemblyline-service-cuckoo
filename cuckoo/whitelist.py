@@ -34,7 +34,11 @@ WHITELIST_DOMAINS = {
     "Windows Update": ".*\.windowsupdate\.com$",
     "Comodo": ".*\.comodoca\.com$",
     "Verisign": ".*\.verisign\.com$",
-    "IPv6 Reverse DNS": "[0-9a-f\.]+\.ip6.arpa$"
+    "IPv6 Reverse DNS": "[0-9a-f\.]+\.ip6.arpa$",
+    "Azure DNS": "\_ldap\._tcp\.dc\._msdcs\.(.*)$",
+    "Azure WPAD": "wpad.*\.microsoft.com$",
+    "Azure Monitoring Disk": "md-ssd-\.*\.blob.core.windows.net$",
+    "Azure Monitoring Table": ".*\.table.core.windows.net"
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
@@ -43,6 +47,8 @@ WHITELIST_IPS = {
     'localhost': r'127.0.0.1',
     'Honeynet': r'169.169.169.169',
     'Windows SSDP': r'239.255.255.250',
+    'Azure VM Version': r'169.254.169.254',
+    'Azure Telemetry': r'168.63.129.16',
     'Windows IGMP': r'224\..*',
     'local_net': r'10\..*',
     'local_net_2': r'192\.168.*',
