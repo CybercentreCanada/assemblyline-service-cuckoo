@@ -329,10 +329,11 @@ def process_signatures(sigs, al_result, classification):
             severity_heuristic_map = {1: 3,
                                       2: 4,
                                       3: 5,
-                                      4: 6}
+                                      4: 6,
+                                      5: 7}
             heuristic = severity_heuristic_map.get(severity)
             # defaulting to the highest severity since outside normal cuckoo range
-            sig_name = sig.get('name', 4)
+            sig_name = sig.get('name', 5)
             sig_res.set_heuristic(heuristic, signature=sig_name)
             sigs_res.add_subsection(sig_res)
             sig_score = int(severity * 100)

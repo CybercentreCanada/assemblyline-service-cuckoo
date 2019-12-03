@@ -9,7 +9,6 @@ import hashlib
 import traceback
 import re
 import email.header
-import sys
 
 from retrying import retry, RetryError
 
@@ -877,7 +876,6 @@ class Cuckoo(ServiceBase):
                 return None
         if fmt == "json":
             try:
-                sys.setrecursionlimit(10000)  # TODO: Arbitrary value set for very large JSON results
                 resp_dict = dict(resp.json())
                 report_data = resp_dict
             except Exception as e:
