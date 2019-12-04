@@ -13,6 +13,7 @@ from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, InvalidClassification
 from cuckoo.clsids import clsids
 from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
+from cuckoo.signatures import check_signature
 import os
 
 try:
@@ -322,20 +323,16 @@ def process_signatures(sigs, al_result, classification):
                       'persistence_autorun']
         # Severity is 0-5ish with 0 being least severe.
         for sig in sigs:
-            severity = round(float(sig.get('severity', 0)))
+            sig_name = sig.get('name')
+            sig_id = check_signature(sig_name)
+            if sig_id == 481:
+                log.warning("Unknown signature detected: %s" % sig)
             actor = sig.get('actor', '')
-            sig_res = ResultSection(title_text="Signature subsection", classification=classification)
-            # Mapping the signature severity to it's corresponding heuristic ID in the .yaml
-            severity_heuristic_map = {1: 3,
-                                      2: 4,
-                                      3: 5,
-                                      4: 6,
-                                      5: 7}
-            heuristic = severity_heuristic_map.get(severity)
-            # defaulting to the highest severity since outside normal cuckoo range
-            sig_name = sig.get('name', 5)
-            sig_res.set_heuristic(heuristic, signature=sig_name)
+            description = sig.get('description', '')
+            sig_res = ResultSection(title_text="Signature subsection", classification=classification, body=description)
+            sig_res.set_heuristic(sig_id, signature=sig_name)
             sigs_res.add_subsection(sig_res)
+            severity = round(sig.get('severity', 0))
             sig_score = int(severity * 100)
             sig_categories = sig.get('categories', [])
             sig_families = sig.get('families', [])
