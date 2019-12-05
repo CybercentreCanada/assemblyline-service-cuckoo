@@ -2945,6 +2945,18 @@ heuristics:
     filetype: '*'
     description: Cuckoo detected Signatures
 
+  - heur_id: 1000
+    name: domain_detected
+    score: 100
+    filetype: '*'
+    description: Cuckoo detected Domains
+
+  - heur_id: 1001
+    name: http_detected
+    score: 100
+    filetype: '*'
+    description: Cuckoo detected HTTP
+
 docker_config:
   image: cccs/assemblyline-service-cuckoo:latest
   cpu_cores: 0.25

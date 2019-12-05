@@ -321,7 +321,6 @@ def process_behavior(behavior, al_result, al_request, classification):
 def process_signatures(sigs, al_result, classification):
     log.debug("Processing signature results.")
     if len(sigs) > 0:
-        sigs_score = 0
         sigs_res = ResultSection(title_text="Signatures", classification=classification)
         skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
         print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities',
@@ -343,13 +342,10 @@ def process_signatures(sigs, al_result, classification):
             sig_res = ResultSection(title_text=title_text, classification=classification, body=description)
             sig_res.set_heuristic(sig_id)
             sigs_res.add_subsection(sig_res)
-            severity = round(sig.get('severity', 0))
-            sig_score = int(severity * 100)
             sig_categories = sig.get('categories', [])
             sig_families = sig.get('families', [])
             sig_marks = sig.get('marks', [])
 
-            sigs_score += sig_score
             if len(sig_categories) > 0:
                 sigs_res.add_line('\tCategories: ' + ','.join([safe_str(x) for x in sig_categories]))
                 for category in sig_categories:
@@ -369,8 +365,6 @@ def process_signatures(sigs, al_result, classification):
                     elif mark.get('type') == 'generic' and 'reg_key' in mark and 'reg_value' in mark:
                         sigs_res.add_line('\tIOC: %s = %s' % (mark['reg_key'], mark['reg_value']))
 
-        # We don't want to get carried away..
-        sigs_res.score = min(1000, sigs_score)
         al_result.add_section(sigs_res)
 
 
@@ -443,8 +437,6 @@ def process_network(network, al_result, guest_ip, classification):
     network_res = ResultSection(title_text="Network Activity",
                                 classification=classification,
                                 body_format=BODY_FORMAT.MEMORY_DUMP)
-    network_score = 0
-
     # IP activity
     hosts = network.get("hosts", [])
     if len(hosts) > 0 and isinstance(hosts[0], dict):
@@ -514,7 +506,6 @@ def process_network(network, al_result, guest_ip, classification):
         # flows is a set of unique flows by the groupings above
         host_lines = []
         for host in sorted(result_map['host_flows']):
-            network_score += 100
             protocols = result_map['host_flows'].get(host, [])
             host_cc = '??'
             host_cc = '('+host_cc+')'
@@ -545,10 +536,10 @@ def process_network(network, al_result, guest_ip, classification):
             max_domain_len = max(max_domain_len, len(domain)+4)
         proto_fmt = "{0:<8}{1:<"+str(max_domain_len)+"}{2}"
         domain_lines = []
-        network_score += 100
         for domain in sorted(result_map['domain_flows']):
             protocols = result_map['domain_flows'][domain]
             network_res.add_tag("network.domain", domain)
+            network_res.set_heuristic(1000)
             for protocol in sorted(protocols):
                 flows = protocols[protocol]
                 if 'http' in protocol:
@@ -556,6 +547,7 @@ def process_network(network, al_result, guest_ip, classification):
                         uri = flow.get('uri', None)
                         if uri:
                             network_res.add_tag("network.uri", uri)
+                            network_res.set_heuristic(1001)
                 flow_lines = dict_list_to_fixedwidth_str_list(flows)
                 for line in flow_lines:
                     proto_line = proto_fmt.format(protocol, domain, line)
@@ -563,10 +555,8 @@ def process_network(network, al_result, guest_ip, classification):
 #                 domain_res.add_lines(protocol_lines)
 #             domains_res.add_section(domain_res)
         network_res.add_lines(domain_lines)
-        network_score = min(500, network_score)
-    
+
     if network_res.body and len(network_res.body) > 0:
-        network_res.score = network_score
         al_result.add_section(network_res)
     log.debug("Network processing complete.")
 
