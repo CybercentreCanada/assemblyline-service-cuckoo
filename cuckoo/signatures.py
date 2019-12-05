@@ -480,7 +480,8 @@ CUCKOO_SIGNATURES = {
   "suspicious_command_tools": 482,
   "network_cnc_http": 483,
   "queries_programs": 484,
-  "allocates_execute_remote_process":  485
+  "allocates_execute_remote_process":  485,
+  "pe_unknown_resource_name": 486
 }
 
 

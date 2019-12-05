@@ -329,6 +329,11 @@ def process_signatures(sigs, al_result, classification):
         # Severity is 0-5ish with 0 being least severe.
         for sig in sigs:
             sig_name = sig.get('name')
+
+            # Skipped Signature Checks:
+            if sig_name in skipped_sigs:
+                continue
+
             sig_id = check_signature(sig_name)
             if sig_id == 3:
                 log.warning("Unknown signature detected: %s" % sig)
@@ -343,10 +348,6 @@ def process_signatures(sigs, al_result, classification):
             sig_categories = sig.get('categories', [])
             sig_families = sig.get('families', [])
             sig_marks = sig.get('marks', [])
-
-            # Skipped Signature Checks:
-            if sig_name in skipped_sigs:
-                continue
 
             sigs_score += sig_score
             if len(sig_categories) > 0:

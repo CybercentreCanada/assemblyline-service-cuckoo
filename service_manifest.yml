@@ -2933,6 +2933,12 @@ heuristics:
     filetype: '*'
     description: Cuckoo detected Signatures
 
+  - heur_id: 486
+    name: pe_unknown_resource_name
+    score: 100
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
 docker_config:
   image: cccs/assemblyline-service-cuckoo:latest
   cpu_cores: 0.25
