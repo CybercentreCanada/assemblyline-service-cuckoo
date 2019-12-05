@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import requests
 import tarfile
@@ -1064,15 +1065,20 @@ class Cuckoo(ServiceBase):
             if not machine_name_exists:
                 raise Exception
 
-            machine_section = ResultSection(title_text='Machine Information',
-                                            classification=self.SERVICE_CLASSIFICATION)
-            machine_section.add_line('ID: ' + str(machine.get('id')))
-            machine_section.add_line('Name: ' + str(machine.get('name')))
-            machine_section.add_line('Label: ' + str(machine.get('label')))
-            machine_section.add_line('Platform: ' + str(machine.get('platform')))
-            machine_section.add_line('Tags:')
+            body = {
+                'ID': str(machine.get('id')),
+                'Name': str(machine.get('name')),
+                'Label': str(machine.get('label')),
+                'Platform': str(machine.get('platform')),
+                'Tags': []}
             for tag in machine.get('tags', []):
-                machine_section.add_line('\t ' + safe_str(tag).replace('_', ' '))
+                body['Tags'].append(safe_str(tag).replace('_', ' '))
+
+            machine_section = ResultSection(title_text='Machine Information',
+                                            classification=self.SERVICE_CLASSIFICATION,
+                                            body_format=BODY_FORMAT.KEY_VALUE,
+                                            body=json.dumps(body))
+
             self.file_res.add_section(machine_section)
             return str(machine.get('ip', ""))
         except Exception as e:

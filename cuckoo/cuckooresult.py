@@ -4,6 +4,8 @@ import logging
 import re
 import ssdeep
 import traceback
+import json
+import os
 
 from collections import defaultdict
 from pprint import pprint
@@ -14,7 +16,6 @@ from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSec
 from cuckoo.clsids import clsids
 from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
 from cuckoo.signatures import check_signature
-import os
 
 try:
     from typing import TYPE_CHECKING
@@ -42,11 +43,6 @@ def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, se
 
     info = api_report.get('info')
     if info is not None:
-        info_res = ResultSection(title_text='Analysis Information',
-                                 classification=classification)
-        info_res.add_line('Cuckoo Version:\t%s' % info.get('version'))
-        info_res.add_line('Analysis ID:\t%s' % info.get('id'))
-        info_res.add_line('Analysis Duration:\t%s' % info.get('duration'))
         start_time = info.get('started')
         end_time = info.get('ended')
         try:
@@ -54,8 +50,17 @@ def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, se
             end_time = datetime.datetime.fromtimestamp(int(end_time)).strftime('%Y-%m-%d %H:%M:%S')
         except:
             pass
-        info_res.add_line('Start Time:\t%s' % start_time)
-        info_res.add_line('End Time:\t%s' % end_time)
+        body = {
+            'Cuckoo Version': info.get('version'),
+            'Analysis ID': info.get('id'),
+            'Analysis Duration': info.get('duration'),
+            'Start Time': start_time,
+            'End Time': end_time
+        }
+        info_res = ResultSection(title_text='Analysis Information',
+                                 classification=classification,
+                                 body_format=BODY_FORMAT.KEY_VALUE,
+                                 body=json.dumps(body))
         al_result.add_section(info_res)
 
     behavior = api_report.get('behavior')
@@ -325,12 +330,13 @@ def process_signatures(sigs, al_result, classification):
         for sig in sigs:
             sig_name = sig.get('name')
             sig_id = check_signature(sig_name)
-            if sig_id == 481:
+            if sig_id == 3:
                 log.warning("Unknown signature detected: %s" % sig)
             actor = sig.get('actor', '')
             description = sig.get('description', '')
-            sig_res = ResultSection(title_text="Signature subsection", classification=classification, body=description)
-            sig_res.set_heuristic(sig_id, signature=sig_name)
+            title_text = "Signature: " + sig_name
+            sig_res = ResultSection(title_text=title_text, classification=classification, body=description)
+            sig_res.set_heuristic(sig_id)
             sigs_res.add_subsection(sig_res)
             severity = round(sig.get('severity', 0))
             sig_score = int(severity * 100)
@@ -343,9 +349,6 @@ def process_signatures(sigs, al_result, classification):
                 continue
 
             sigs_score += sig_score
-
-            sigs_res.add_line(sig_name + ' [' + str(sig_score) + ']')
-            sigs_res.add_line('\tDescription: ' + sig.get('description'))
             if len(sig_categories) > 0:
                 sigs_res.add_line('\tCategories: ' + ','.join([safe_str(x) for x in sig_categories]))
                 for category in sig_categories:
@@ -355,9 +358,6 @@ def process_signatures(sigs, al_result, classification):
                 sigs_res.add_line('\tFamilies: ' + ','.join([safe_str(x) for x in sig_families]))
                 for family in sig_families:
                     sigs_res.add_tag("dynamic.signature.category", family)
-
-            if sig_name != 'unknown' and sig_name != '':
-                sigs_res.add_tag("dynamic.signature.name", sig_name)
 
             sigs_res.add_line('')
             if actor and actor != '':
