@@ -359,7 +359,6 @@ def process_signatures(sigs, al_result, classification):
                 for family in sig_families:
                     sigs_res.add_tag("dynamic.signature.category", family)
 
-            sigs_res.add_line('')
             if actor and actor != '':
                 sigs_res.add_tag("attribution.actor", actor)
             if sig_name in print_iocs:
