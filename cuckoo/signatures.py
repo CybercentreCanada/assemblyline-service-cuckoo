@@ -481,7 +481,8 @@ CUCKOO_SIGNATURES = {
   "network_cnc_http": 483,
   "queries_programs": 484,
   "allocates_execute_remote_process":  485,
-  "pe_unknown_resource_name": 486
+  "pe_unknown_resource_name": 486,
+  "peid_packer": 487
 }
 
 
