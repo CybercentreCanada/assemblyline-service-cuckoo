@@ -2952,10 +2952,10 @@ heuristics:
     description: Cuckoo detected Domains
 
   - heur_id: 1001
-    name: http_detected
+    name: host_detected
     score: 100
     filetype: '*'
-    description: Cuckoo detected HTTP
+    description: Cuckoo detected Hosts
 
 docker_config:
   image: cccs/assemblyline-service-cuckoo:latest

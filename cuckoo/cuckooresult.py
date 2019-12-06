@@ -445,7 +445,7 @@ def process_network(network, al_result, guest_ip, classification):
     udp = parse_protocol_data(network.get("udp", []), group_fields=['dport'])
     tcp = parse_protocol_data(network.get("tcp", []), group_fields=['dport'])
     smtp = parse_protocol_data(network.get("smtp", []), group_fields=['raw'])
-    dns = parse_protocol_data(network.get("dns", []), group_by='request', group_fields=['type'])
+    dns = parse_protocol_data(network.get("dns", []), group_by='request', group_fields=['answers'])
     icmp = parse_protocol_data(network.get("icmp", []), group_fields=['type'])
 
     # Domain activity
@@ -500,7 +500,6 @@ def process_network(network, al_result, guest_ip, classification):
         add_domain_flows(domain, 'https', https.get(domain), result_map)
 
     if 'host_flows' in result_map:
-        # hosts_res = ResultSection(title_text='IP Flows',classification=classification)
         # host_flows is a map of host:protocol entries
         # protocol is a map of protocol_name:flows
         # flows is a set of unique flows by the groupings above
@@ -522,11 +521,12 @@ def process_network(network, al_result, guest_ip, classification):
                     proto_line = "{0:<8}{1:<19}{2:<8}{3}".format(protocol, host, host_cc, line)
                     host_lines.append(proto_line)
 
-        network_res.add_lines(host_lines)
+        hosts_res = ResultSection(title_text='IP Flows', classification=classification, body=host_lines)
+        hosts_res.set_heuristic(1001)
+        network_res.add_subsection(hosts_res)
 
     if 'domain_flows' in result_map:
-        # domains_res = ResultSection(title_text='Domain Flows',classification=classification)
-        # host_flows is a map of host:protocol entries
+        # domain_flows is a map of domain:protocol entries
         # protocol is a map of protocol_name:flows
         # flows is a set of unique flows by the groupings above
 
@@ -539,25 +539,29 @@ def process_network(network, al_result, guest_ip, classification):
         for domain in sorted(result_map['domain_flows']):
             protocols = result_map['domain_flows'][domain]
             network_res.add_tag("network.domain", domain)
-            network_res.set_heuristic(1000)
             for protocol in sorted(protocols):
                 flows = protocols[protocol]
+                flow_lines = None
                 if 'http' in protocol:
                     for flow in flows:
                         uri = flow.get('uri', None)
                         if uri:
                             network_res.add_tag("network.uri", uri)
-                            network_res.set_heuristic(1001)
-                flow_lines = dict_list_to_fixedwidth_str_list(flows)
+                    flow_lines = dict_list_to_fixedwidth_str_list(flows)
+                if 'dns' in protocol:
+                    for flow in flows:
+                        answers = flow.get('answers', None)
+                        if answers:
+                            flow_lines = dict_list_to_fixedwidth_str_list(answers)
                 for line in flow_lines:
                     proto_line = proto_fmt.format(protocol, domain, line)
                     domain_lines.append(proto_line)                
 #                 domain_res.add_lines(protocol_lines)
 #             domains_res.add_section(domain_res)
-        network_res.add_lines(domain_lines)
-
-    if network_res.body and len(network_res.body) > 0:
-        al_result.add_section(network_res)
+        domains_res = ResultSection(title_text='Domain Flows', classification=classification, body=domain_lines)
+        domains_res.set_heuristic(1000)
+        network_res.add_subsection(domains_res)
+    al_result.add_section(network_res)
     log.debug("Network processing complete.")
 
 
