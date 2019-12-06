@@ -32,7 +32,7 @@ CUCKOO_API_QUERY_PCAP = "pcap/get/%s"
 CUCKOO_API_QUERY_MACHINES = "machines/list"
 CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
 CUCKOO_API_QUERY_HOST_STATUS = "cuckoo/status"
-CUCKOO_POLL_DELAY = 2
+CUCKOO_POLL_DELAY = 3
 GUEST_VM_START_TIMEOUT = 75
 
 SUPPORTED_EXTENSIONS = [
@@ -958,9 +958,9 @@ class Cuckoo(ServiceBase):
     # Fixed retry amount to avoid starting an analysis too late.
     @retry(wait_fixed=2000, stop_max_attempt_number=15)
     def cuckoo_query_machines(self):
-        # if self.check_stop():
-        #     self.log.debug("Service stopped during machine query.")
-        #     return False
+        if self.check_stop():
+            self.log.debug("Service stopped during machine query.")
+            return False
         self.log.debug("Querying for available analysis machines using url %s.." % self.query_machines_url)
         resp = self.session.get(self.query_machines_url, headers=self.auth_header)
         if resp.status_code != 200:

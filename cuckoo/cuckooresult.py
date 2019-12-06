@@ -521,7 +521,8 @@ def process_network(network, al_result, guest_ip, classification):
                     host_lines.append(proto_line)
 
         hosts_res = ResultSection(title_text='IP Flows', classification=classification,
-                                  body_format=BODY_FORMAT.MEMORY_DUMP, body=host_lines)
+                                  body_format=BODY_FORMAT.MEMORY_DUMP)
+        hosts_res.add_lines(host_lines)
         hosts_res.set_heuristic(1001)
         network_res.add_subsection(hosts_res)
 
@@ -559,7 +560,8 @@ def process_network(network, al_result, guest_ip, classification):
 #                 domain_res.add_lines(protocol_lines)
 #             domains_res.add_section(domain_res)
         domains_res = ResultSection(title_text='Domain Flows', classification=classification,
-                                    body_format=BODY_FORMAT.MEMORY_DUMP, body=domain_lines)
+                                    body_format=BODY_FORMAT.MEMORY_DUMP)
+        domains_res.add_lines(domain_lines)
         domains_res.set_heuristic(1000)
         network_res.add_subsection(domains_res)
     al_result.add_section(network_res)
