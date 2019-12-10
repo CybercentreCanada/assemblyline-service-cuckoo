@@ -72,7 +72,10 @@ SUPPORTED_EXTENSIONS = [
     "bin",
     "hta",
     "zip",
-    "lnk"
+    "lnk",
+    "hwp",
+    "pub",
+    "zip",
 ]
 
 
