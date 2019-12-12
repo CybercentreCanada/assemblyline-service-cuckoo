@@ -2945,6 +2945,474 @@ heuristics:
     filetype: '*'
     description: Cuckoo detected Signatures
 
+  - heur_id: 488
+    name: exe_appdata
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 489
+    name: injection_process_search
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 490
+    name: disables_proxy
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 491
+    name: js_anti_analysis
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 492
+    name: pdf_attachments
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 493
+    name: pdf_openaction
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 494
+    name: pdf_openaction_js
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 495
+    name: rtf_unknown_character_set
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 496
+    name: credential_dumping_lsass_access
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 497
+    name: martian_command_process
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 498
+    name: sysinternals_tools_usage
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 499
+    name: adds_user
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 500
+    name: adds_user_admin
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 501
+    name: checks_kernel_debugger
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 502
+    name: win32_process_create
+    score: 400
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 503
+    name: wmi_antivm
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 504
+    name: wmi_persistance
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 505
+    name: wmi_service
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 506
+    name: injection_queueapcthread
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 507
+    name: injection_ntsetcontextthread
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 508
+    name: amsi_bypass
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 509
+    name: powershell_bitstransfer
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 510
+    name: powershell_ddi_rc4
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 511
+    name: powershell_dfsp
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 512
+    name: powershell_di
+    score: 100
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 513
+    name: powershell_download
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 514
+    name: powershell_empire
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 515
+    name: powershell_meterpreter
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 516
+    name: powershell_request
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 517
+    name: powershell_c2dns
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 518
+    name: powershell_unicorn
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 519
+    name: volatility_ldrmodules_1
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 520
+    name: volatility_ldrmodules_2
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 521
+    name: volatility_devicetree_1
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 522
+    name: volatility_svcscan_1
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 523
+    name: volatility_svcscan_2
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 524
+    name: volatility_svcscan_3
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 525
+    name: volatility_modscan_1
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 526
+    name: volatility_handles_1
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 527
+    name: modifies_proxy_override
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 528
+    name: modifies_proxy_autoconfig
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 529
+    name: creates_user_folder_exe
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 530
+    name: memdump_tor_urls
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 531
+    name: memdump_ip_urls
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 532
+    name: disables_spdy_ie
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 533
+    name: disables_spdy_chrome
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 534
+    name: modifies_firefox_configuration
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 535
+    name: disables_ie_http2
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 536
+    name: ransomware_message_ocr
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 537
+    name: stack_pivot
+    score: 600
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 538
+    name: dep_heap_bypass
+    score: 600
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 539
+    name: dep_stack_bypass
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 540
+    name: shellcode_writeprocessmemory
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 541
+    name: stack_pivot_shellcode_apis
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 542
+    name: stackpivot_shellcode_createprocess
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 543
+    name: network_downloader_exe
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 544
+    name: persistence_registry_exe
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 545
+    name: persistence_registry_powershell
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 546
+    name: office_check_project_name
+    score: 100
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 547
+    name: office_count_dirs
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 548
+    name: office_appinfo_version
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 549
+    name: office_check_window
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 550
+    name: office_http_request
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 551
+    name: office_recent_files
+    score: 400
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 552
+    name: has_office_eps
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 553
+    name: office_indirect_call
+    score: 100
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 554
+    name: office_check_doc_name
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 555
+    name: office_platform_detect
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 556
+    name: document_close
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 557
+    name: document_open
+    score: 200
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 558
+    name: office_eps_strings
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 559
+    name: office_vuln_guid
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 560
+    name: office_vuln_modules
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 561
+    name: ransomware_appends_extensions
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 562
+    name: ransomware_dropped_files
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 563
+    name: ransomware_mass_file_delete
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 564
+    name: injection_write_memory_exe
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
+  - heur_id: 565
+    name: clear_permission_event_logs
+    score: 300
+    filetype: '*'
+    description: Cuckoo detected Signatures
+
   - heur_id: 1000
     name: domain_detected
     score: 100
