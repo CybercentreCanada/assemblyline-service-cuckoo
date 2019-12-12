@@ -336,7 +336,6 @@ def process_signatures(sigs, al_result, classification):
             sig_id = check_signature(sig_name)
             if sig_id == 3:
                 log.warning("Unknown signature detected: %s" % sig)
-                continue
             actor = sig.get('actor', '')
             description = sig.get('description', '')
             title_text = "Signature: " + sig_name
