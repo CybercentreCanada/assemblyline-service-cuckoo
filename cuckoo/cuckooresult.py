@@ -364,8 +364,8 @@ def process_signatures(sigs, al_result, classification):
                         sigs_res.add_line('\tIOC: %s' % mark['ioc'])
                     elif mark.get('type') == 'generic' and 'reg_key' in mark and 'reg_value' in mark:
                         sigs_res.add_line('\tIOC: %s = %s' % (mark['reg_key'], mark['reg_value']))
-
-        al_result.add_section(sigs_res)
+        if sigs_res.body:
+            al_result.add_section(sigs_res)
 
 
 def parse_protocol_data(flow_data, group_by='dst', group_fields=list()):
