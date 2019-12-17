@@ -1077,7 +1077,7 @@ class Cuckoo(ServiceBase):
                 'platform': str(machine.get('platform')),
                 'tags': []}
             for tag in machine.get('tags', []):
-                body['Tags'].append(safe_str(tag).replace('_', ' '))
+                body['tags'].append(safe_str(tag).replace('_', ' '))
 
             machine_section = ResultSection(title_text='Machine Information',
                                             classification=self.SERVICE_CLASSIFICATION,
