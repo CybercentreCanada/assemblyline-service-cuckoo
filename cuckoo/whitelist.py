@@ -36,6 +36,7 @@ WHITELIST_DOMAINS = {
     "Verisign": ".*\.verisign\.com$",
     "IPv6 Reverse DNS": "[0-9a-f\.]+\.ip6.arpa$",
     "Azure DNS": "\_ldap\._tcp\.dc\._msdcs\.(.*)$",
+    'Azure Office': "\_VLMCS\._TCP\.reddog\.microsoft\.com$",
     "Azure WPAD": "wpad.*\.microsoft.com$",
     "Azure Monitoring Disk": "md-ssd-\.*\.blob.core.windows.net$",
     "Azure Monitoring Table": ".*\.table.core.windows.net"

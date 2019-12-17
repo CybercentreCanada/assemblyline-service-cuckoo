@@ -504,25 +504,25 @@ def process_network(network, al_result, guest_ip, classification):
         # protocol is a map of protocol_name:flows
         # flows is a set of unique flows by the groupings above
         host_lines = []
+        hosts_res = ResultSection(title_text='IP Flows', classification=classification,
+                                  body_format=BODY_FORMAT.MEMORY_DUMP)
         for host in sorted(result_map['host_flows']):
             protocols = result_map['host_flows'].get(host, [])
             host_cc = '??'
             host_cc = '('+host_cc+')'
-            network_res.add_tag("network.dynamic.ip", host)
+            hosts_res.add_tag("network.dynamic.ip", host)
             for protocol in sorted(protocols):
                 flows = protocols[protocol]
                 if 'http' in protocol:
                     for flow in flows:
                         uri = flow.get('uri', None)
                         if uri:
-                            network_res.add_tag("network.dynamic.uri", uri)
+                            hosts_res.add_tag("network.dynamic.uri", uri)
                 flow_lines = dict_list_to_fixedwidth_str_list(flows)
                 for line in flow_lines:
                     proto_line = "{0:<8}{1:<19}{2:<8}{3}".format(protocol, host, host_cc, line)
                     host_lines.append(proto_line)
 
-        hosts_res = ResultSection(title_text='IP Flows', classification=classification,
-                                  body_format=BODY_FORMAT.MEMORY_DUMP)
         hosts_res.add_lines(host_lines)
         hosts_res.set_heuristic(1001)
         network_res.add_subsection(hosts_res)
@@ -539,9 +539,11 @@ def process_network(network, al_result, guest_ip, classification):
             max_domain_len = max(max_domain_len, len(domain)+4)
         proto_fmt = "{0:<8}{1:<"+str(max_domain_len)+"}{2}"
         domain_lines = []
+        domains_res = ResultSection(title_text='Domain Flows', classification=classification,
+                                    body_format=BODY_FORMAT.MEMORY_DUMP)
         for domain in sorted(result_map['domain_flows']):
             protocols = result_map['domain_flows'][domain]
-            network_res.add_tag("network.dynamic.domain", domain)
+            domains_res.add_tag("network.dynamic.domain", domain)
             for protocol in sorted(protocols):
                 flows = protocols[protocol]
                 flow_lines = None
@@ -549,7 +551,7 @@ def process_network(network, al_result, guest_ip, classification):
                     for flow in flows:
                         uri = flow.get('uri', None)
                         if uri:
-                            network_res.add_tag("network.dynamic.uri", uri)
+                            domains_res.add_tag("network.dynamic.uri", uri)
                     flow_lines = dict_list_to_fixedwidth_str_list(flows)
                 if 'dns' in protocol:
                     for flow in flows:
@@ -562,8 +564,7 @@ def process_network(network, al_result, guest_ip, classification):
                         domain_lines.append(proto_line)
 #                 domain_res.add_lines(protocol_lines)
 #             domains_res.add_section(domain_res)
-        domains_res = ResultSection(title_text='Domain Flows', classification=classification,
-                                    body_format=BODY_FORMAT.MEMORY_DUMP)
+
         domains_res.add_lines(domain_lines)
         domains_res.set_heuristic(1000)
         network_res.add_subsection(domains_res)
