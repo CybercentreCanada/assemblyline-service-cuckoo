@@ -1071,11 +1071,11 @@ class Cuckoo(ServiceBase):
                 raise Exception
 
             body = {
-                'ID': str(machine.get('id')),
-                'Name': str(machine.get('name')),
-                'Label': str(machine.get('label')),
-                'Platform': str(machine.get('platform')),
-                'Tags': []}
+                'id': str(machine.get('id')),
+                'name': str(machine.get('name')),
+                'label': str(machine.get('label')),
+                'platform': str(machine.get('platform')),
+                'tags': []}
             for tag in machine.get('tags', []):
                 body['Tags'].append(safe_str(tag).replace('_', ' '))
 

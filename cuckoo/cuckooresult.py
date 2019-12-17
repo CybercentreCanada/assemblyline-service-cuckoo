@@ -51,11 +51,11 @@ def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, se
         except:
             pass
         body = {
-            'Cuckoo Version': info.get('version'),
-            'Analysis ID': info.get('id'),
-            'Analysis Duration': info.get('duration'),
-            'Start Time': start_time,
-            'End Time': end_time
+            'cuckoo_version': info.get('version'),
+            'analysis_id': info.get('id'),
+            'analysis_duration': info.get('duration'),
+            'start_time': start_time,
+            'end_time': end_time
         }
         info_res = ResultSection(title_text='Analysis Information',
                                  classification=classification,
