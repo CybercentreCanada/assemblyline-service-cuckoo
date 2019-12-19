@@ -471,16 +471,33 @@ def process_network(network, al_result, guest_ip, classification):
             if hst not in hosts and re.match(r"^[0-9.]+$", hst):
                 hosts.append(hst)
 
+    for dom in dns:
+        if dom not in domains:
+            # Cuckoo has whitelisted this domain separately than AL's whitelist feature
+            dns_query = dns.get(dom)[0]
+            hosts = remove_whitelisted_dynamic_ip(dns_query, hosts)
+
+    for domain in domains:
+        if wlist_check_domain(domain):
+            # Now we need to omit the dynamic IP from the whitelisted domain
+            # Get domain from dns, get mapped ip, pop ip from hosts
+            dns_query = dns.get(domain)[0]
+            hosts = remove_whitelisted_dynamic_ip(dns_query, hosts)
+            continue
+        add_flows("domain_flows", domain, 'dns', dns.get(domain), result_map)
+        add_flows("domain_flows", domain, 'http', http.get(domain), result_map)
+        add_flows("domain_flows", domain, 'https', https.get(domain), result_map)
+
     # network['hosts'] has all unique non-local network ips.
     for host in hosts:
         if host == guest_ip or wlist_check_ip(host):
             continue
-        add_host_flows(host, 'udp', udp.get(host), result_map)
-        add_host_flows(host, 'tcp', tcp.get(host), result_map)
-        add_host_flows(host, 'smtp', smtp.get(host), result_map)
-        add_host_flows(host, 'icmp', icmp.get(host), result_map)
-        add_host_flows(host, 'http', http.get(host), result_map)
-        add_host_flows(host, 'https', https.get(host), result_map)
+        add_flows("host_flows", host, 'udp', udp.get(host), result_map)
+        add_flows("host_flows", host, 'tcp', tcp.get(host), result_map)
+        add_flows("host_flows", host, 'smtp', smtp.get(host), result_map)
+        add_flows("host_flows", host, 'icmp', icmp.get(host), result_map)
+        add_flows("host_flows", host, 'http', http.get(host), result_map)
+        add_flows("host_flows", host, 'https', https.get(host), result_map)
 
     if hosts != [] and 'host_flows' not in result_map:
         # This only occurs if for some reason we don't parse corresponding flows out from the
@@ -490,13 +507,6 @@ def process_network(network, al_result, guest_ip, classification):
             if host == guest_ip or wlist_check_ip(host):
                 continue
             result_map['host_flows'][host] = []
-
-    for domain in domains:
-        if wlist_check_domain(domain):
-            continue
-        add_domain_flows(domain, 'dns', dns.get(domain), result_map)
-        add_domain_flows(domain, 'http', http.get(domain), result_map)
-        add_domain_flows(domain, 'https', https.get(domain), result_map)
 
     hosts_res = None
     if 'host_flows' in result_map:
@@ -574,22 +584,22 @@ def process_network(network, al_result, guest_ip, classification):
     log.debug("Network processing complete.")
 
 
-def add_host_flows(host, protocol, flows, result_map):
+def add_flows(flow_type, key, protocol, flows, result_map):
     if flows is None:
         return
     host_flows = result_map.get('host_flows', defaultdict(dict))
-    flow_key = host
+    flow_key = key
     host_flows[flow_key][protocol] = flows
-    result_map['host_flows'] = host_flows
+    result_map[flow_type] = host_flows
 
 
-def add_domain_flows(domain, protocol, flows, result_map):
-    if flows is None:
-        return
-    domain_flows = result_map.get('domain_flows', defaultdict(dict))
-    flow_key = domain
-    domain_flows[flow_key][protocol] = flows
-    result_map['domain_flows'] = domain_flows
+def remove_whitelisted_dynamic_ip(dns_query, hosts):
+    ip = None
+    if 'answers' in dns_query and len(dns_query.get('answers')) > 0:
+        ip = dns_query.get('answers')[0].get('data', None)
+    if ip and ip in hosts:
+        hosts.remove(ip)
+    return hosts
 
 #  TEST CODE
 if __name__ == "__main__":

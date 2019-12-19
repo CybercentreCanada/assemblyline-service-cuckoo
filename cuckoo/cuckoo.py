@@ -23,7 +23,6 @@ from assemblyline_v4_service.common.base import ServiceBase
 from cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 
 CUCKOO_API_PORT = "8090"
-CUCKOO_TIMEOUT = "120"
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
 CUCKOO_API_DELETE_TASK = "tasks/delete/%s"
@@ -184,12 +183,6 @@ class Cuckoo(ServiceBase):
             "list": ["auto"],
             "type": "list",
             "value": "auto"
-        },
-        {
-            "default": CUCKOO_TIMEOUT,
-            "name": "analysis_timeout",
-            "type": "int",
-            "value": CUCKOO_TIMEOUT,
         },
         {
             "default": False,
@@ -395,7 +388,6 @@ class Cuckoo(ServiceBase):
             self.file_name = original_ext[0] + file_ext
 
         # Parse user args
-        analysis_timeout = None
         generate_report = None
         dump_processes = None
         dll_function = None
@@ -406,9 +398,7 @@ class Cuckoo(ServiceBase):
         custom_options = None
 
         for param in self.SERVICE_DEFAULT_SUBMISSION_PARAMS:
-            if param['name'] == "analysis_timeout":
-                analysis_timeout = param['value']
-            elif param['name'] == "generate_report":
+            if param['name'] == "generate_report":
                 generate_report = param['value']
             elif param['name'] == "dump_processes":
                 dump_processes = param['value']
@@ -488,7 +478,7 @@ class Cuckoo(ServiceBase):
         if routing is None:
             routing = self.enabled_routes[0]
 
-        kwargs['timeout'] = analysis_timeout
+        kwargs['timeout'] = self.cfg['analysis_timeout']
         kwargs['options'] = ','.join(task_options)
         if custom_options is not None:
             kwargs['options'] += ",%s" % custom_options

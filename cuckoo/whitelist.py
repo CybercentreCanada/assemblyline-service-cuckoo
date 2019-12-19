@@ -39,7 +39,11 @@ WHITELIST_DOMAINS = {
     'Azure Office': "\_VLMCS\._TCP\.reddog\.microsoft\.com$",
     "Azure WPAD": "wpad.*\.microsoft.com$",
     "Azure Monitoring Disk": "md-ssd-\.*\.blob.core.windows.net$",
-    "Azure Monitoring Table": ".*\.table.core.windows.net"
+    "Azure Monitoring Table": ".*\.table.core.windows.net",
+    "Azure Monitoring Blob": ".*\.blob.core.windows.net",
+    "Azure OpInsights": ".*\.oms\.opinsights\.azure\.com",
+    "ISATAP": "isatap\..*\.microsoft\.com",
+    "Windows Updater": "ctldl\.windowsupdate\.com"
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses

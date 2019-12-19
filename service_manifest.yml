@@ -22,6 +22,9 @@ config:
   remote_host_port: 8090
   auth_header_value: Bearer sample_api_token
 
+  # Cuckoo analysis timeout
+  analysis_timeout: 120
+
 heuristics:
   - heur_id: 1
     name: SMS Activity
