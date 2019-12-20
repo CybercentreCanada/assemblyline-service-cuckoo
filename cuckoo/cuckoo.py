@@ -3,7 +3,6 @@ import json
 import os
 import requests
 import tarfile
-import time
 import random
 import ssdeep
 import hashlib
@@ -163,27 +162,13 @@ class Cuckoo(ServiceBase):
     SERVICE_CLASSIFICATION = ""  # will default to unrestricted
 
     SERVICE_DEFAULT_CONFIG = {
-        "cuckoo_image": "cuckoo/cuckoobox:latest",
-        "REMOTE_DISK_ROOT": "vm/disks/cuckoo/",
-        "LOCAL_DISK_ROOT": "cuckoo_vms/",
-        "LOCAL_VM_META_ROOT": "var/cuckoo/",
-        "ram_limit": "5120m",
         "dedup_similar_percent": 80,
-        "community_updates": ["https://github.com/cuckoosandbox/community/archive/master.tar.gz",
-                              "https://bitbucket.org/cse-assemblyline/al_cuckoo_community/get/master.tar.gz"],
 
         # If given a DLL without being told what function(s) to execute, try to execute at most this many of the exports
         "max_dll_exports_exec": 5
     }
 
     SERVICE_DEFAULT_SUBMISSION_PARAMS = [
-        {
-            "name": "analysis_vm",
-            "default": "auto",
-            "list": ["auto"],
-            "type": "list",
-            "value": "auto"
-        },
         {
             "default": False,
             "name": "enforce_timeout",
@@ -292,11 +277,6 @@ class Cuckoo(ServiceBase):
     def start(self):
 
         self.import_service_deps()
-
-        # Set this here, normally we don't need until an execute() call
-        # but when using the cuckoo_tests script we don't call execute
-        self.session = requests.Session()
-
         self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent", 80))
 
         for param in self.SERVICE_DEFAULT_SUBMISSION_PARAMS:
@@ -313,11 +293,9 @@ class Cuckoo(ServiceBase):
 
     # noinspection PyTypeChecker
     def execute(self, request):
-        # TODO: Inherit this parameter from assemblyline
-        self.cuckoo_ip = self.config["remote_host_ip"]
-
+        self.session = requests.Session()
+        self.cuckoo_ip = self.cfg["remote_host_ip"]
         self.set_urls()
-
         self.task = request.task
         request.result = Result()
 
@@ -433,31 +411,6 @@ class Cuckoo(ServiceBase):
                 kwargs["package"] = "dll_multi"
 
         exports_available = []
-        if not dll_function and file_ext == ".dll":
-            # only proceed if it looks like we actually have the al_cuckoo_community repo
-            if "community_updates" in self.cfg:
-                if any("al_cuckoo_community" in x for x in self.cfg.get("community_updates")):
-                    # We have a DLL file, but no user specified function(s) to run. let's try to pick a few...
-                    dll_parsed = pefile.PE(data=file_content)
-
-                    # Do we have any exports?
-                    if hasattr(dll_parsed, "DIRECTORY_ENTRY_EXPORT"):
-                        for export_symbol in dll_parsed.DIRECTORY_ENTRY_EXPORT.symbols:
-                            if export_symbol.name is not None:
-                                exports_available.append(export_symbol.name)
-                            else:
-                                exports_available.append("#%d" % export_symbol.ordinal)
-
-                        if len(exports_available) > 0:
-                            max_dll_exports = self.cfg.get("max_dll_exports_exec",
-                                                           self.SERVICE_DEFAULT_CONFIG["max_dll_exports_exec"])
-                            task_options.append("function=%s" %
-                                                "|".join(exports_available[:max_dll_exports]))
-                            kwargs["package"] = "dll_multi"
-                            self.log.debug("DLL found, trying to run with following functions: %s" % "|".join(exports_available[:max_dll_exports]))
-                            request.result.report_heuristic(Cuckoo.AL_Cuckoo_001)
-                else:
-                    self.log.warning("Missing al_cuckoo_community repo, can't attempt executing various DLL exports")
 
         if arguments:
             task_options.append('arguments={}'.format(arguments))
@@ -526,11 +479,8 @@ class Cuckoo(ServiceBase):
                     raise CuckooProcessingException("Unable to generate cuckoo al report for task %s: %s" %
                                                     (safe_str(self.cuckoo_task.id), safe_str(e)))
 
-                # if self.check_stop():
-                #     raise RecoverableError("Cuckoo stopped during result processing..")
-
                 # Get the max size for extract files, used a few times after this
-                request.max_file_size = 80000000 #TODO import this
+                request.max_file_size = 80000000  # TODO import this
                 max_extracted_size = request.max_file_size
 
                 if generate_report is True:
@@ -661,7 +611,6 @@ class Cuckoo(ServiceBase):
             self.log.info('General exception caught during processing: %s' % e)
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            # self.session.close()
 
             # Send the exception off to ServiceBase
             raise
@@ -670,22 +619,9 @@ class Cuckoo(ServiceBase):
         if self.cuckoo_task and self.cuckoo_task.id is not None:
             self.cuckoo_delete_task(self.cuckoo_task.id)
 
-        # self.session.close()
-
     @staticmethod
     def get_name():
         return "Cuckoo"
-
-    def check_stop(self):
-        resp = self.session.get(self.query_host_url, headers=self.auth_header)
-        if resp.status_code != 200:
-            self.log.debug("Failed to check the status of the Cuckoo host. Status code: %s" % resp.status_code)
-            if resp.status_code == 404:
-                self.log.warning("Got 404 error from Cuckoo API. This is because the host machine is not found. "
-                                 "Please check if the REST API is up and running along with Cuckoo")
-                raise Exception("Retrying after 404 error")
-            return True
-        return False
 
     @retry(wait_fixed=1000, retry_on_exception=_exclude_chain_ex,
            stop_max_attempt_number=3)
@@ -708,11 +644,6 @@ class Cuckoo(ServiceBase):
 
         self.log.debug("Submission succeeded. File: %s -- Task ID: %s" % (self.cuckoo_task.file, self.cuckoo_task.id))
 
-        # Quick sleep to avoid failing when the API can't get the task yet.
-        # for i in range(5):
-        #     if self.check_stop():
-        #         return
-        #     time.sleep(1)
         try:
             status = self.cuckoo_poll_started()
         except RetryError:
@@ -773,15 +704,9 @@ class Cuckoo(ServiceBase):
         return "started"
 
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
-           # stop_max_attempt_number= CUCKOO_MAX_TIMEOUT / CUCKOO_POLL_DELAY,
            retry_on_result=_retry_on_none,
            retry_on_exception = _exclude_chain_ex)
     def cuckoo_poll_report(self):
-
-        # Bail if we were stopped
-        # if self.check_stop():
-        #     return "stopped"
-
         task_info = self.cuckoo_query_task(self.cuckoo_task.id)
         if task_info is None or task_info == {}:
             # The API didn't return a task..
@@ -803,10 +728,6 @@ class Cuckoo(ServiceBase):
             self.log.debug("Analysis has completed, waiting on report to be produced.")
         elif status == "reported":
             self.log.debug("Cuckoo report generation has completed.")
-            # for i in range(5):
-            #     if self.check_stop():
-            #         return
-            #     time.sleep(1)   # wait a few seconds in case report isn't actually ready
 
             try:
                 self.cuckoo_task.report = self.cuckoo_query_report(self.cuckoo_task.id)
@@ -821,12 +742,15 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=2000, stop_max_attempt_number=3)
     def cuckoo_submit_file(self, file_content):
-        # if self.check_stop():
-        #     return None
         self.log.debug("Submitting file: %s to server %s" % (self.cuckoo_task.file, self.submit_url))
         files = {"file": (self.cuckoo_task.file, file_content)}
-
-        resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task, headers=self.auth_header)
+        try:
+            resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task, headers=self.auth_header)
+        except requests.exceptions.Timeout:
+            raise Exception("Cuckoo timed out after while trying to submit a file %s" % self.cuckoo_task.file)
+        except requests.ConnectionError:
+            raise RecoverableError("Unable to reach the Cuckoo nest while trying to submit a file %s"
+                                   % self.cuckoo_task.file)
         if resp.status_code != 200:
             self.log.debug("Failed to submit file %s. Status code: %s" % (self.cuckoo_task.file, resp.status_code))
 
@@ -854,10 +778,15 @@ class Cuckoo(ServiceBase):
     @retry(wait_fixed=1000, stop_max_attempt_number=5,
            retry_on_exception=lambda x: not isinstance(x, MissingCuckooReportException))
     def cuckoo_query_report(self, task_id, fmt="json", params=None):
-        # if self.check_stop():
-        #     return None
         self.log.debug("Querying report, task_id: %s - format: %s", task_id, fmt)
-        resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {}, headers=self.auth_header)
+        try:
+            resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {},
+                                    headers=self.auth_header)
+        except requests.exceptions.Timeout:
+            raise Exception("Cuckoo timed out after while trying to query the report for task %s" % task_id)
+        except requests.ConnectionError:
+            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query the report for task %s"
+                                   % task_id)
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.error("Task or report not found for task %s." % task_id)
@@ -887,9 +816,13 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=2000)
     def cuckoo_query_pcap(self, task_id):
-        # if self.check_stop():
-        #     return None
-        resp = self.session.get(self.query_pcap_url % task_id, headers=self.auth_header)
+        try:
+            resp = self.session.get(self.query_pcap_url % task_id, headers=self.auth_header)
+        except requests.exceptions.Timeout:
+            raise Exception("Cuckoo timed out after while trying to query the pcap for task %s" % task_id)
+        except requests.ConnectionError:
+            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query the pcap for task %s"
+                                   % task_id)
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.debug("Task or pcap not found for task: %s" % task_id)
@@ -903,9 +836,12 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=500, stop_max_attempt_number=3, retry_on_result=_retry_on_none)
     def cuckoo_query_task(self, task_id):
-        # if self.check_stop():
-        #     return {}
-        resp = self.session.get(self.query_task_url % task_id, headers=self.auth_header)
+        try:
+            resp = self.session.get(self.query_task_url % task_id, headers=self.auth_header)
+        except requests.exceptions.Timeout:
+            raise Exception("Cuckoo timed out after while trying to query the task %s" % task_id)
+        except requests.ConnectionError:
+            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query the task %s" % task_id)
         if resp.status_code != 200:
             if resp.status_code == 404:
                 self.log.debug("Task not found for task: %s" % task_id)
@@ -923,11 +859,13 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=2000)
     def cuckoo_query_machine_info(self, machine_name):
-        # if self.check_stop():
-        #     self.log.debug("Service stopped during machine info query.")
-        #     return None
-
-        resp = self.session.get(self.query_machine_info_url % machine_name, headers=self.auth_header)
+        try:
+            resp = self.session.get(self.query_machine_info_url % machine_name, headers=self.auth_header)
+        except requests.exceptions.Timeout:
+            raise Exception("Cuckoo timed out after while trying to query machine info for %s" % machine_name)
+        except requests.ConnectionError:
+            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query machine info for %s"
+                                   % machine_name)
         if resp.status_code != 200:
             self.log.debug("Failed to query machine %s. Status code: %d" % (machine_name, resp.status_code))
             return None
@@ -938,9 +876,12 @@ class Cuckoo(ServiceBase):
 
     @retry(wait_fixed=1000, stop_max_attempt_number=2)
     def cuckoo_delete_task(self, task_id):
-        # if self.check_stop():
-        #     return
-        resp = self.session.get(self.delete_task_url % task_id, headers=self.auth_header)
+        try:
+            resp = self.session.get(self.delete_task_url % task_id, headers=self.auth_header)
+        except requests.exceptions.Timeout:
+            raise Exception("Cuckoo timed out after while trying to delete task %s" % task_id)
+        except requests.ConnectionError:
+            raise RecoverableError("Unable to reach the Cuckoo nest while trying to delete task %s" % task_id)
         if resp.status_code != 200:
             self.log.debug("Failed to delete task %s. Status code: %d" % (task_id, resp.status_code))
         else:
@@ -949,13 +890,15 @@ class Cuckoo(ServiceBase):
                 self.cuckoo_task.id = None
 
     # Fixed retry amount to avoid starting an analysis too late.
-    @retry(wait_fixed=2000, stop_max_attempt_number=15)
+    @retry(wait_fixed=5000, stop_max_attempt_number=6)
     def cuckoo_query_machines(self):
-        if self.check_stop():
-            self.log.debug("Service stopped during machine query.")
-            return False
         self.log.debug("Querying for available analysis machines using url %s.." % self.query_machines_url)
-        resp = self.session.get(self.query_machines_url, headers=self.auth_header)
+        try:
+            resp = self.session.get(self.query_machines_url, headers=self.auth_header)
+        except requests.exceptions.Timeout:
+            raise Exception("Cuckoo timed out after while trying to query machines")
+        except requests.ConnectionError:
+            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query machines")
         if resp.status_code != 200:
             self.log.debug("Failed to query machines: %s" % resp.status_code)
             raise CuckooVMBusyException()
@@ -970,8 +913,6 @@ class Cuckoo(ServiceBase):
             try:
                 dropped_tar = tarfile.open(fileobj=io.BytesIO(dropped_tar_bytes))
                 for tarobj in dropped_tar:
-                    # if self.check_stop():
-                    #     return
                     if tarobj.isfile() and not tarobj.isdir():  # a file, not a dir
                         # A dropped file found
                         dropped_name = os.path.split(tarobj.name)[1]
