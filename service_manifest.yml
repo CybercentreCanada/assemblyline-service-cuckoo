@@ -22,8 +22,16 @@ config:
   remote_host_port: 8090
   auth_header_value: Bearer sample_api_token
 
-  # Cuckoo analysis timeout
+  # Cuckoo analysis specifications
   analysis_timeout: 120
+  enforce_timeout: false
+  generate_report: true
+  dump_processes: false
+  arguments:
+  custom_options:
+  dump_memory: false
+  no_monitor: false
+  routing: inetsim
 
 heuristics:
   - heur_id: 1

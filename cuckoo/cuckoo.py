@@ -113,15 +113,10 @@ def _retry_on_none(result):
     * ``file`` *(required)* - sample file (multipart encoded file content)
     * ``package`` *(optional)* - analysis package to be used for the analysis
     * ``timeout`` *(optional)* *(int)* - analysis timeout (in seconds)
-    * ``priority`` *(optional)* *(int)* - priority to assign to the task (1-3)
     * ``options`` *(optional)* - options to pass to the analysis package
-    * ``machine`` *(optional)* - ID of the analysis machine to use for the analysis
-    * ``platform`` *(optional)* - name of the platform to select the analysis machine from (e.g. "windows")
-    * ``tags`` *(optional)* - specify machine tags.
     * ``custom`` *(optional)* - custom string to pass over the analysis and the processing/reporting modules
     * ``memory`` *(optional)* - enable the creation of a full memory dump of the analysis machine
     * ``enforce_timeout`` *(optional)* - enable to enforce the execution for the full timeout value
-    * ``clock`` *(optional)* - set virtual machine clock (format %m-%d-%Y %H:%M:%S)
 """
 
 
@@ -167,64 +162,6 @@ class Cuckoo(ServiceBase):
         # If given a DLL without being told what function(s) to execute, try to execute at most this many of the exports
         "max_dll_exports_exec": 5
     }
-
-    SERVICE_DEFAULT_SUBMISSION_PARAMS = [
-        {
-            "default": False,
-            "name": "enforce_timeout",
-            "type": "bool",
-            "value": False,
-        },
-        {
-            "default": True,
-            "name": "generate_report",
-            "type": "bool",
-            "value": True,
-        },
-        {
-            "default": False,
-            "name": "dump_processes",
-            "type": "bool",
-            "value": False,
-        },
-        {
-            "default": "",
-            "name": "dll_function",
-            "type": "str",
-            "value": "",
-        },
-        {
-            "default": "",
-            "name": "arguments",
-            "type": "str",
-            "value": "",
-        },
-        {
-            "default": "",
-            "name": "custom_options",
-            "type": "str",
-            "value": "",
-        },
-        {
-            "default": False,
-            "name": "dump_memory",
-            "type": "bool",
-            "value": False,
-        },
-        {
-            "default": False,
-            "name": "no_monitor",
-            "type": "bool",
-            "value": False,
-        },
-        {
-            "default": "inetsim",
-            "list": ["inetsim", "gateway"],
-            "name": "routing",
-            "type": "list",
-            "value": "inetsim",
-        }
-    ]
 
     # Heuristic info
     AL_Cuckoo_001 = Heuristic(heur_id=1, attack_id="Exec Multiple Exports", signature="executable/windows/dll")
@@ -278,17 +215,6 @@ class Cuckoo(ServiceBase):
 
         self.import_service_deps()
         self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent", 80))
-
-        for param in self.SERVICE_DEFAULT_SUBMISSION_PARAMS:
-            if param['name'] == "routing":
-                self.enabled_routes = param['list']
-                if self.enabled_routes[0] != param['default']:
-                    self.enabled_routes.remove(param['default'])
-                    self.enabled_routes.insert(0, param['default'])
-
-        if self.enabled_routes is None:
-            raise ValueError("No routing submission_parameter.")
-
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
@@ -372,28 +298,27 @@ class Cuckoo(ServiceBase):
         arguments = None
         dump_memory = None
         no_monitor = None
-        routing = None
         custom_options = None
 
-        for param in self.SERVICE_DEFAULT_SUBMISSION_PARAMS:
-            if param['name'] == "generate_report":
-                generate_report = param['value']
-            elif param['name'] == "dump_processes":
-                dump_processes = param['value']
-            elif param['name'] == "dll_function":
-                dll_function = param['value']
-            elif param['name'] == "arguments":
-                arguments = param['value']
-            elif param['name'] == "dump_memory":
-                dump_memory = param['value']
-            elif param['name'] == "no_monitor":
-                no_monitor = param['value']
-            elif param['name'] == "routing":
-                routing = param['value']
-            elif param['name'] == "enforce_timeout":
-                kwargs['enforce_timeout'] = param['value']
-            elif param['name'] == "custom_options":
-                custom_options = param['value']
+        for param in self.cfg:
+            if param == "analysis_timeout":
+                kwargs['timeout'] = self.cfg.get(param, None)
+            elif param == "generate_report":
+                generate_report = self.cfg.get(param, None)
+            elif param == "dump_processes":
+                dump_processes = self.cfg.get(param, None)
+            elif param == "dll_function":
+                dll_function = self.cfg.get(param, None)
+            elif param == "arguments":
+                arguments = self.cfg.get(param, None)
+            elif param == "dump_memory":
+                dump_memory = self.cfg.get(param, None)
+            elif param == "no_monitor":
+                no_monitor = self.cfg.get(param, None)
+            elif param == "enforce_timeout":
+                kwargs['enforce_timeout'] = self.cfg.get(param, None)
+            elif param == "custom_options":
+                custom_options = self.cfg.get(param, None)
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
@@ -428,10 +353,6 @@ class Cuckoo(ServiceBase):
         if no_monitor:
             task_options.append("free=yes")
 
-        if routing is None:
-            routing = self.enabled_routes[0]
-
-        kwargs['timeout'] = self.cfg['analysis_timeout']
         kwargs['options'] = ','.join(task_options)
         if custom_options is not None:
             kwargs['options'] += ",%s" % custom_options
