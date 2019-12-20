@@ -587,10 +587,10 @@ def process_network(network, al_result, guest_ip, classification):
 def add_flows(flow_type, key, protocol, flows, result_map):
     if flows is None:
         return
-    host_flows = result_map.get('host_flows', defaultdict(dict))
+    current_flows = result_map.get(flow_type, defaultdict(dict))
     flow_key = key
-    host_flows[flow_key][protocol] = flows
-    result_map[flow_type] = host_flows
+    current_flows[flow_key][protocol] = flows
+    result_map[flow_type] = current_flows
 
 
 def remove_whitelisted_dynamic_ip(dns_query, hosts):
