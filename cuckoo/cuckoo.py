@@ -661,7 +661,7 @@ class Cuckoo(ServiceBase):
             self.log.info('General exception caught during processing: %s' % e)
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            self.session.close()
+            # self.session.close()
 
             # Send the exception off to ServiceBase
             raise
@@ -670,7 +670,7 @@ class Cuckoo(ServiceBase):
         if self.cuckoo_task and self.cuckoo_task.id is not None:
             self.cuckoo_delete_task(self.cuckoo_task.id)
 
-        self.session.close()
+        # self.session.close()
 
     @staticmethod
     def get_name():
