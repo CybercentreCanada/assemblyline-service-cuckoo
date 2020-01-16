@@ -41,9 +41,12 @@ WHITELIST_DOMAINS = {
     "Azure Monitoring Disk": "md-ssd-\.*\.blob.core.windows.net$",
     "Azure Monitoring Table": ".*\.table.core.windows.net",
     "Azure Monitoring Blob": ".*\.blob.core.windows.net",
-    "Azure OpInsights": ".*\.oms\.opinsights\.azure\.com",
+    "Azure OpInsights": ".*.opinsights.azure.com",
     "ISATAP": "isatap\..*\.microsoft\.com",
-    "Windows Updater": "ctldl\.windowsupdate\.com"
+    "Windows Updater": ".*\.update\.microsoft\.com",
+    "Windows Downloader": ".*download\.microsoft\.com",
+    "Windows KMS": "kms.core.windows.net",
+    "Another Windows Updater": "ctldl\.windowsupdate\.com"
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
