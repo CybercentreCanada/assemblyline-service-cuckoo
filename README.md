@@ -34,6 +34,7 @@ Files that are unpacked and saved to disk are fed back into AssemblyLine.
 
 #### Cuckoo Host Options
 Details regarding Cuckoo API can be found [here](https://cuckoo.readthedocs.io/en/latest/usage/api/). 
+
 * **remote_host_ip** - [default: 127.0.0.1] The IP address of the machine where the Cuckoo API is being served 
 * **remote_host_port** - [default: 8090] The port where the Cuckoo API is being served
 * **auth_header_value** - [default: Bearer sample_api_token] The authentication token to be passed with each API call
@@ -67,4 +68,4 @@ See the official documentation: https://cuckoo.readthedocs.io/en/latest/installa
 As per the official documentation, `$ cuckoo community` can be run on the nest machine in order to install signatures.
 
 ### Azure Deployment
-A document has been prepared to assist with the deployment of Cuckoo using Azure resources. The release date of this document is TBD.
+A document has been prepared on our side to assist with the deployment of Cuckoo using Azure resources. The release date of this document is TBD.
