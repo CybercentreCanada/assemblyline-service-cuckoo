@@ -33,6 +33,10 @@ config:
   no_monitor: false
   routing: inetsim
 
+  # Cuckoo request specification
+  max_file_size: 80000000
+  recursion_limit: 10000
+
 heuristics:
   - heur_id: 1
     name: SMS Activity
