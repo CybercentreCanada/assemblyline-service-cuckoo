@@ -31,7 +31,7 @@ config:
   custom_options:
   dump_memory: false
   no_monitor: false
-  routing: inetsim
+  routing: inetsim # TODO: implement routing options
 
   # Cuckoo request specification
   max_file_size: 80000000
