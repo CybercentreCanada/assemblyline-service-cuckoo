@@ -1,21 +1,21 @@
-# This is a sample build configuration for Python.
-# Check our guides at https://confluence.atlassian.com/x/x4UWN for more examples.
-# Only use spaces to indent your .yml configuration.
-# -----
-# You can specify a custom docker image from Docker Hub as your build environment.
-#image: python:3.5.1
-
-pipelines:
-  custom:
-    build_docker:
-      - step:
-          name: Build docker cuckoobox
-          image: atlassian/pipelines-awscli
-          script: # Modify the commands below to build your repository.
-            - cd docker/cuckoobox
-            # Get libraries
-            - python get_libs_for_cuckoo_docker.py | xargs -IX -n1 aws s3 cp s3://assemblyline-support/X libs/
-            - docker build -t cuckoo/cuckoobox .
 
 options:
-  docker: true
+  max-time: 5
+
+pipelines:
+  default:
+    - step:
+        script:
+          - echo 'In the future, Python tests will be run here.'
+  tags:
+    v*:
+      - step:
+          name: Deploy to Docker Hub
+          image: python:3.7
+          services: [docker]
+          deployment: container
+          script:
+            - export TAG=${BITBUCKET_TAG#v}
+            - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
+            - docker build --build-arg version=$TAG -t cccs/assemblyline-service-cuckoo:$TAG -t cccs/assemblyline-service-cuckoo:latest .
+            - docker push cccs/assemblyline-service-cuckoo
