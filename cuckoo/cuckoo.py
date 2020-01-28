@@ -366,13 +366,19 @@ class Cuckoo(ServiceBase):
                                                  self.SERVICE_CLASSIFICATION)
                     if success is False:
                         err_str = self.get_errors()
+                        if self.cuckoo_task and self.cuckoo_task.id is not None:
+                            self.cuckoo_delete_task(self.cuckoo_task.id)
                         raise CuckooProcessingException("Cuckoo was unable to process this file. %s",
                                                         err_str)
                 except RecoverableError as e:
                     self.log.info("Recoverable error. Error message: %s" % e.message)
+                    if self.cuckoo_task and self.cuckoo_task.id is not None:
+                        self.cuckoo_delete_task(self.cuckoo_task.id)
                     raise
                 except Exception as e:
                     self.log.exception("Error generating AL report: ")
+                    if self.cuckoo_task and self.cuckoo_task.id is not None:
+                        self.cuckoo_delete_task(self.cuckoo_task.id)
                     raise CuckooProcessingException(
                         "Unable to generate cuckoo al report for task %s: %s" %
                         (safe_str(self.cuckoo_task.id), safe_str(e))
@@ -514,6 +520,8 @@ class Cuckoo(ServiceBase):
             else:
                 # We didn't get a report back.. cuckoo has failed us
                 self.log.info("Raising recoverable error for running job.")
+                if self.cuckoo_task and self.cuckoo_task.id is not None:
+                    self.cuckoo_delete_task(self.cuckoo_task.id)
                 raise RecoverableError("Unable to retrieve cuckoo report. The following errors were detected: %s" %
                                        safe_str(self.cuckoo_task.errors))
 
@@ -547,6 +555,8 @@ class Cuckoo(ServiceBase):
         except Exception as e:
             err_msg = "Error submitting to Cuckoo"
             self.cuckoo_task.errors.append('%s: %s' % (err_msg, safe_str(e)))
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
             raise RecoverableError("Unable to submit to Cuckoo")
 
         self.log.debug("Submission succeeded. File: %s -- Task ID: %s" % (self.cuckoo_task.file, self.cuckoo_task.id))
@@ -584,6 +594,8 @@ class Cuckoo(ServiceBase):
 
         if err_msg:
             self.log.error(err_msg)
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
             raise RecoverableError(err_msg)
 
     def stop(self):
@@ -654,8 +666,12 @@ class Cuckoo(ServiceBase):
         try:
             resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task, headers=self.auth_header)
         except requests.exceptions.Timeout:
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
             raise Exception("Cuckoo timed out after while trying to submit a file %s" % self.cuckoo_task.file)
         except requests.ConnectionError:
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
             raise RecoverableError("Unable to reach the Cuckoo nest while trying to submit a file %s"
                                    % self.cuckoo_task.file)
         if resp.status_code != 200:
@@ -690,6 +706,8 @@ class Cuckoo(ServiceBase):
             resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {},
                                     headers=self.auth_header)
         except requests.exceptions.Timeout:
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
             raise Exception("Cuckoo timed out after while trying to query the report for task %s" % task_id)
         except requests.ConnectionError:
             raise RecoverableError("Unable to reach the Cuckoo nest while trying to query the report for task %s"
@@ -699,7 +717,8 @@ class Cuckoo(ServiceBase):
                 self.log.error("Task or report not found for task %s." % task_id)
                 # most common cause of getting to here seems to be odd/non-ascii filenames, where the cuckoo agent
                 # inside the VM dies
-
+                if self.cuckoo_task and self.cuckoo_task.id is not None:
+                    self.cuckoo_delete_task(self.cuckoo_task.id)
                 raise MissingCuckooReportException("Task or report not found")
             else:
                 self.log.error("Failed to query report %s. Status code: %d" % (task_id, resp.status_code))
@@ -718,6 +737,8 @@ class Cuckoo(ServiceBase):
             report_data = resp.content
 
         if not report_data or report_data == '':
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
             raise Exception("Empty report data")
 
         return report_data
@@ -727,6 +748,8 @@ class Cuckoo(ServiceBase):
         try:
             resp = self.session.get(self.query_pcap_url % task_id, headers=self.auth_header)
         except requests.exceptions.Timeout:
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
             raise Exception("Cuckoo timed out after while trying to query the pcap for task %s" % task_id)
         except requests.ConnectionError:
             raise RecoverableError("Unable to reach the Cuckoo nest while trying to query the pcap for task %s"
@@ -746,6 +769,8 @@ class Cuckoo(ServiceBase):
         try:
             resp = self.session.get(self.query_task_url % task_id, headers=self.auth_header)
         except requests.exceptions.Timeout:
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
             raise Exception("Cuckoo timed out after while trying to query the task %s" % task_id)
         except requests.ConnectionError:
             raise RecoverableError("Unable to reach the Cuckoo nest while trying to query the task %s" % task_id)
@@ -767,6 +792,8 @@ class Cuckoo(ServiceBase):
         try:
             resp = self.session.get(self.query_machine_info_url % machine_name, headers=self.auth_header)
         except requests.exceptions.Timeout:
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
             raise Exception("Cuckoo timed out after while trying to query machine info for %s" % machine_name)
         except requests.ConnectionError:
             raise RecoverableError("Unable to reach the Cuckoo nest while trying to query machine info for %s"
