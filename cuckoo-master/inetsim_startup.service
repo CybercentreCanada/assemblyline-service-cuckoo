@@ -1,0 +1,13 @@
+[Unit]
+Description=INetSim Startup Service
+After=multi-user.target
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python /usr/bin/inetsim_startup.py
+StandardInput=tty-force
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
