@@ -3441,6 +3441,6 @@ heuristics:
     description: Cuckoo detected Hosts
 
 docker_config:
-  image: cccs/assemblyline-service-cuckoo:latest
+  image: ${REGISTRY}cccs/assemblyline-service-cuckoo:latest
   cpu_cores: 0.5
   ram_mb: 256
