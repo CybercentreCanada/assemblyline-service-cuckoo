@@ -727,7 +727,7 @@ class Cuckoo(ServiceBase):
         if fmt == "json":
             try:
                 # Setting environment recursion limit for large JSONs
-                sys.setrecursionlimit(self.cfg['recursion_limit'])
+                sys.setrecursionlimit(int(self.cfg['recursion_limit']))
                 resp_dict = dict(resp.json())
                 report_data = resp_dict
             except Exception:
