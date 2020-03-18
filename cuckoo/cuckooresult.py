@@ -45,17 +45,20 @@ def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, se
     if info is not None:
         start_time = info.get('started')
         end_time = info.get('ended')
+        duration = info.get('duration')
+        analysis_time = -1  # Default error time
         try:
             start_time = datetime.datetime.fromtimestamp(int(start_time)).strftime('%Y-%m-%d %H:%M:%S')
             end_time = datetime.datetime.fromtimestamp(int(end_time)).strftime('%Y-%m-%d %H:%M:%S')
+            duration = datetime.datetime.fromtimestamp(int(duration)).strftime('%Hh %Mm %Ss')
+            analysis_time = duration + "\t(" + start_time + " to " + end_time + ")"
         except:
             pass
         body = {
-            'cuckoo_version': info.get('version'),
-            'analysis_id': info.get('id'),
-            'analysis_duration': info.get('duration'),
-            'start_time': start_time,
-            'end_time': end_time
+            'Analysis ID': info.get('id'),
+            'Analysis Time': analysis_time,
+            'Routing': info.get('route'),
+            'Cuckoo Version': info.get('version')
         }
         info_res = ResultSection(title_text='Analysis Information',
                                  classification=classification,
@@ -243,6 +246,10 @@ def process_behavior(behavior, al_result, al_request, classification):
                 process_com(call.get("arguments"), result_map)
                 # TODO: More interesting API stuff.
 
+    # Make a Process Tree Section
+    process_tree_section = ResultSection("Spawned Process Tree", body_format=BODY_FORMAT.JSON, body=json.dumps(result_map["processtree"]))
+    al_result.add_section(process_tree_section)
+
     guids = behavior.get("summary", {}).get("guid", [])
 
     result_limit = 25
@@ -254,12 +261,27 @@ def process_behavior(behavior, al_result, al_request, classification):
                       "file_exists":        ["Check File: Exists", result_limit, None],
                       "file_failed":        ["Check File: Failed", result_limit, None],
                       "regkey_written":     ["Registry Keys Written", result_limit, None],
+                      "regkey_opened":     ["Registry Keys Opened", result_limit, None],
+                      "regkey_deleted":     ["Registry Keys Deleted", result_limit, None],
                       "command_line":       ["Commands", None, None],
-                      "downloads_file":     ["Files Downloads", None, None],
+                      "downloads_file":     ["Files Downloaded", None, None],
                       "file_written":       ["Files Written", None, "file.path"],
                       "wmi_query":          ["WMI Queries", None, None],
                       "mutex":              ["Mutexes", None, "dynamic.mutex"],
                       }
+
+    # Creating grandparent sections
+    file_system_activity = ResultSection(title_text="File System Activity",
+                                         classification=classification)
+
+    # Creating parent sections
+    directory_activity = ResultSection(title_text="Directory Activity",
+                                       classification=classification)
+    file_activity = ResultSection(title_text="File Activity",
+                                  classification=classification)
+    registry_key_activity = ResultSection(title_text="Registry Key Activity",
+                                          classification=classification)
+
     for q_name, [title, limit, tag_type] in result_queries.items():
         q_res = behavior.get("summary", {}).get(q_name, [])
         if q_res:
@@ -285,7 +307,43 @@ def process_behavior(behavior, al_result, al_request, classification):
                     except MaxExtractedExceeded:
                         log.debug("The maximum amount of files to be extracted is 501, "
                                   "which has been exceeded in this submission")
-            al_result.add_section(res_sec)
+
+            # Display Registry Keys Written as key value pairs
+            if q_name in ["regkey_written"]:
+                kv_body = {}
+                for regkey in q_res:
+                    r = regkey.split(",")
+                    if len(r) > 1:
+                        kv_body[r[0]] = r[1]
+                    else:
+                        kv_body[r[0]] = ""
+                res_sec.body_format = BODY_FORMAT.KEY_VALUE
+                res_sec.body = json.dumps(kv_body)
+
+            # Add respective subsections to parent sections
+            if q_name in ["directory_created", "directory_removed"]:
+                directory_activity.add_subsection(res_sec)
+            elif q_name in ["file_written", "file_deleted", "file_exists", "file_failed", "downloads_file"]:
+                file_activity.add_subsection(res_sec)
+            elif q_name in ["regkey_written", "regkey_opened", "regkey_deleted"]:
+                registry_key_activity.add_subsection(res_sec)
+            elif q_name in ["dll_loaded"]:
+                file_system_activity.add_subsection(res_sec)
+            elif q_name in ["command_line"]:
+                res_sec.body_format = BODY_FORMAT.MEMORY_DUMP
+                al_result.add_section(res_sec)
+            elif q_name in ["wmi_query", "mutex"]:
+                al_result.add_section(res_sec)
+
+    # Adding parent sections to grandparent section and grandparent to result
+    if len(directory_activity.subsections) > 0:
+        file_system_activity.add_subsection(directory_activity)
+    if len(file_activity.subsections) > 0:
+        file_system_activity.add_subsection(file_activity)
+    if len(registry_key_activity.subsections) > 0:
+        file_system_activity.add_subsection(registry_key_activity)
+    if len(file_system_activity.subsections) > 0:
+        al_result.add_section(file_system_activity)
 
     if len(guids) > 0:
         process_com(guids, result_map)
@@ -338,9 +396,15 @@ def process_signatures(sigs, al_result, classification):
                 log.warning("Unknown signature detected: %s" % sig)
             actor = sig.get('actor', '')
             description = sig.get('description', '')
-            title_text = "Signature: " + sig_name
-            sig_res = ResultSection(title_text=title_text, classification=classification, body=description)
-            sig_res.set_heuristic(sig_id)
+            sig_res = ResultSection(title_text=sig_name, classification=classification, body=description)
+            attack_id = sig.get('ttp', None)
+            sig_res.set_heuristic(sig_id, attack_id=attack_id)
+
+            # Add Marks or indicators to the signature section
+            marks = sig.get('marks')
+            if marks is not None:
+                marks_res = ResultSection("Indicators", classification=classification, body_format=BODY_FORMAT.JSON, body=json.dumps(marks))
+                sig_res.add_subsection(marks_res)
             sigs_res.add_subsection(sig_res)
             sig_categories = sig.get('categories', [])
             sig_families = sig.get('families', [])
@@ -364,7 +428,7 @@ def process_signatures(sigs, al_result, classification):
                         sigs_res.add_line('\tIOC: %s' % mark['ioc'])
                     elif mark.get('type') == 'generic' and 'reg_key' in mark and 'reg_value' in mark:
                         sigs_res.add_line('\tIOC: %s = %s' % (mark['reg_key'], mark['reg_value']))
-        if sigs_res.body:
+        if len(sigs_res.subsections) > 0:
             al_result.add_section(sigs_res)
 
 

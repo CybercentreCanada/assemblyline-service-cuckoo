@@ -932,14 +932,15 @@ class Cuckoo(ServiceBase):
             if not machine_name_exists:
                 raise Exception
 
+            manager = self.cuckoo_task.report.get("info", "").get("machine", "").get("manager", "")
             body = {
-                'id': str(machine.get('id')),
-                'name': str(machine.get('name')),
-                'label': str(machine.get('label')),
-                'platform': str(machine.get('platform')),
-                'tags': []}
+                'Name': str(machine.get('name')),
+                'Manager': manager,
+                'Platform': str(machine.get('platform')),
+                'IP': str(machine.get('ip')),
+                'Tags': []}
             for tag in machine.get('tags', []):
-                body['tags'].append(safe_str(tag).replace('_', ' '))
+                body['Tags'].append(safe_str(tag).replace('_', ' '))
 
             machine_section = ResultSection(title_text='Machine Information',
                                             classification=self.SERVICE_CLASSIFICATION,
