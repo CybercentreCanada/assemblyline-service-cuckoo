@@ -55,8 +55,8 @@ def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, se
         except:
             pass
         body = {
-            'Analysis ID': info.get('id'),
-            'Analysis Time': analysis_time,
+            'ID': info.get('id'),
+            'Duration': analysis_time,
             'Routing': info.get('route'),
             'Cuckoo Version': info.get('version')
         }
@@ -290,10 +290,16 @@ def process_behavior(behavior, al_result, al_request, classification):
                 title = "%s (Limit %i)" % (title, limit)
 
             res_sec = ResultSection(title_text=title, classification=classification)
-            for ln in map(safe_str, q_res):
-                res_sec.add_line(ln)
-                if tag_type is not None:
-                    res_sec.add_tag(tag_type, ln)
+            if q_name == "command_line":
+                for ln in map(safe_str, q_res):
+                    res_sec.add_line("$\t" + ln)
+                    if tag_type is not None:
+                        res_sec.add_tag(tag_type, ln)
+            else:
+                for ln in map(safe_str, q_res):
+                    res_sec.add_line(ln)
+                    if tag_type is not None:
+                        res_sec.add_tag(tag_type, ln)
             # Dump out contents to a temporary file and add as an extracted file
             if q_name == "command_line":
                 for raw_ln in q_res:
@@ -341,6 +347,11 @@ def process_behavior(behavior, al_result, al_request, classification):
     if len(file_activity.subsections) > 0:
         file_system_activity.add_subsection(file_activity)
     if len(registry_key_activity.subsections) > 0:
+        if len(result_map.get('regkeys', [])) > 0:
+            sorted_regkeys = sorted(
+                [safe_str(x) for x in result_map['regkeys']])
+            regkey_hash = ssdeep.hash(''.join(sorted_regkeys))
+            registry_key_activity.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash)
         file_system_activity.add_subsection(registry_key_activity)
     if len(file_system_activity.subsections) > 0:
         al_result.add_section(file_system_activity)
@@ -354,7 +365,6 @@ def process_behavior(behavior, al_result, al_request, classification):
         # Hash
         sorted_clsids = sorted([safe_str(x) for x in result_map['clsids'].values()])
         ssdeep_clsid_hash = ssdeep.hash(''.join(sorted_clsids))
-        res_sec.add_tag("dynamic.ssdeep.cls_ids", ssdeep_clsid_hash)
 
         clsids_hash = hashlib.sha1((','.join(sorted_clsids)).encode('utf-8')).hexdigest()
         if wlist_check_hash(clsids_hash):
@@ -363,14 +373,10 @@ def process_behavior(behavior, al_result, al_request, classification):
 
         # Report
         clsid_res = ResultSection(title_text="CLSIDs", classification=classification)
+        clsid_res.add_tag("dynamic.ssdeep.cls_ids", ssdeep_clsid_hash)
         for clsid in sorted(result_map['clsids'].keys()):
             clsid_res.add_line(clsid + ' : ' + result_map['clsids'][clsid])
         al_result.add_section(clsid_res)
-
-    if len(result_map.get('regkeys', [])) > 0:
-        sorted_regkeys = sorted([safe_str(x) for x in result_map['regkeys']])
-        regkey_hash = ssdeep.hash(''.join(sorted_regkeys))
-        res_sec.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash)
 
     log.debug("Behavior processing completed. Looks like valid execution: %s" % str(executed))
     return executed
@@ -397,13 +403,19 @@ def process_signatures(sigs, al_result, classification):
             actor = sig.get('actor', '')
             description = sig.get('description', '')
             sig_res = ResultSection(title_text=sig_name, classification=classification, body=description)
-            attack_id = sig.get('ttp', None)
-            sig_res.set_heuristic(sig_id, attack_id=attack_id)
+            attack_ids = sig.get('ttp', {})
+
+            # TODO: we are only able to handle a single attack id at the moment
+            if attack_ids != {}:
+                attack_id = next(iter(attack_ids))  # Grab first ID
+                sig_res.set_heuristic(sig_id, attack_id=attack_id)
+            else:
+                sig_res.set_heuristic(sig_id)
 
             # Add Marks or indicators to the signature section
             marks = sig.get('marks')
             if marks is not None:
-                marks_res = ResultSection("Indicators", classification=classification, body_format=BODY_FORMAT.JSON, body=json.dumps(marks))
+                marks_res = ResultSection("Indicators", classification=classification, body_format=BODY_FORMAT.MEMORY_DUMP, body=json.dumps(marks))
                 sig_res.add_subsection(marks_res)
             sigs_res.add_subsection(sig_res)
             sig_categories = sig.get('categories', [])
