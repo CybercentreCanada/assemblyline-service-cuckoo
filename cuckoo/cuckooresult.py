@@ -6,6 +6,7 @@ import ssdeep
 import traceback
 import json
 import os
+from ipaddress import ip_address, ip_network
 
 from collections import defaultdict
 from pprint import pprint
@@ -33,7 +34,7 @@ log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 
 
 # noinspection PyBroadException
-def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, service_classification=Classification.UNRESTRICTED):
+def generate_al_result(api_report, al_result, al_request, file_ext, random_ip_range, service_classification=Classification.UNRESTRICTED):
     log.debug("Generating AL Result.")
     try:
         classification = Classification.max_classification(Classification.UNRESTRICTED, service_classification)
@@ -78,7 +79,7 @@ def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, se
     if sigs:
         process_signatures(sigs, al_result, classification)
     if network:
-        process_network(network, al_result, guest_ip, classification)
+        process_network(network, al_result, random_ip_range, classification)
     if behavior:
         process_behavior(behavior, al_result, al_request, classification)
 
@@ -520,45 +521,106 @@ def process_signatures(sigs, al_result, classification):
 #             proto_data[host] = proto_ex_data[host][:]
 
 
-def process_network(network, al_result, guest_ip, classification):
+def process_network(network, al_result, random_ip_range, classification):
     log.debug("Processing network results.")
-    result_map = {}
-
     network_res = ResultSection(title_text="Network Activity",
                                 classification=classification)
-    skipped_protocols = ["tls", "dns_servers", "hosts", "pcap_sha256", "domains", "dead_hosts", "sorted_pcap_sha256"]
+
+    # Items that we will not be adding to the network activity table
+    skipped_protocols = ["tls", "dns_servers", "hosts", "pcap_sha256", "domains", "dead_hosts", "sorted_pcap_sha256", "http_ex", "https_ex"]
+    skipped_paths = ["", "/"]
+
+    # Lists containing items that could be tagged multiple times,
+    # which we want to avoid
+    tagged_ips = []
+    tagged_domains = []
+    tagged_uris = []
+
+    inetsim_network = ip_network(random_ip_range)
+
     network_table = []
 
     # now to parse through every network call and create a nice table containing
     # each call
     for protocol in network:
-        if protocol not in skipped_protocols:
+        if protocol not in skipped_protocols and protocol != []:
+
+            # TODO: Raise heuristic for domains and ips, but only one heurisitc per section
+            # If either of these protocols contain items, then raise heuristic
+            # if protocol == "dns":
+            #     network_res.set_heuristic(1001)
+            # if protocol == "http":
+            #     network_res.set_heuristic(1000)
+
             network_calls = network[protocol]
             for network_call in network_calls:
-                network_table_record = {}
-                network_table_record["timestamp"] = network_call.get("time", "")
-                network_table_record["protocol"] = protocol
-                network_table_record["method"] = network_call.get("method", "")
-                network_table_record["source_ip"] = network_call.get("src", "")
-                network_table_record["source_port"] = network_call.get("sport", "")
+                network_table_record = {
+                    "timestamp": network_call.get("time", ""),
+                    "protocol": protocol,
+                    "method": network_call.get("method", ""),
+                    "source_ip": network_call.get("src", ""),
+                    "source_port": network_call.get("sport", ""),
+                    "domain": "",
+                    "resolved_ip": "",
+                    "domain_type": "",
+                    "destination_port": "",
+                    "actual_ip": "",
+                    "destination_country_code": "",
+                }
                 if "host" in network_call:
                     network_table_record["domain"] = network_call.get("host", "")
                 elif "request" in network_call:
                     network_table_record["domain"] = network_call.get("request", "")
-                network_table_record["path"] = network_call.get("path", "")
+                # Grabbing uri field instead of path field because AL cannot
+                # handle path as a URI for tags
+                network_table_record["path"] = network_call.get("uri", "")
                 if "answers" in network_call:
                     answers = network_call.get("answers")
-                    first_answer = answers[0]
-                    resolved_ip = first_answer.get("data", "")
-                    domain_type = first_answer.get("type", "")
-                    network_table_record["resolved_ip"] = resolved_ip
-                    network_table_record["domain_type"] = domain_type
+                    if len(answers) > 0:
+                        first_answer = answers[0]
+                        resolved_ip = first_answer.get("data", "")
+                        domain_type = first_answer.get("type", "")
+                        network_table_record["resolved_ip"] = resolved_ip
+                        network_table_record["domain_type"] = domain_type
                 if "dport" in network_call:
                     network_table_record["destination_port"] = network_call.get("dport", "")
                 elif "port" in network_call:
                     network_table_record["destination_port"] = network_call.get("port", "")
                 network_table_record["actual_ip"] = network_call.get("dst", "")
                 # "destination_country_code": "",  # TODO: somehow get the country code of the destination IP
+
+                # It's tagging time!
+
+                # We check if domain is not an IP
+                domain = network_table_record["domain"]
+                is_ip = False
+                try:
+                    is_ip = ip_address(domain)
+                except ValueError:
+                    # In the occasional circumstance, a sample with make a call
+                    # to an explicit IP, which breaks the way that AL handles
+                    # domains
+                    continue
+                if domain != "" and domain not in tagged_domains and not is_ip:
+                    tagged_domain = network_table_record["domain"]
+                    tagged_domains.append(tagged_domain)
+                    network_res.add_tag("network.dynamic.domain", tagged_domain)
+
+                # We check if the actual ip is not in the provided network
+                # because this network is randomly generated by INetSim and we
+                # do not want to tag these IPs
+                ip = network_table_record["actual_ip"]
+                if ip != "" and ip not in tagged_ips and ip_address(ip) not in inetsim_network:
+                    tagged_ip = network_table_record["actual_ip"]
+                    tagged_ips.append(tagged_ip)
+                    network_res.add_tag("network.dynamic.ip", tagged_ip)
+
+                path = network_table_record["path"]
+                if path not in skipped_paths and path not in tagged_uris:
+                    tagged_uri = network_table_record["path"]
+                    tagged_uris.append(tagged_uri)
+                    network_res.add_tag("network.dynamic.uri", tagged_uri)
+
                 network_table.append(network_table_record)
 
     # Now for the cool stuff
@@ -717,22 +779,22 @@ def process_network(network, al_result, guest_ip, classification):
     log.debug("Network processing complete.")
 
 
-def add_flows(flow_type, key, protocol, flows, result_map):
-    if flows is None:
-        return
-    current_flows = result_map.get(flow_type, defaultdict(dict))
-    flow_key = key
-    current_flows[flow_key][protocol] = flows
-    result_map[flow_type] = current_flows
+# def add_flows(flow_type, key, protocol, flows, result_map):
+#     if flows is None:
+#         return
+#     current_flows = result_map.get(flow_type, defaultdict(dict))
+#     flow_key = key
+#     current_flows[flow_key][protocol] = flows
+#     result_map[flow_type] = current_flows
 
 
-def remove_whitelisted_dynamic_ip(dns_query, hosts):
-    ip = None
-    if 'answers' in dns_query and len(dns_query.get('answers')) > 0:
-        ip = dns_query.get('answers')[0].get('data', None)
-    if ip and ip in hosts:
-        hosts.remove(ip)
-    return hosts
+# def remove_whitelisted_dynamic_ip(dns_query, hosts):
+#     ip = None
+#     if 'answers' in dns_query and len(dns_query.get('answers')) > 0:
+#         ip = dns_query.get('answers')[0].get('data', None)
+#     if ip and ip in hosts:
+#         hosts.remove(ip)
+#     return hosts
 
 #  TEST CODE
 if __name__ == "__main__":
