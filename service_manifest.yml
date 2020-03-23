@@ -38,7 +38,7 @@ config:
   recursion_limit: 10000
 
   # InetSim specifications
-  random_ip_range: 11.0.0.0-11.255.255.255
+  random_ip_range: 11.0.0.0/8
 
 heuristics:
   - heur_id: 1
