@@ -66,27 +66,25 @@ def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, se
                                  body=json.dumps(body))
         al_result.add_section(info_res)
 
-    behavior = api_report.get('behavior')
-    network = api_report.get('network', {})
-    droidmon = api_report.get('droidmon')
     debug = api_report.get('debug')
     sigs = api_report.get('signatures', [])
+    network = api_report.get('network', {})
+    behavior = api_report.get('behavior')
+    # droidmon = api_report.get('droidmon')
 
-    executed = True
+    # executed = True
     if debug:
         process_debug(debug, al_result, classification)
-
+    if sigs:
+        process_signatures(sigs, al_result, classification)
+    if network:
+        process_network(network, al_result, guest_ip, classification)
     if behavior:
-        executed = process_behavior(behavior, al_result, al_request, classification)
+        process_behavior(behavior, al_result, al_request, classification)
 
-    if droidmon:
-        process_droidmon(droidmon, network, al_result, classification)
+    # if droidmon:
+    #     process_droidmon(droidmon, network, al_result, classification)
 
-    if executed is True:
-        if network:
-            process_network(network, al_result, guest_ip, classification)
-        if sigs:
-            process_signatures(sigs, al_result, classification)
     else:
         log.debug("It doesn't look like this file executed (unsupported file type?)")
         noexec_res = ResultSection(title_text="Notes", classification=classification)
@@ -109,75 +107,75 @@ def process_clsid(key, result_map):
     result_map['clsids'] = clsid_map
 
 
-def process_droidmon(droidmon, network, al_result, classification):
-    droidmon_res = ResultSection(title_text="Droidmon", classification=classification)
-
-    if 'raw' in droidmon:
-        classes = set()
-        for raw_entry in droidmon['raw']:
-            if "class" in raw_entry:
-                classes.add(raw_entry['class'])
-        if len(classes) > 0:
-            sorted_classes = sorted(safe_str(x) for x in classes)
-            _, cls_hash_one, cls_hash_two = ssdeep.hash(''.join(sorted_classes)).split(':')
-            droidmon_res.add_tag("dynamic.ssdeep.dynamic_classes", cls_hash_one)
-            droidmon_res.add_tag("dynamic.ssdeep.dynamic_classes", cls_hash_two)
-    if 'httpConnections' in droidmon:
-        # Add this http information to the main network map:
-        for req in droidmon['httpConnections']:
-            match = DROIDMON_CONN_RE.match(req["request"])
-            if match:
-                meth = match.group(1)
-                uri = match.group(2)
-                domain = match.group(3)
-                port = match.group(4)
-                path = match.group(5)
-                ver = match.group(6)
-                seen = False
-                for entry in network['http']:
-                    if entry['uri'] == uri and entry['method'] == meth and entry['port'] == port:
-                        entry['count'] += 1
-                        seen = True
-                        break
-                if not seen:
-                    new_entry = {
-                        "count": 1,
-                        "body": "",
-                        "uri": uri,
-                        "user-agent": "",
-                        "method": meth,
-                        "host": domain,
-                        "version": ver,
-                        "path": path,
-                        "data": "",
-                        "port": int(port) if port else None
-                    }
-                    log.warning(new_entry)
-                    network['http'].append(new_entry)
-
-    if 'sms' in droidmon:
-        sms_res = ResultSection(title_text='SMS Activity',
-                                classification=classification,
-                                body_format=BODY_FORMAT.MEMORY_DUMP)
-        sms_res.set_heuristic(1)
-        sms_lines = dict_list_to_fixedwidth_str_list(droidmon['sms'])
-        for sms_line in sms_lines:
-            sms_res.add_line(sms_line)
-        for sms in droidmon['sms']:
-            droidmon_res.add_tag("info.phone_number", sms['dest_number'])
-        al_result.add_section(sms_res)
-
-    if 'crypto_keys' in droidmon:
-        crypto_res = ResultSection(title_text='Crypto Keys',
-                                   classification=classification,
-                                   body_format=BODY_FORMAT.MEMORY_DUMP)
-        crypto_res.set_heuristic(2)
-        crypto_key_lines = dict_list_to_fixedwidth_str_list(droidmon['crypto_keys'])
-        for crypto_key_line in crypto_key_lines:
-            crypto_res.add_line(crypto_key_line)
-        for crypto_key in droidmon['crypto_keys']:
-            droidmon_res.add_tag("technique.crypto", crypto_key['type'])
-        al_result.add_section(crypto_res)
+# def process_droidmon(droidmon, network, al_result, classification):
+#     droidmon_res = ResultSection(title_text="Droidmon", classification=classification)
+#
+#     if 'raw' in droidmon:
+#         classes = set()
+#         for raw_entry in droidmon['raw']:
+#             if "class" in raw_entry:
+#                 classes.add(raw_entry['class'])
+#         if len(classes) > 0:
+#             sorted_classes = sorted(safe_str(x) for x in classes)
+#             _, cls_hash_one, cls_hash_two = ssdeep.hash(''.join(sorted_classes)).split(':')
+#             droidmon_res.add_tag("dynamic.ssdeep.dynamic_classes", cls_hash_one)
+#             droidmon_res.add_tag("dynamic.ssdeep.dynamic_classes", cls_hash_two)
+#     if 'httpConnections' in droidmon:
+#         # Add this http information to the main network map:
+#         for req in droidmon['httpConnections']:
+#             match = DROIDMON_CONN_RE.match(req["request"])
+#             if match:
+#                 meth = match.group(1)
+#                 uri = match.group(2)
+#                 domain = match.group(3)
+#                 port = match.group(4)
+#                 path = match.group(5)
+#                 ver = match.group(6)
+#                 seen = False
+#                 for entry in network['http']:
+#                     if entry['uri'] == uri and entry['method'] == meth and entry['port'] == port:
+#                         entry['count'] += 1
+#                         seen = True
+#                         break
+#                 if not seen:
+#                     new_entry = {
+#                         "count": 1,
+#                         "body": "",
+#                         "uri": uri,
+#                         "user-agent": "",
+#                         "method": meth,
+#                         "host": domain,
+#                         "version": ver,
+#                         "path": path,
+#                         "data": "",
+#                         "port": int(port) if port else None
+#                     }
+#                     log.warning(new_entry)
+#                     network['http'].append(new_entry)
+#
+#     if 'sms' in droidmon:
+#         sms_res = ResultSection(title_text='SMS Activity',
+#                                 classification=classification,
+#                                 body_format=BODY_FORMAT.MEMORY_DUMP)
+#         sms_res.set_heuristic(1)
+#         sms_lines = dict_list_to_fixedwidth_str_list(droidmon['sms'])
+#         for sms_line in sms_lines:
+#             sms_res.add_line(sms_line)
+#         for sms in droidmon['sms']:
+#             droidmon_res.add_tag("info.phone_number", sms['dest_number'])
+#         al_result.add_section(sms_res)
+#
+#     if 'crypto_keys' in droidmon:
+#         crypto_res = ResultSection(title_text='Crypto Keys',
+#                                    classification=classification,
+#                                    body_format=BODY_FORMAT.MEMORY_DUMP)
+#         crypto_res.set_heuristic(2)
+#         crypto_key_lines = dict_list_to_fixedwidth_str_list(droidmon['crypto_keys'])
+#         for crypto_key_line in crypto_key_lines:
+#             crypto_res.add_line(crypto_key_line)
+#         for crypto_key in droidmon['crypto_keys']:
+#             droidmon_res.add_tag("technique.crypto", crypto_key['type'])
+#         al_result.add_section(crypto_res)
 
 
 def process_debug(debug, al_result, classification):
@@ -252,131 +250,131 @@ def process_behavior(behavior, al_result, al_request, classification):
 
     guids = behavior.get("summary", {}).get("guid", [])
 
-    result_limit = 25
+    # result_limit = 25
 
-    result_queries = {"directory_created":  ["Directories Created", result_limit, None],
-                      "directory_removed":  ["Directories Deleted", result_limit, None],
-                      "dll_loaded":         ["Modules Loaded", result_limit, None],
-                      "file_deleted":       ["Files Deleted", result_limit, None],
-                      "file_exists":        ["Check File: Exists", result_limit, None],
-                      "file_failed":        ["Check File: Failed", result_limit, None],
-                      "regkey_written":     ["Registry Keys Written", result_limit, None],
-                      "regkey_opened":     ["Registry Keys Opened", result_limit, None],
-                      "regkey_deleted":     ["Registry Keys Deleted", result_limit, None],
-                      "command_line":       ["Commands", None, None],
-                      "downloads_file":     ["Files Downloaded", None, None],
-                      "file_written":       ["Files Written", None, "file.path"],
-                      "wmi_query":          ["WMI Queries", None, None],
-                      "mutex":              ["Mutexes", None, "dynamic.mutex"],
-                      }
+    # result_queries = {"directory_created":  ["Directories Created", result_limit, None],
+    #                   "directory_removed":  ["Directories Deleted", result_limit, None],
+    #                   "dll_loaded":         ["Modules Loaded", result_limit, None],
+    #                   "file_deleted":       ["Files Deleted", result_limit, None],
+    #                   "file_exists":        ["Check File: Exists", result_limit, None],
+    #                   "file_failed":        ["Check File: Failed", result_limit, None],
+    #                   "regkey_written":     ["Registry Keys Written", result_limit, None],
+    #                   "regkey_opened":     ["Registry Keys Opened", result_limit, None],
+    #                   "regkey_deleted":     ["Registry Keys Deleted", result_limit, None],
+    #                   "command_line":       ["Commands", None, None],
+    #                   "downloads_file":     ["Files Downloaded", None, None],
+    #                   "file_written":       ["Files Written", None, "file.path"],
+    #                   "wmi_query":          ["WMI Queries", None, None],
+    #                   "mutex":              ["Mutexes", None, "dynamic.mutex"],
+    #                   }
 
-    # Creating grandparent sections
-    file_system_activity = ResultSection(title_text="File System Activity",
-                                         classification=classification)
-
-    # Creating parent sections
-    directory_activity = ResultSection(title_text="Directory Activity",
-                                       classification=classification)
-    file_activity = ResultSection(title_text="File Activity",
-                                  classification=classification)
-    registry_key_activity = ResultSection(title_text="Registry Key Activity",
-                                          classification=classification)
-
-    for q_name, [title, limit, tag_type] in result_queries.items():
-        q_res = behavior.get("summary", {}).get(q_name, [])
-        if q_res:
-            if limit is not None:
-                q_res = q_res[:limit]
-                title = "%s (Limit %i)" % (title, limit)
-
-            res_sec = ResultSection(title_text=title, classification=classification)
-            if q_name == "command_line":
-                for ln in map(safe_str, q_res):
-                    res_sec.add_line("$\t" + ln)
-                    if tag_type is not None:
-                        res_sec.add_tag(tag_type, ln)
-            else:
-                for ln in map(safe_str, q_res):
-                    res_sec.add_line(ln)
-                    if tag_type is not None:
-                        res_sec.add_tag(tag_type, ln)
-            # Dump out contents to a temporary file and add as an extracted file
-            if q_name == "command_line":
-                for raw_ln in q_res:
-                    cli_hash = hashlib.sha256(raw_ln.encode('utf-8')).hexdigest()
-                    temp_filepath = os.path.join(al_request._working_directory, "command_%s" % cli_hash[:10])
-                    with open(temp_filepath, 'wb') as temp_fh:
-                        temp_fh.write(raw_ln.encode())
-                    try:
-                        al_request.add_extracted(temp_filepath, "command_line_dump.txt",
-                                                 "Extracted command_line from Cuckoo")
-                    except MaxExtractedExceeded:
-                        log.debug("The maximum amount of files to be extracted is 501, "
-                                  "which has been exceeded in this submission")
-
-            # Display Registry Keys Written as key value pairs
-            if q_name in ["regkey_written"]:
-                kv_body = {}
-                for regkey in q_res:
-                    r = regkey.split(",")
-                    if len(r) > 1:
-                        kv_body[r[0]] = r[1]
-                    else:
-                        kv_body[r[0]] = ""
-                res_sec.body_format = BODY_FORMAT.KEY_VALUE
-                res_sec.body = json.dumps(kv_body)
-
-            # Add respective subsections to parent sections
-            if q_name in ["directory_created", "directory_removed"]:
-                directory_activity.add_subsection(res_sec)
-            elif q_name in ["file_written", "file_deleted", "file_exists", "file_failed", "downloads_file"]:
-                file_activity.add_subsection(res_sec)
-            elif q_name in ["regkey_written", "regkey_opened", "regkey_deleted"]:
-                registry_key_activity.add_subsection(res_sec)
-            elif q_name in ["dll_loaded"]:
-                file_system_activity.add_subsection(res_sec)
-            elif q_name in ["command_line"]:
-                res_sec.body_format = BODY_FORMAT.MEMORY_DUMP
-                al_result.add_section(res_sec)
-            elif q_name in ["wmi_query", "mutex"]:
-                al_result.add_section(res_sec)
-
-    # Adding parent sections to grandparent section and grandparent to result
-    if len(directory_activity.subsections) > 0:
-        file_system_activity.add_subsection(directory_activity)
-    if len(file_activity.subsections) > 0:
-        file_system_activity.add_subsection(file_activity)
-    if len(registry_key_activity.subsections) > 0:
-        if len(result_map.get('regkeys', [])) > 0:
-            sorted_regkeys = sorted(
-                [safe_str(x) for x in result_map['regkeys']])
-            regkey_hash = ssdeep.hash(''.join(sorted_regkeys))
-            registry_key_activity.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash)
-        file_system_activity.add_subsection(registry_key_activity)
-    if len(file_system_activity.subsections) > 0:
-        al_result.add_section(file_system_activity)
-
-    if len(guids) > 0:
-        process_com(guids, result_map)
-
-    # Make it serializable and sorted.. maybe we hash these?
-    # Could probably do the same thing with registry keys..
-    if result_map.get('clsids', {}) != {}:
-        # Hash
-        sorted_clsids = sorted([safe_str(x) for x in result_map['clsids'].values()])
-        ssdeep_clsid_hash = ssdeep.hash(''.join(sorted_clsids))
-
-        clsids_hash = hashlib.sha1((','.join(sorted_clsids)).encode('utf-8')).hexdigest()
-        if wlist_check_hash(clsids_hash):
-            # Benign activity
-            executed = False
-
-        # Report
-        clsid_res = ResultSection(title_text="CLSIDs", classification=classification)
-        clsid_res.add_tag("dynamic.ssdeep.cls_ids", ssdeep_clsid_hash)
-        for clsid in sorted(result_map['clsids'].keys()):
-            clsid_res.add_line(clsid + ' : ' + result_map['clsids'][clsid])
-        al_result.add_section(clsid_res)
+    # # Creating grandparent sections
+    # file_system_activity = ResultSection(title_text="File System Activity",
+    #                                      classification=classification)
+    #
+    # # Creating parent sections
+    # directory_activity = ResultSection(title_text="Directory Activity",
+    #                                    classification=classification)
+    # file_activity = ResultSection(title_text="File Activity",
+    #                               classification=classification)
+    # registry_key_activity = ResultSection(title_text="Registry Key Activity",
+    #                                       classification=classification)
+    #
+    # for q_name, [title, limit, tag_type] in result_queries.items():
+    #     q_res = behavior.get("summary", {}).get(q_name, [])
+    #     if q_res:
+    #         if limit is not None:
+    #             q_res = q_res[:limit]
+    #             title = "%s (Limit %i)" % (title, limit)
+    #
+    #         res_sec = ResultSection(title_text=title, classification=classification)
+    #         if q_name == "command_line":
+    #             for ln in map(safe_str, q_res):
+    #                 res_sec.add_line("$\t" + ln)
+    #                 if tag_type is not None:
+    #                     res_sec.add_tag(tag_type, ln)
+    #         else:
+    #             for ln in map(safe_str, q_res):
+    #                 res_sec.add_line(ln)
+    #                 if tag_type is not None:
+    #                     res_sec.add_tag(tag_type, ln)
+    #         # Dump out contents to a temporary file and add as an extracted file
+    #         if q_name == "command_line":
+    #             for raw_ln in q_res:
+    #                 cli_hash = hashlib.sha256(raw_ln.encode('utf-8')).hexdigest()
+    #                 temp_filepath = os.path.join(al_request._working_directory, "command_%s" % cli_hash[:10])
+    #                 with open(temp_filepath, 'wb') as temp_fh:
+    #                     temp_fh.write(raw_ln.encode())
+    #                 try:
+    #                     al_request.add_extracted(temp_filepath, "command_line_dump.txt",
+    #                                              "Extracted command_line from Cuckoo")
+    #                 except MaxExtractedExceeded:
+    #                     log.debug("The maximum amount of files to be extracted is 501, "
+    #                               "which has been exceeded in this submission")
+    #
+    #         # Display Registry Keys Written as key value pairs
+    #         if q_name in ["regkey_written"]:
+    #             kv_body = {}
+    #             for regkey in q_res:
+    #                 r = regkey.split(",")
+    #                 if len(r) > 1:
+    #                     kv_body[r[0]] = r[1]
+    #                 else:
+    #                     kv_body[r[0]] = ""
+    #             res_sec.body_format = BODY_FORMAT.KEY_VALUE
+    #             res_sec.body = json.dumps(kv_body)
+    #
+    #         # Add respective subsections to parent sections
+    #         if q_name in ["directory_created", "directory_removed"]:
+    #             directory_activity.add_subsection(res_sec)
+    #         elif q_name in ["file_written", "file_deleted", "file_exists", "file_failed", "downloads_file"]:
+    #             file_activity.add_subsection(res_sec)
+    #         elif q_name in ["regkey_written", "regkey_opened", "regkey_deleted"]:
+    #             registry_key_activity.add_subsection(res_sec)
+    #         elif q_name in ["dll_loaded"]:
+    #             file_system_activity.add_subsection(res_sec)
+    #         elif q_name in ["command_line"]:
+    #             res_sec.body_format = BODY_FORMAT.MEMORY_DUMP
+    #             al_result.add_section(res_sec)
+    #         elif q_name in ["wmi_query", "mutex"]:
+    #             al_result.add_section(res_sec)
+    #
+    # # Adding parent sections to grandparent section and grandparent to result
+    # if len(directory_activity.subsections) > 0:
+    #     file_system_activity.add_subsection(directory_activity)
+    # if len(file_activity.subsections) > 0:
+    #     file_system_activity.add_subsection(file_activity)
+    # if len(registry_key_activity.subsections) > 0:
+    #     if len(result_map.get('regkeys', [])) > 0:
+    #         sorted_regkeys = sorted(
+    #             [safe_str(x) for x in result_map['regkeys']])
+    #         regkey_hash = ssdeep.hash(''.join(sorted_regkeys))
+    #         registry_key_activity.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash)
+    #     file_system_activity.add_subsection(registry_key_activity)
+    # if len(file_system_activity.subsections) > 0:
+    #     al_result.add_section(file_system_activity)
+    #
+    # if len(guids) > 0:
+    #     process_com(guids, result_map)
+    #
+    # # Make it serializable and sorted.. maybe we hash these?
+    # # Could probably do the same thing with registry keys..
+    # if result_map.get('clsids', {}) != {}:
+    #     # Hash
+    #     sorted_clsids = sorted([safe_str(x) for x in result_map['clsids'].values()])
+    #     ssdeep_clsid_hash = ssdeep.hash(''.join(sorted_clsids))
+    #
+    #     clsids_hash = hashlib.sha1((','.join(sorted_clsids)).encode('utf-8')).hexdigest()
+    #     if wlist_check_hash(clsids_hash):
+    #         # Benign activity
+    #         executed = False
+    #
+    #     # Report
+    #     clsid_res = ResultSection(title_text="CLSIDs", classification=classification)
+    #     clsid_res.add_tag("dynamic.ssdeep.cls_ids", ssdeep_clsid_hash)
+    #     for clsid in sorted(result_map['clsids'].keys()):
+    #         clsid_res.add_line(clsid + ' : ' + result_map['clsids'][clsid])
+    #     al_result.add_section(clsid_res)
 
     log.debug("Behavior processing completed. Looks like valid execution: %s" % str(executed))
     return executed
@@ -386,9 +384,11 @@ def process_signatures(sigs, al_result, classification):
     log.debug("Processing signature results.")
     if len(sigs) > 0:
         sigs_res = ResultSection(title_text="Signatures", classification=classification)
-        skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
-        print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities',
-                      'persistence_autorun']
+        # skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
+        skipped_sigs = []
+        # print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities',
+        #               'persistence_autorun']
+        print_iocs = []
         # Severity is 0-5ish with 0 being least severe.
         for sig in sigs:
             sig_name = sig.get('name')
@@ -402,7 +402,8 @@ def process_signatures(sigs, al_result, classification):
                 log.warning("Unknown signature detected: %s" % sig)
             actor = sig.get('actor', '')
             description = sig.get('description', '')
-            sig_res = ResultSection(title_text=sig_name, classification=classification, body=description)
+            title = "Signature: %s" % sig_name
+            sig_res = ResultSection(title_text=title, classification=classification, body=description)
             attack_ids = sig.get('ttp', {})
 
             # TODO: we are only able to handle a single attack id at the moment
