@@ -37,6 +37,9 @@ config:
   max_file_size: 80000000
   recursion_limit: 10000
 
+  # InetSim specifications
+  random_ip_range: 11.0.0.0-11.255.255.255
+
 heuristics:
   - heur_id: 1
     name: SMS Activity

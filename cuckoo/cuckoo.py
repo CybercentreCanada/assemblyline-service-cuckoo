@@ -362,7 +362,7 @@ class Cuckoo(ServiceBase):
                                                  self.file_res,
                                                  request,
                                                  file_ext,
-                                                 guest_ip,
+                                                 self.cfg.get("random_ip_range"),
                                                  self.SERVICE_CLASSIFICATION)
                     if success is False:
                         err_str = self.get_errors()

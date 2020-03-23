@@ -33,7 +33,7 @@ log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 
 
 # noinspection PyBroadException
-def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, service_classification=Classification.UNRESTRICTED):
+def generate_al_result(api_report, al_result, al_request, file_ext, random_ip_range, service_classification=Classification.UNRESTRICTED):
     log.debug("Generating AL Result.")
     try:
         classification = Classification.max_classification(Classification.UNRESTRICTED, service_classification)
@@ -78,7 +78,7 @@ def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, se
     if sigs:
         process_signatures(sigs, al_result, classification)
     if network:
-        process_network(network, al_result, guest_ip, classification)
+        process_network(network, al_result, random_ip_range, classification)
     if behavior:
         process_behavior(behavior, al_result, al_request, classification)
 
@@ -520,7 +520,7 @@ def process_signatures(sigs, al_result, classification):
 #             proto_data[host] = proto_ex_data[host][:]
 
 
-def process_network(network, al_result, guest_ip, classification):
+def process_network(network, al_result, random_ip_range, classification):
     log.debug("Processing network results.")
     result_map = {}
 
@@ -548,11 +548,12 @@ def process_network(network, al_result, guest_ip, classification):
                 network_table_record["path"] = network_call.get("path", "")
                 if "answers" in network_call:
                     answers = network_call.get("answers")
-                    first_answer = answers[0]
-                    resolved_ip = first_answer.get("data", "")
-                    domain_type = first_answer.get("type", "")
-                    network_table_record["resolved_ip"] = resolved_ip
-                    network_table_record["domain_type"] = domain_type
+                    if len(answers) > 0:
+                        first_answer = answers[0]
+                        resolved_ip = first_answer.get("data", "")
+                        domain_type = first_answer.get("type", "")
+                        network_table_record["resolved_ip"] = resolved_ip
+                        network_table_record["domain_type"] = domain_type
                 if "dport" in network_call:
                     network_table_record["destination_port"] = network_call.get("dport", "")
                 elif "port" in network_call:
@@ -717,22 +718,22 @@ def process_network(network, al_result, guest_ip, classification):
     log.debug("Network processing complete.")
 
 
-def add_flows(flow_type, key, protocol, flows, result_map):
-    if flows is None:
-        return
-    current_flows = result_map.get(flow_type, defaultdict(dict))
-    flow_key = key
-    current_flows[flow_key][protocol] = flows
-    result_map[flow_type] = current_flows
+# def add_flows(flow_type, key, protocol, flows, result_map):
+#     if flows is None:
+#         return
+#     current_flows = result_map.get(flow_type, defaultdict(dict))
+#     flow_key = key
+#     current_flows[flow_key][protocol] = flows
+#     result_map[flow_type] = current_flows
 
 
-def remove_whitelisted_dynamic_ip(dns_query, hosts):
-    ip = None
-    if 'answers' in dns_query and len(dns_query.get('answers')) > 0:
-        ip = dns_query.get('answers')[0].get('data', None)
-    if ip and ip in hosts:
-        hosts.remove(ip)
-    return hosts
+# def remove_whitelisted_dynamic_ip(dns_query, hosts):
+#     ip = None
+#     if 'answers' in dns_query and len(dns_query.get('answers')) > 0:
+#         ip = dns_query.get('answers')[0].get('data', None)
+#     if ip and ip in hosts:
+#         hosts.remove(ip)
+#     return hosts
 
 #  TEST CODE
 if __name__ == "__main__":
