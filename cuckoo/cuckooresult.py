@@ -96,15 +96,15 @@ def generate_al_result(api_report, al_result, al_request, file_ext, guest_ip, se
     return True
 
 
-def process_clsid(key, result_map):
-    clsid_map = result_map.get('clsids', defaultdict(str))
-    for uuid in set(UUID_RE.findall(safe_str(key))):
-        # Check if we have a matching CLSID
-        uuid = uuid.upper()
-        name = clsids.get(uuid)
-        if name:
-            clsid_map[name] = uuid
-    result_map['clsids'] = clsid_map
+# def process_clsid(key, result_map):
+#     clsid_map = result_map.get('clsids', defaultdict(str))
+#     for uuid in set(UUID_RE.findall(safe_str(key))):
+#         # Check if we have a matching CLSID
+#         uuid = uuid.upper()
+#         name = clsids.get(uuid)
+#         if name:
+#             clsid_map[name] = uuid
+#     result_map['clsids'] = clsid_map
 
 
 # def process_droidmon(droidmon, network, al_result, classification):
@@ -199,26 +199,26 @@ def process_debug(debug, al_result, classification):
     return failed
 
 
-def process_key(key, result_map):
-    keys = result_map.get('regkeys', [])
-    key = USER_SID_RE.sub("S-1-5-21-<DOMAIN_ID>-<RELATIVE_ID>", key)
-    keys.append(key)
-    keys.append(key)
-    # Check for CLSIDs
-    process_clsid(key, result_map)
-    result_map['regkeys'] = keys
+# def process_key(key, result_map):
+#     keys = result_map.get('regkeys', [])
+#     key = USER_SID_RE.sub("S-1-5-21-<DOMAIN_ID>-<RELATIVE_ID>", key)
+#     keys.append(key)
+#     keys.append(key)
+#     # Check for CLSIDs
+#     process_clsid(key, result_map)
+#     result_map['regkeys'] = keys
 
 
-def process_com(args, result_map):
-    if "clsid" in args:
-        process_clsid(args.get("clsid"), result_map)
-    else:
-        for arg in args:
-            if isinstance(arg, dict):
-                if arg.get("name") == "ClsId":
-                    process_clsid(arg.get("value"), result_map)
-            elif isinstance(arg, str):
-                process_clsid(arg, result_map)
+# def process_com(args, result_map):
+#     if "clsid" in args:
+#         process_clsid(args.get("clsid"), result_map)
+#     else:
+#         for arg in args:
+#             if isinstance(arg, dict):
+#                 if arg.get("name") == "ClsId":
+#                     process_clsid(arg.get("value"), result_map)
+#             elif isinstance(arg, str):
+#                 process_clsid(arg, result_map)
 
 
 def process_behavior(behavior, al_result, al_request, classification):
@@ -226,29 +226,29 @@ def process_behavior(behavior, al_result, al_request, classification):
     log.debug("Processing behavior results.")
     executed = True
     result_map = {}
-    res_sec = None
+    # res_sec = None
 
     # Spender
-    for key in behavior.get("summary", {}).get("keys", []):
-        process_key(key, result_map)
-    # Cuckoobox
-    for key in behavior.get("summary", {}).get("regkey_opened", []):
-        process_key(key, result_map)
+    # for key in behavior.get("summary", {}).get("keys", []):
+    #     process_key(key, result_map)
+    # # Cuckoobox
+    # for key in behavior.get("summary", {}).get("regkey_opened", []):
+    #     process_key(key, result_map)
 
     result_map['processtree'] = behavior.get("processtree")
-    for process in behavior.get("processes"):
-        # pid = process.get("process_id")
-        for call in process.get("calls"):
-            api = call.get("api")
-            if "CoCreateInstance" in api:
-                process_com(call.get("arguments"), result_map)
+    # for process in behavior.get("processes"):
+    #     # pid = process.get("process_id")
+    #     for call in process.get("calls"):
+    #         api = call.get("api")
+    #         if "CoCreateInstance" in api:
+    #             process_com(call.get("arguments"), result_map)
                 # TODO: More interesting API stuff.
 
     # Make a Process Tree Section
     process_tree_section = ResultSection("Spawned Process Tree", body_format=BODY_FORMAT.JSON, body=json.dumps(result_map["processtree"]))
     al_result.add_section(process_tree_section)
 
-    guids = behavior.get("summary", {}).get("guid", [])
+    # guids = behavior.get("summary", {}).get("guid", [])
 
     # result_limit = 25
 
@@ -382,129 +382,142 @@ def process_behavior(behavior, al_result, al_request, classification):
 
 def process_signatures(sigs, al_result, classification):
     log.debug("Processing signature results.")
-    if len(sigs) > 0:
-        sigs_res = ResultSection(title_text="Signatures", classification=classification)
-        # skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
-        skipped_sigs = []
-        # print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities',
-        #               'persistence_autorun']
-        print_iocs = []
+    if len(sigs) <= 0:
+        return
+
+    sigs_res = ResultSection(title_text="Signatures", classification=classification)
+    # skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
+    skipped_sigs = []
+    # print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities',
+    #               'persistence_autorun']
+    skipped_sig_iocs = []
+    skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
+    skipped_category_iocs = ["section"]
+
+    for sig in sigs:
+        sig_name = sig.get('name')
+
+        if sig_name in skipped_sigs:
+            continue
+
+        # Setting up result section for each signature
+        title = "Signature: %s" % sig_name
+        description = sig.get('description', 'No description for signature.')
+        sig_res = ResultSection(
+            title_text=title,
+            classification=classification,
+            body=description
+        )
+
+        # Setting up the heuristic for each signature
         # Severity is 0-5ish with 0 being least severe.
-        for sig in sigs:
-            sig_name = sig.get('name')
+        sig_id = check_signature(sig_name)
+        if sig_id == 3:
+            log.warning("Unknown signature detected: %s" % sig)
 
-            # Skipped Signature Checks:
-            if sig_name in skipped_sigs:
-                continue
+        # Setting the Mitre ATT&CK ID for the heuristic
+        attack_ids = sig.get('ttp', {})
+        # TODO: we are only able to handle a single attack id at the moment
+        if attack_ids != {}:
+            attack_id = next(iter(attack_ids))  # Grab first ID
+            sig_res.set_heuristic(sig_id, attack_id=attack_id)
+        else:
+            sig_res.set_heuristic(sig_id)
 
-            sig_id = check_signature(sig_name)
-            if sig_id == 3:
-                log.warning("Unknown signature detected: %s" % sig)
-            actor = sig.get('actor', '')
-            description = sig.get('description', '')
-            title = "Signature: %s" % sig_name
-            sig_res = ResultSection(title_text=title, classification=classification, body=description)
-            attack_ids = sig.get('ttp', {})
+        # Getting the signature category and tagging it
+        sig_categories = sig.get('categories', [])
+        if len(sig_categories) > 0:
+            sigs_res.add_line('\tCategories: ' + ','.join([safe_str(x) for x in sig_categories]))
+            for category in sig_categories:
+                sigs_res.add_tag("dynamic.signature.category", category)
 
-            # TODO: we are only able to handle a single attack id at the moment
-            if attack_ids != {}:
-                attack_id = next(iter(attack_ids))  # Grab first ID
-                sig_res.set_heuristic(sig_id, attack_id=attack_id)
-            else:
-                sig_res.set_heuristic(sig_id)
+        # Getting the signature family and tagging it
+        sig_families = sig.get('families', [])
+        if len(sig_families) > 0:
+            sigs_res.add_line('\tFamilies: ' + ','.join([safe_str(x) for x in sig_families]))
+            for family in sig_families:
+                sigs_res.add_tag("dynamic.signature.category", family)
 
-            # Add Marks or indicators to the signature section
-            marks = sig.get('marks')
-            if marks is not None:
-                marks_res = ResultSection("Indicators", classification=classification, body_format=BODY_FORMAT.MEMORY_DUMP, body=json.dumps(marks))
-                sig_res.add_subsection(marks_res)
-            sigs_res.add_subsection(sig_res)
-            sig_categories = sig.get('categories', [])
-            sig_families = sig.get('families', [])
+        # Find any indicators of compromise from the signature marks
+        markcount = sig.get("markcount", 0)
+        if markcount > 0 and sig_name not in skipped_sig_iocs:
             sig_marks = sig.get('marks', [])
-
-            if len(sig_categories) > 0:
-                sigs_res.add_line('\tCategories: ' + ','.join([safe_str(x) for x in sig_categories]))
-                for category in sig_categories:
-                    sigs_res.add_tag("dynamic.signature.category", category)
-
-            if len(sig_families) > 0:
-                sigs_res.add_line('\tFamilies: ' + ','.join([safe_str(x) for x in sig_families]))
-                for family in sig_families:
-                    sigs_res.add_tag("dynamic.signature.category", family)
-
-            if actor and actor != '':
-                sigs_res.add_tag("attribution.actor", actor)
-            if sig_name in print_iocs:
-                for mark in sig_marks:
-                    if mark.get('type') == 'ioc' and mark.get('category') in ['url', 'file', 'cmdline', 'request']:
+            for mark in sig_marks:
+                mark_type = mark.get("type")
+                if mark_type == "generic":  # If a mark is generic, then do:
+                    for item in mark:
+                        if item not in skipped_mark_items:
+                            sigs_res.add_line('\tIOC: %s' % mark[item])
+                elif mark_type == "ioc":
+                    if mark.get('category') not in skipped_category_iocs:
                         sigs_res.add_line('\tIOC: %s' % mark['ioc'])
-                    elif mark.get('type') == 'generic' and 'reg_key' in mark and 'reg_value' in mark:
-                        sigs_res.add_line('\tIOC: %s = %s' % (mark['reg_key'], mark['reg_value']))
-        if len(sigs_res.subsections) > 0:
-            al_result.add_section(sigs_res)
+
+        # Adding the signature result section to the parent result section
+        sigs_res.add_subsection(sig_res)
+    if len(sigs_res.subsections) > 0:
+        al_result.add_section(sigs_res)
 
 
-def parse_protocol_data(flow_data, group_by='dst', group_fields=list()):
-    protocol_data = defaultdict(list)
-    for flow in flow_data:
-        group = flow.get(group_by)
-        flow_data = {}
-        for field in group_fields:
-            flow_data[field] = flow.get(field)
-        if flow_data not in protocol_data[group]:
-            protocol_data[group].append(flow_data)
-    return protocol_data
-
-
-def dict_list_to_fixedwidth_str_list(dict_list, print_keys=True):
-    out_lines = []
-    lens = {}
-    max_lens = {}
-    for in_dict in dict_list:
-        for k, v in in_dict.items():
-            k_len = len(str(k))
-            v_len = len(str(v))
-            max_lens[k] = max(max_lens.get(k, 0), v_len+4)
-            lens[k] = (k_len, max_lens[k])
-    if print_keys:
-        fmt_template = '{0:<%d}: {1:<%d}'
-    else:
-        fmt_template = '{0:<%d}'
-    
-    for in_dict in dict_list:
-        output = ''
-        for k in sorted(in_dict.keys()):
-            if print_keys:
-                fmt = fmt_template % lens[k]
-                output += fmt.format(k, in_dict[k])
-            else:
-                fmt = fmt_template % lens[k][1]
-                output += fmt.format(in_dict[k])
-            
-        out_lines.append(output)
-    return out_lines
+# def parse_protocol_data(flow_data, group_by='dst', group_fields=list()):
+#     protocol_data = defaultdict(list)
+#     for flow in flow_data:
+#         group = flow.get(group_by)
+#         flow_data = {}
+#         for field in group_fields:
+#             flow_data[field] = flow.get(field)
+#         if flow_data not in protocol_data[group]:
+#             protocol_data[group].append(flow_data)
+#     return protocol_data
+#
+#
+# def dict_list_to_fixedwidth_str_list(dict_list, print_keys=True):
+#     out_lines = []
+#     lens = {}
+#     max_lens = {}
+#     for in_dict in dict_list:
+#         for k, v in in_dict.items():
+#             k_len = len(str(k))
+#             v_len = len(str(v))
+#             max_lens[k] = max(max_lens.get(k, 0), v_len+4)
+#             lens[k] = (k_len, max_lens[k])
+#     if print_keys:
+#         fmt_template = '{0:<%d}: {1:<%d}'
+#     else:
+#         fmt_template = '{0:<%d}'
+#
+#     for in_dict in dict_list:
+#         output = ''
+#         for k in sorted(in_dict.keys()):
+#             if print_keys:
+#                 fmt = fmt_template % lens[k]
+#                 output += fmt.format(k, in_dict[k])
+#             else:
+#                 fmt = fmt_template % lens[k][1]
+#                 output += fmt.format(in_dict[k])
+#
+#         out_lines.append(output)
+#     return out_lines
 
 
 # This is probably just a temporary requirement.. the _ex http/s flow data doesn't have the same formatting
 # for the uri field.
-def _add_ex_data(proto_data, proto_ex_data, protocol, port):
-    # Format and add _ex data
-    for host in proto_ex_data:
-        for flow in proto_ex_data[host]:
-            if flow['dport'] == port:
-                full_uri = "%s://%s%s" % (protocol, host, flow['uri'])
-            else:
-                full_uri = "%s://%s:%d%s" % (protocol, host, flow['dport'], flow['uri'])
-            flow['uri'] = full_uri
-            flow['port'] = flow['dport']
-            flow.pop('dport')
-        if host in proto_data:
-            for flow in proto_ex_data[host]:
-                if flow not in proto_data[host]:
-                    proto_data[host].append(flow)
-        else:
-            proto_data[host] = proto_ex_data[host][:]
+# def _add_ex_data(proto_data, proto_ex_data, protocol, port):
+#     # Format and add _ex data
+#     for host in proto_ex_data:
+#         for flow in proto_ex_data[host]:
+#             if flow['dport'] == port:
+#                 full_uri = "%s://%s%s" % (protocol, host, flow['uri'])
+#             else:
+#                 full_uri = "%s://%s:%d%s" % (protocol, host, flow['dport'], flow['uri'])
+#             flow['uri'] = full_uri
+#             flow['port'] = flow['dport']
+#             flow.pop('dport')
+#         if host in proto_data:
+#             for flow in proto_ex_data[host]:
+#                 if flow not in proto_data[host]:
+#                     proto_data[host].append(flow)
+#         else:
+#             proto_data[host] = proto_ex_data[host][:]
 
 
 def process_network(network, al_result, guest_ip, classification):
@@ -513,151 +526,194 @@ def process_network(network, al_result, guest_ip, classification):
 
     network_res = ResultSection(title_text="Network Activity",
                                 classification=classification)
-    # IP activity
-    hosts = network.get("hosts", [])
-    if len(hosts) > 0 and isinstance(hosts[0], dict):
-        hosts = [host['ip'] for host in network.get("hosts", [])]
+    skipped_protocols = ["tls", "dns_servers", "hosts", "pcap_sha256", "domains", "dead_hosts", "sorted_pcap_sha256"]
+    network_table = []
 
-    udp = parse_protocol_data(network.get("udp", []), group_fields=['dport'])
-    tcp = parse_protocol_data(network.get("tcp", []), group_fields=['dport'])
-    smtp = parse_protocol_data(network.get("smtp", []), group_fields=['raw'])
-    dns = parse_protocol_data(network.get("dns", []), group_by='request', group_fields=['answers'])
-    icmp = parse_protocol_data(network.get("icmp", []), group_fields=['type'])
+    # now to parse through every network call and create a nice table containing
+    # each call
+    for protocol in network:
+        if protocol not in skipped_protocols:
+            network_calls = network[protocol]
+            for network_call in network_calls:
+                network_table_record = {}
+                network_table_record["timestamp"] = network_call.get("time", "")
+                network_table_record["protocol"] = protocol
+                network_table_record["method"] = network_call.get("method", "")
+                network_table_record["source_ip"] = network_call.get("src", "")
+                network_table_record["source_port"] = network_call.get("sport", "")
+                if "host" in network_call:
+                    network_table_record["domain"] = network_call.get("host", "")
+                elif "request" in network_call:
+                    network_table_record["domain"] = network_call.get("request", "")
+                network_table_record["path"] = network_call.get("path", "")
+                if "answers" in network_call:
+                    answers = network_call.get("answers")
+                    first_answer = answers[0]
+                    resolved_ip = first_answer.get("data", "")
+                    domain_type = first_answer.get("type", "")
+                    network_table_record["resolved_ip"] = resolved_ip
+                    network_table_record["domain_type"] = domain_type
+                if "dport" in network_call:
+                    network_table_record["destination_port"] = network_call.get("dport", "")
+                elif "port" in network_call:
+                    network_table_record["destination_port"] = network_call.get("port", "")
+                network_table_record["actual_ip"] = network_call.get("dst", "")
+                # "destination_country_code": "",  # TODO: somehow get the country code of the destination IP
+                network_table.append(network_table_record)
 
-    # Domain activity
-    domains = parse_protocol_data(network.get("domains", []), group_by='domain')
+    # Now for the cool stuff
+    # 1 DNS request = corresponding UDP request on port 53
+    # TODO: cool stuff
 
-    http = parse_protocol_data(network.get("http", []), group_by='host',
-                               group_fields=['port', 'uri', 'method'])
-    http_ex = parse_protocol_data(network.get("http_ex", []), group_by='host',
-                                  group_fields=['dport', 'uri', 'method'])
-    _add_ex_data(http, http_ex, 'http', 80)
 
-    https = parse_protocol_data(network.get("https", []), group_by='host',
-                                group_fields=['port', 'uri', 'method'])
-    https_ex = parse_protocol_data(network.get("https_ex", []), group_by='host',
-                                   group_fields=['dport', 'uri', 'method'])
-    _add_ex_data(https, https_ex, 'https', 443)
+    network_res.body = network_table
+    al_result.add_section(network_res)
+
+    # # IP activity
+    # hosts = network.get("hosts", [])
+    # if len(hosts) > 0 and isinstance(hosts[0], dict):
+    #     hosts = [host['ip'] for host in network.get("hosts", [])]
+    #
+    # udp = parse_protocol_data(network.get("udp", []), group_fields=['dport'])
+    # tcp = parse_protocol_data(network.get("tcp", []), group_fields=['dport'])
+    # smtp = parse_protocol_data(network.get("smtp", []), group_fields=['raw'])
+    # dns = parse_protocol_data(network.get("dns", []), group_by='request', group_fields=['answers'])
+    # icmp = parse_protocol_data(network.get("icmp", []), group_fields=['type'])
+
+    # # Domain activity
+    # domains = parse_protocol_data(network.get("domains", []), group_by='domain')
+    #
+    # http = parse_protocol_data(network.get("http", []), group_by='host',
+    #                            group_fields=['port', 'uri', 'method'])
+    # http_ex = parse_protocol_data(network.get("http_ex", []), group_by='host',
+    #                               group_fields=['dport', 'uri', 'method'])
+    # _add_ex_data(http, http_ex, 'http', 80)
+    #
+    # https = parse_protocol_data(network.get("https", []), group_by='host',
+    #                             group_fields=['port', 'uri', 'method'])
+    # https_ex = parse_protocol_data(network.get("https_ex", []), group_by='host',
+    #                                group_fields=['dport', 'uri', 'method'])
+    # _add_ex_data(https, https_ex, 'https', 443)
 
     # Miscellaneous activity
     # irc = network.get("irc")
 
     # Add missing ip hosts
-    for proto in [udp, tcp, http, https, icmp, smtp]:
-        for hst in proto.keys():
-            if hst not in hosts and re.match(r"^[0-9.]+$", hst):
-                hosts.append(hst)
-
-    for dom in dns:
-        if dom not in domains:
-            # Cuckoo has whitelisted this domain separately than AL's whitelist feature
-            dns_query = dns.get(dom)[0]
-            hosts = remove_whitelisted_dynamic_ip(dns_query, hosts)
-
-    for domain in domains:
-        if wlist_check_domain(domain):
-            # Now we need to omit the dynamic IP from the whitelisted domain
-            # Get domain from dns, get mapped ip, pop ip from hosts
-            dns_query = dns.get(domain)[0]
-            hosts = remove_whitelisted_dynamic_ip(dns_query, hosts)
-            continue
-        add_flows("domain_flows", domain, 'dns', dns.get(domain), result_map)
-        add_flows("domain_flows", domain, 'http', http.get(domain), result_map)
-        add_flows("domain_flows", domain, 'https', https.get(domain), result_map)
-
-    # network['hosts'] has all unique non-local network ips.
-    for host in hosts:
-        if host == guest_ip or wlist_check_ip(host):
-            continue
-        add_flows("host_flows", host, 'udp', udp.get(host), result_map)
-        add_flows("host_flows", host, 'tcp', tcp.get(host), result_map)
-        add_flows("host_flows", host, 'smtp', smtp.get(host), result_map)
-        add_flows("host_flows", host, 'icmp', icmp.get(host), result_map)
-        add_flows("host_flows", host, 'http', http.get(host), result_map)
-        add_flows("host_flows", host, 'https', https.get(host), result_map)
-
-    if hosts != [] and 'host_flows' not in result_map:
-        # This only occurs if for some reason we don't parse corresponding flows out from the
-        # network dump. So we'll just manually add the IPs so they're at least being reported.
-        result_map['host_flows'] = {}
-        for host in hosts:
-            if host == guest_ip or wlist_check_ip(host):
-                continue
-            result_map['host_flows'][host] = []
-
-    hosts_res = None
-    if 'host_flows' in result_map:
-        # host_flows is a map of host:protocol entries
-        # protocol is a map of protocol_name:flows
-        # flows is a set of unique flows by the groupings above
-        host_lines = []
-        hosts_res = ResultSection(title_text='IP Flows', classification=classification,
-                                  body_format=BODY_FORMAT.MEMORY_DUMP)
-        for host in sorted(result_map['host_flows']):
-            protocols = result_map['host_flows'].get(host, [])
-            host_cc = '??'
-            host_cc = '('+host_cc+')'
-            hosts_res.add_tag("network.dynamic.ip", host)
-            for protocol in sorted(protocols):
-                flows = protocols[protocol]
-                if 'http' in protocol:
-                    for flow in flows:
-                        uri = flow.get('uri', None)
-                        if uri:
-                            hosts_res.add_tag("network.dynamic.uri", uri)
-                flow_lines = dict_list_to_fixedwidth_str_list(flows)
-                for line in flow_lines:
-                    proto_line = "{0:<8}{1:<19}{2:<8}{3}".format(protocol, host, host_cc, line)
-                    host_lines.append(proto_line)
-
-        hosts_res.add_lines(host_lines)
-        hosts_res.set_heuristic(1001)
-        network_res.add_subsection(hosts_res)
-
-    domains_res = None
-    if 'domain_flows' in result_map:
-        # domain_flows is a map of domain:protocol entries
-        # protocol is a map of protocol_name:flows
-        # flows is a set of unique flows by the groupings above
-
-        # Formatting..
-        max_domain_len = 0
-        for domain in result_map['domain_flows']:
-            max_domain_len = max(max_domain_len, len(domain)+4)
-        proto_fmt = "{0:<8}{1:<"+str(max_domain_len)+"}{2}"
-        domain_lines = []
-        domains_res = ResultSection(title_text='Domain Flows', classification=classification,
-                                    body_format=BODY_FORMAT.MEMORY_DUMP)
-        for domain in sorted(result_map['domain_flows']):
-            protocols = result_map['domain_flows'][domain]
-            domains_res.add_tag("network.dynamic.domain", domain)
-            for protocol in sorted(protocols):
-                flows = protocols[protocol]
-                flow_lines = None
-                if 'http' in protocol:
-                    for flow in flows:
-                        uri = flow.get('uri', None)
-                        if uri:
-                            domains_res.add_tag("network.dynamic.uri", uri)
-                    flow_lines = dict_list_to_fixedwidth_str_list(flows)
-                if 'dns' in protocol:
-                    for flow in flows:
-                        answers = flow.get('answers', None)
-                        if answers:
-                            flow_lines = dict_list_to_fixedwidth_str_list(answers)
-                if flow_lines:
-                    for line in flow_lines:
-                        proto_line = proto_fmt.format(protocol, domain, line)
-                        domain_lines.append(proto_line)
-#                 domain_res.add_lines(protocol_lines)
-#             domains_res.add_section(domain_res)
-
-        domains_res.add_lines(domain_lines)
-        domains_res.set_heuristic(1000)
-        network_res.add_subsection(domains_res)
-
-    if (domains_res and len(domains_res.body) > 0) or (hosts_res and len(hosts_res.body) > 0):
-        al_result.add_section(network_res)
+#     for proto in [udp, tcp, http, https, icmp, smtp]:
+#         for hst in proto.keys():
+#             if hst not in hosts and re.match(r"^[0-9.]+$", hst):
+#                 hosts.append(hst)
+#
+#     for dom in dns:
+#         if dom not in domains:
+#             # Cuckoo has whitelisted this domain separately than AL's whitelist feature
+#             dns_query = dns.get(dom)[0]
+#             hosts = remove_whitelisted_dynamic_ip(dns_query, hosts)
+#
+#     for domain in domains:
+#         if wlist_check_domain(domain):
+#             # Now we need to omit the dynamic IP from the whitelisted domain
+#             # Get domain from dns, get mapped ip, pop ip from hosts
+#             dns_query = dns.get(domain)[0]
+#             hosts = remove_whitelisted_dynamic_ip(dns_query, hosts)
+#             continue
+#         add_flows("domain_flows", domain, 'dns', dns.get(domain), result_map)
+#         add_flows("domain_flows", domain, 'http', http.get(domain), result_map)
+#         add_flows("domain_flows", domain, 'https', https.get(domain), result_map)
+#
+#     # network['hosts'] has all unique non-local network ips.
+#     for host in hosts:
+#         if host == guest_ip or wlist_check_ip(host):
+#             continue
+#         add_flows("host_flows", host, 'udp', udp.get(host), result_map)
+#         add_flows("host_flows", host, 'tcp', tcp.get(host), result_map)
+#         add_flows("host_flows", host, 'smtp', smtp.get(host), result_map)
+#         add_flows("host_flows", host, 'icmp', icmp.get(host), result_map)
+#         add_flows("host_flows", host, 'http', http.get(host), result_map)
+#         add_flows("host_flows", host, 'https', https.get(host), result_map)
+#
+#     if hosts != [] and 'host_flows' not in result_map:
+#         # This only occurs if for some reason we don't parse corresponding flows out from the
+#         # network dump. So we'll just manually add the IPs so they're at least being reported.
+#         result_map['host_flows'] = {}
+#         for host in hosts:
+#             if host == guest_ip or wlist_check_ip(host):
+#                 continue
+#             result_map['host_flows'][host] = []
+#
+#     hosts_res = None
+#     if 'host_flows' in result_map:
+#         # host_flows is a map of host:protocol entries
+#         # protocol is a map of protocol_name:flows
+#         # flows is a set of unique flows by the groupings above
+#         host_lines = []
+#         hosts_res = ResultSection(title_text='IP Flows', classification=classification,
+#                                   body_format=BODY_FORMAT.MEMORY_DUMP)
+#         for host in sorted(result_map['host_flows']):
+#             protocols = result_map['host_flows'].get(host, [])
+#             host_cc = '??'
+#             host_cc = '('+host_cc+')'
+#             hosts_res.add_tag("network.dynamic.ip", host)
+#             for protocol in sorted(protocols):
+#                 flows = protocols[protocol]
+#                 if 'http' in protocol:
+#                     for flow in flows:
+#                         uri = flow.get('uri', None)
+#                         if uri:
+#                             hosts_res.add_tag("network.dynamic.uri", uri)
+#                 flow_lines = dict_list_to_fixedwidth_str_list(flows)
+#                 for line in flow_lines:
+#                     proto_line = "{0:<8}{1:<19}{2:<8}{3}".format(protocol, host, host_cc, line)
+#                     host_lines.append(proto_line)
+#
+#         hosts_res.add_lines(host_lines)
+#         hosts_res.set_heuristic(1001)
+#         network_res.add_subsection(hosts_res)
+#
+#     domains_res = None
+#     if 'domain_flows' in result_map:
+#         # domain_flows is a map of domain:protocol entries
+#         # protocol is a map of protocol_name:flows
+#         # flows is a set of unique flows by the groupings above
+#
+#         # Formatting..
+#         max_domain_len = 0
+#         for domain in result_map['domain_flows']:
+#             max_domain_len = max(max_domain_len, len(domain)+4)
+#         proto_fmt = "{0:<8}{1:<"+str(max_domain_len)+"}{2}"
+#         domain_lines = []
+#         domains_res = ResultSection(title_text='Domain Flows', classification=classification,
+#                                     body_format=BODY_FORMAT.MEMORY_DUMP)
+#         for domain in sorted(result_map['domain_flows']):
+#             protocols = result_map['domain_flows'][domain]
+#             domains_res.add_tag("network.dynamic.domain", domain)
+#             for protocol in sorted(protocols):
+#                 flows = protocols[protocol]
+#                 flow_lines = None
+#                 if 'http' in protocol:
+#                     for flow in flows:
+#                         uri = flow.get('uri', None)
+#                         if uri:
+#                             domains_res.add_tag("network.dynamic.uri", uri)
+#                     flow_lines = dict_list_to_fixedwidth_str_list(flows)
+#                 if 'dns' in protocol:
+#                     for flow in flows:
+#                         answers = flow.get('answers', None)
+#                         if answers:
+#                             flow_lines = dict_list_to_fixedwidth_str_list(answers)
+#                 if flow_lines:
+#                     for line in flow_lines:
+#                         proto_line = proto_fmt.format(protocol, domain, line)
+#                         domain_lines.append(proto_line)
+# #                 domain_res.add_lines(protocol_lines)
+# #             domains_res.add_section(domain_res)
+#
+#         domains_res.add_lines(domain_lines)
+#         domains_res.set_heuristic(1000)
+#         network_res.add_subsection(domains_res)
+#
+#     if (domains_res and len(domains_res.body) > 0) or (hosts_res and len(hosts_res.body) > 0):
+#         al_result.add_section(network_res)
     log.debug("Network processing complete.")
 
 
