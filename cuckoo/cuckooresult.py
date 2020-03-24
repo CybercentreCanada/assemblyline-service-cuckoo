@@ -54,7 +54,7 @@ def generate_al_result(api_report, al_result, al_request, file_ext, random_ip_ra
             'ID': info.get('id'),
             'Duration': analysis_time,
             'Routing': info.get('route'),
-            'Cuckoo Version': info.get('version')
+            'Version': info.get('version')
         }
         info_res = ResultSection(title_text='Analysis Information',
                                  classification=classification,
@@ -447,15 +447,17 @@ def process_signatures(sigs, al_result, random_ip_range, classification):
                         # haven't already raised this ioc
                         if item not in skipped_mark_items and mark[item] not in iocs:
                             # Now check if any item in signature is whitelisted explicitly or in inetsim network
-                            if not contains_whitelisted_value(mark[item]) or (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
-                                iocs.append(mark[item])
-                                sigs_res.add_line('\tIOC: %s' % mark[item])
+                            if not contains_whitelisted_value(mark[item]):
+                                if not is_ip(mark[item]) or (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
+                                    iocs.append(mark[item])
+                                    sigs_res.add_line('\tIOC: %s' % mark[item])
                 elif mark_type == "ioc":
                     if mark.get('category') not in skipped_category_iocs and mark["ioc"] not in iocs:
                         # Now check if any item in signature is whitelisted explicitly or in inetsim network
-                        if not contains_whitelisted_value(mark["ioc"]) or (is_ip(mark["ioc"]) and ip_address(mark["ioc"]) not in inetsim_network):
-                            iocs.append(mark["ioc"])
-                            sigs_res.add_line('\tIOC: %s' % mark["ioc"])
+                        if not contains_whitelisted_value(mark["ioc"]):
+                            if not is_ip(mark["ioc"]) or (is_ip(mark["ioc"]) and ip_address(mark["ioc"]) not in inetsim_network):
+                                iocs.append(mark["ioc"])
+                                sigs_res.add_line('\tIOC: %s' % mark["ioc"])
 
         # Adding the signature result section to the parent result section
         sigs_res.add_subsection(sig_res)
@@ -677,6 +679,9 @@ def process_network(network, al_result, random_ip_range, classification):
         for network_table_record in network_table:
             if network_table_record["actual_ip"] == resolved_domains[domain]:
                 network_table_record["actual_ip"] = domain
+
+    # If there is a tcp request straight to a random IP that wasn't even resolved, then that is noise?
+
     if len(network_table) > 0:
         network_res.body = network_table
         al_result.add_section(network_res)
@@ -830,15 +835,15 @@ def process_network(network, al_result, random_ip_range, classification):
 
 
 def is_ip(val) -> bool:
-    is_ip = False
     try:
-        is_ip = ip_address(val)
+        ip_address(val)
+        return True
     except ValueError:
         # In the occasional circumstance, a sample with make a call
         # to an explicit IP, which breaks the way that AL handles
         # domains
         pass
-    return is_ip
+    return False
 
 
 # def add_flows(flow_type, key, protocol, flows, result_map):
