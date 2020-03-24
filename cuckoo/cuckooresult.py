@@ -7,6 +7,8 @@ import traceback
 import json
 import os
 from ipaddress import ip_address, ip_network
+from urllib.parse import urlparse
+from ip2geotools.databases.noncommercial import DbIpCity
 
 from collections import defaultdict
 from pprint import pprint
@@ -394,6 +396,7 @@ def process_signatures(sigs, al_result, classification):
     skipped_sig_iocs = []
     skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
+    iocs = []
 
     for sig in sigs:
         sig_name = sig.get('name')
@@ -445,19 +448,54 @@ def process_signatures(sigs, al_result, classification):
             sig_marks = sig.get('marks', [])
             for mark in sig_marks:
                 mark_type = mark.get("type")
-                if mark_type == "generic":  # If a mark is generic, then do:
+                if mark_type == "generic":
                     for item in mark:
-                        if item not in skipped_mark_items:
-                            sigs_res.add_line('\tIOC: %s' % mark[item])
+                        # Check if key is not flagged to skip, and that we
+                        # haven't already raised this ioc
+                        if item not in skipped_mark_items and mark[item] not in iocs:
+                            # Now check if any item in signature is whitelisted
+                            if not contains_whitelisted_value(mark[item]):
+                                iocs.append(mark[item])
+                                sigs_res.add_line('\tIOC: %s' % mark[item])
                 elif mark_type == "ioc":
-                    if mark.get('category') not in skipped_category_iocs:
-                        sigs_res.add_line('\tIOC: %s' % mark['ioc'])
+                    if mark.get('category') not in skipped_category_iocs and mark["ioc"] not in iocs:
+                        # Now check if any item in signature is whitelisted
+                        if not contains_whitelisted_value(mark["ioc"]):
+                            iocs.append(mark["ioc"])
+                            sigs_res.add_line('\tIOC: %s' % mark["ioc"])
 
         # Adding the signature result section to the parent result section
         sigs_res.add_subsection(sig_res)
     if len(sigs_res.subsections) > 0:
         al_result.add_section(sigs_res)
 
+
+def contains_whitelisted_value(val: str) -> bool:
+    if val is None:
+        return False
+    ip = re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', val)
+    url = re.search(r"((\w+:\/\/)[-a-zA-Z0-9:@;?&=\/%\+\.\*!'\(\),\$_\{\}\^~\[\]`#|]+)", val)
+    domain = re.search(r'^(((?!-))(xn--|_{1,1})?[a-z0-9-]{0,61}[a-z0-9]{1,1}\.)*(xn--)?([a-z0-9][a-z0-9\-]{0,60}|[a-z0-9-]{1,30}\.[a-z]{2,})$', val)
+    md5_hash = re.search(r"([a-fA-F\d]{32})", val)
+    if ip is not None:
+        ip = ip.group()
+        if wlist_check_ip(ip):
+            return True
+    elif url is not None:
+        url_pieces = urlparse(url.group())
+        domain = url_pieces.netloc
+        if wlist_check_domain(domain):
+            return True
+    elif domain is not None:
+        domain = domain.group()
+        if wlist_check_domain(domain):
+            return True
+    elif md5_hash is not None:
+        md5_hash = md5_hash.group()
+        if wlist_check_hash(md5_hash):
+            return True
+    else:
+        return False
 
 # def parse_protocol_data(flow_data, group_by='dst', group_fields=list()):
 #     protocol_data = defaultdict(list)
@@ -544,16 +582,21 @@ def process_network(network, al_result, random_ip_range, classification):
     # each call
     for protocol in network:
         if protocol not in skipped_protocols and network[protocol] != []:
+            title_text = "Protocol: %s" % protocol
+            protocol_res_sec = ResultSection(title_text=title_text,
+                                             classification=classification)
 
-            # TODO: Raise heuristic for domains and ips, but only one heurisitc per section
             # If either of these protocols contain items, then raise heuristic
-            # if protocol == "dns":
-            #     network_res.set_heuristic(1001)
-            # if protocol == "http":
-            #     network_res.set_heuristic(1000)
+            if protocol == "dns":
+                protocol_res_sec.set_heuristic(1001)
+            elif protocol == "http":
+                protocol_res_sec.set_heuristic(1000)
 
             network_calls = network[protocol]
             for network_call in network_calls:
+                if any(contains_whitelisted_value(network_call.get(item)) for item in ["host", "dst", "request", "uri"]):
+                    continue
+
                 network_table_record = {
                     "timestamp": network_call.get("time", ""),
                     "protocol": protocol,
@@ -565,8 +608,10 @@ def process_network(network, al_result, random_ip_range, classification):
                     "domain_type": "",
                     "destination_port": "",
                     "actual_ip": "",
+                    "destination_city": "",
                     "destination_country_code": "",
                 }
+
                 if "host" in network_call:
                     network_table_record["domain"] = network_call.get("host", "")
                 elif "request" in network_call:
@@ -586,8 +631,12 @@ def process_network(network, al_result, random_ip_range, classification):
                     network_table_record["destination_port"] = network_call.get("dport", "")
                 elif "port" in network_call:
                     network_table_record["destination_port"] = network_call.get("port", "")
-                network_table_record["actual_ip"] = network_call.get("dst", "")
-                # "destination_country_code": "",  # TODO: somehow get the country code of the destination IP
+                if "dst" in network_call:
+                    dst = network_call.get("dst", "")
+                    network_table_record["actual_ip"] = dst
+                    response = DbIpCity.get(dst, api_key='free')
+                    network_table_record["destination_city"] = response.city
+                    network_table_record["destination_country_code"] = response.country
 
                 # It's tagging time!
 
@@ -604,7 +653,7 @@ def process_network(network, al_result, random_ip_range, classification):
                 if domain != "" and domain not in tagged_domains and not is_ip:
                     tagged_domain = network_table_record["domain"]
                     tagged_domains.append(tagged_domain)
-                    network_res.add_tag("network.dynamic.domain", tagged_domain)
+                    protocol_res_sec.add_tag("network.dynamic.domain", tagged_domain)
 
                 # We check if the actual ip is not in the provided network
                 # because this network is randomly generated by INetSim and we
@@ -613,20 +662,21 @@ def process_network(network, al_result, random_ip_range, classification):
                 if ip != "" and ip not in tagged_ips and ip_address(ip) not in inetsim_network:
                     tagged_ip = network_table_record["actual_ip"]
                     tagged_ips.append(tagged_ip)
-                    network_res.add_tag("network.dynamic.ip", tagged_ip)
+                    protocol_res_sec.add_tag("network.dynamic.ip", tagged_ip)
 
                 path = network_table_record["path"]
                 if path not in skipped_paths and path not in tagged_uris:
                     tagged_uri = network_table_record["path"]
                     tagged_uris.append(tagged_uri)
-                    network_res.add_tag("network.dynamic.uri", tagged_uri)
+                    protocol_res_sec.add_tag("network.dynamic.uri", tagged_uri)
 
                 network_table.append(network_table_record)
+            if len(protocol_res_sec.tags) > 0:
+                network_res.add_subsection(protocol_res_sec)
 
     # Now for the cool stuff
     # 1 DNS request = corresponding UDP request on port 53
     # TODO: cool stuff
-
 
     network_res.body = network_table
     al_result.add_section(network_res)
