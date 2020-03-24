@@ -543,7 +543,7 @@ def process_network(network, al_result, random_ip_range, classification):
     # now to parse through every network call and create a nice table containing
     # each call
     for protocol in network:
-        if protocol not in skipped_protocols and protocol != []:
+        if protocol not in skipped_protocols and network[protocol] != []:
 
             # TODO: Raise heuristic for domains and ips, but only one heurisitc per section
             # If either of these protocols contain items, then raise heuristic
@@ -600,7 +600,7 @@ def process_network(network, al_result, random_ip_range, classification):
                     # In the occasional circumstance, a sample with make a call
                     # to an explicit IP, which breaks the way that AL handles
                     # domains
-                    continue
+                    pass
                 if domain != "" and domain not in tagged_domains and not is_ip:
                     tagged_domain = network_table_record["domain"]
                     tagged_domains.append(tagged_domain)
