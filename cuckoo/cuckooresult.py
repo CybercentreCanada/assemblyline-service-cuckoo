@@ -16,17 +16,10 @@ from pprint import pprint
 from assemblyline_v4_service.common.task import MaxExtractedExceeded
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, InvalidClassification
+from assemblyline_v4_service.common.request import ServiceRequest
 from cuckoo.clsids import clsids
 from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
 from cuckoo.signatures import check_signature
-
-try:
-    from typing import TYPE_CHECKING
-    if TYPE_CHECKING:
-        from assemblyline.al.service.base import ServiceRequest
-except ImportError:
-    # we don't care if this isn't here at runtime...
-    pass
 
 UUID_RE = re.compile(r"{([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\}")
 USER_SID_RE = re.compile(r"S-1-5-21-\d+-\d+-\d+-\d+")
@@ -79,7 +72,7 @@ def generate_al_result(api_report, al_result, al_request, file_ext, random_ip_ra
     if debug:
         process_debug(debug, al_result, classification)
     if sigs:
-        process_signatures(sigs, al_result, classification)
+        process_signatures(sigs, al_result, random_ip_range, classification)
     if network:
         process_network(network, al_result, random_ip_range, classification)
     if behavior:
@@ -224,8 +217,7 @@ def process_debug(debug, al_result, classification):
 #                 process_clsid(arg, result_map)
 
 
-def process_behavior(behavior, al_result, al_request, classification):
-    # type: (dict, Result, ServiceRequest, str) -> bool
+def process_behavior(behavior: dict, al_result: Result, al_request: ServiceRequest, classification: str) -> bool:
     log.debug("Processing behavior results.")
     executed = True
     result_map = {}
@@ -383,7 +375,7 @@ def process_behavior(behavior, al_result, al_request, classification):
     return executed
 
 
-def process_signatures(sigs, al_result, classification):
+def process_signatures(sigs, al_result, random_ip_range, classification):
     log.debug("Processing signature results.")
     if len(sigs) <= 0:
         return
@@ -397,6 +389,7 @@ def process_signatures(sigs, al_result, classification):
     skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     iocs = []
+    inetsim_network = ip_network(random_ip_range)
 
     for sig in sigs:
         sig_name = sig.get('name')
@@ -453,14 +446,14 @@ def process_signatures(sigs, al_result, classification):
                         # Check if key is not flagged to skip, and that we
                         # haven't already raised this ioc
                         if item not in skipped_mark_items and mark[item] not in iocs:
-                            # Now check if any item in signature is whitelisted
-                            if not contains_whitelisted_value(mark[item]):
+                            # Now check if any item in signature is whitelisted explicitly or in inetsim network
+                            if not contains_whitelisted_value(mark[item]) or (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
                                 iocs.append(mark[item])
                                 sigs_res.add_line('\tIOC: %s' % mark[item])
                 elif mark_type == "ioc":
                     if mark.get('category') not in skipped_category_iocs and mark["ioc"] not in iocs:
-                        # Now check if any item in signature is whitelisted
-                        if not contains_whitelisted_value(mark["ioc"]):
+                        # Now check if any item in signature is whitelisted explicitly or in inetsim network
+                        if not contains_whitelisted_value(mark["ioc"]) or (is_ip(mark["ioc"]) and ip_address(mark["ioc"]) not in inetsim_network):
                             iocs.append(mark["ioc"])
                             sigs_res.add_line('\tIOC: %s' % mark["ioc"])
 
@@ -471,7 +464,7 @@ def process_signatures(sigs, al_result, classification):
 
 
 def contains_whitelisted_value(val: str) -> bool:
-    if val is None:
+    if not val or not isinstance(val, str):
         return False
     ip = re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', val)
     url = re.search(r"((\w+:\/\/)[-a-zA-Z0-9:@;?&=\/%\+\.\*!'\(\),\$_\{\}\^~\[\]`#|]+)", val)
@@ -562,6 +555,7 @@ def contains_whitelisted_value(val: str) -> bool:
 def process_network(network, al_result, random_ip_range, classification):
     log.debug("Processing network results.")
     network_res = ResultSection(title_text="Network Activity",
+                                # body_format=BODY_FORMAT.MEMORY_DUMP,
                                 classification=classification)
 
     # Items that we will not be adding to the network activity table
@@ -575,6 +569,9 @@ def process_network(network, al_result, random_ip_range, classification):
     tagged_uris = []
 
     inetsim_network = ip_network(random_ip_range)
+
+    # This will contain the mapping of domains and their corresponding IPs
+    resolved_domains = {}
 
     network_table = []
 
@@ -612,10 +609,13 @@ def process_network(network, al_result, random_ip_range, classification):
                     "destination_country_code": "",
                 }
 
+                req = None
                 if "host" in network_call:
                     network_table_record["domain"] = network_call.get("host", "")
                 elif "request" in network_call:
-                    network_table_record["domain"] = network_call.get("request", "")
+                    req = network_call.get("request")
+                    network_table_record["domain"] = req
+                    resolved_domains[req] = ""
                 # Grabbing uri field instead of path field because AL cannot
                 # handle path as a URI for tags
                 network_table_record["path"] = network_call.get("uri", "")
@@ -624,6 +624,7 @@ def process_network(network, al_result, random_ip_range, classification):
                     if len(answers) > 0:
                         first_answer = answers[0]
                         resolved_ip = first_answer.get("data", "")
+                        resolved_domains[req] = resolved_ip
                         domain_type = first_answer.get("type", "")
                         network_table_record["resolved_ip"] = resolved_ip
                         network_table_record["domain_type"] = domain_type
@@ -642,15 +643,7 @@ def process_network(network, al_result, random_ip_range, classification):
 
                 # We check if domain is not an IP
                 domain = network_table_record["domain"]
-                is_ip = False
-                try:
-                    is_ip = ip_address(domain)
-                except ValueError:
-                    # In the occasional circumstance, a sample with make a call
-                    # to an explicit IP, which breaks the way that AL handles
-                    # domains
-                    pass
-                if domain != "" and domain not in tagged_domains and not is_ip:
+                if domain != "" and domain not in tagged_domains and not is_ip(domain):
                     tagged_domain = network_table_record["domain"]
                     tagged_domains.append(tagged_domain)
                     protocol_res_sec.add_tag("network.dynamic.domain", tagged_domain)
@@ -678,8 +671,15 @@ def process_network(network, al_result, random_ip_range, classification):
     # 1 DNS request = corresponding UDP request on port 53
     # TODO: cool stuff
 
-    network_res.body = network_table
-    al_result.add_section(network_res)
+    # If the network is INetSim, then the resolved IPs for domains are random
+    # Therefore we can replace all resolved IPs with the domain
+    for domain in resolved_domains:
+        for network_table_record in network_table:
+            if network_table_record["actual_ip"] == resolved_domains[domain]:
+                network_table_record["actual_ip"] = domain
+    if len(network_table) > 0:
+        network_res.body = network_table
+        al_result.add_section(network_res)
 
     # # IP activity
     # hosts = network.get("hosts", [])
@@ -827,6 +827,18 @@ def process_network(network, al_result, random_ip_range, classification):
 #     if (domains_res and len(domains_res.body) > 0) or (hosts_res and len(hosts_res.body) > 0):
 #         al_result.add_section(network_res)
     log.debug("Network processing complete.")
+
+
+def is_ip(val) -> bool:
+    is_ip = False
+    try:
+        is_ip = ip_address(val)
+    except ValueError:
+        # In the occasional circumstance, a sample with make a call
+        # to an explicit IP, which breaks the way that AL handles
+        # domains
+        pass
+    return is_ip
 
 
 # def add_flows(flow_type, key, protocol, flows, result_map):
