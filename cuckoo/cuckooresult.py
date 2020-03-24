@@ -675,12 +675,16 @@ def process_network(network, al_result, random_ip_range, classification):
 
     # If the network is INetSim, then the resolved IPs for domains are random
     # Therefore we can replace all resolved IPs with the domain
+    copy_of_network_table = network_table[:]
     for domain in resolved_domains:
-        for network_table_record in network_table:
+        for network_table_record in copy_of_network_table:
+            if not network_table_record["actual_ip"]:
+                continue
             if network_table_record["actual_ip"] == resolved_domains[domain]:
                 network_table_record["actual_ip"] = domain
-
-    # If there is a tcp request straight to a random IP that wasn't even resolved, then that is noise?
+            # If there is a tcp request straight to a random IP that wasn't even resolved, then that is noise?
+            elif ip_address(network_table_record["actual_ip"]) in inetsim_network:
+                network_table.remove(network_table_record)
 
     if len(network_table) > 0:
         network_res.body = network_table
