@@ -392,6 +392,10 @@ def process_signatures(sigs, al_result, random_ip_range, classification):
     inetsim_network = ip_network(random_ip_range)
 
     for sig in sigs:
+        # Sometime a signature is not initially meant to be skipped, but
+        # then it is raised because it detects whitelisted activity. Therefore
+        # this boolean flag will be used to determine this
+        sig_based_on_whitelist = False
         sig_name = sig.get('name')
 
         if sig_name in skipped_sigs:
@@ -451,6 +455,11 @@ def process_signatures(sigs, al_result, random_ip_range, classification):
                                 if not is_ip(mark[item]) or (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
                                     iocs.append(mark[item])
                                     sigs_res.add_line('\tIOC: %s' % mark[item])
+                                else:
+                                    sig_based_on_whitelist = True
+                            else:
+                                sig_based_on_whitelist = True
+
                 elif mark_type == "ioc":
                     if mark.get('category') not in skipped_category_iocs and mark["ioc"] not in iocs:
                         # Now check if any item in signature is whitelisted explicitly or in inetsim network
@@ -458,9 +467,14 @@ def process_signatures(sigs, al_result, random_ip_range, classification):
                             if not is_ip(mark["ioc"]) or (is_ip(mark["ioc"]) and ip_address(mark["ioc"]) not in inetsim_network):
                                 iocs.append(mark["ioc"])
                                 sigs_res.add_line('\tIOC: %s' % mark["ioc"])
+                            else:
+                                sig_based_on_whitelist = True
+                        else:
+                            sig_based_on_whitelist = True
 
-        # Adding the signature result section to the parent result section
-        sigs_res.add_subsection(sig_res)
+        if not sig_based_on_whitelist:
+            # Adding the signature result section to the parent result section
+            sigs_res.add_subsection(sig_res)
     if len(sigs_res.subsections) > 0:
         al_result.add_section(sigs_res)
 
@@ -673,18 +687,23 @@ def process_network(network, al_result, random_ip_range, classification):
     # 1 DNS request = corresponding UDP request on port 53
     # TODO: cool stuff
 
-    # If the network is INetSim, then the resolved IPs for domains are random
-    # Therefore we can replace all resolved IPs with the domain
     copy_of_network_table = network_table[:]
-    for domain in resolved_domains:
-        for network_table_record in copy_of_network_table:
-            if not network_table_record["actual_ip"]:
-                continue
+    for network_table_record in copy_of_network_table:
+        if not network_table_record["actual_ip"]:
+            continue
+
+        # If the network is INetSim, then the resolved IPs for domains are
+        # random. Therefore we can replace all resolved IPs with the domain
+        for domain in resolved_domains:
             if network_table_record["actual_ip"] == resolved_domains[domain]:
                 network_table_record["actual_ip"] = domain
+                # Also resetting the geoloation of the IP since the IP is fake
+                network_table_record["destination_country_code"] = ""
+                network_table_record["destination_city"] = ""
+
             # If there is a tcp request straight to a random IP that wasn't even resolved, then that is noise?
-            elif ip_address(network_table_record["actual_ip"]) in inetsim_network:
-                network_table.remove(network_table_record)
+        if is_ip(network_table_record["actual_ip"]) and ip_address(network_table_record["actual_ip"]) in inetsim_network:
+            network_table.remove(network_table_record)
 
     if len(network_table) > 0:
         network_res.body = network_table
