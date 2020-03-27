@@ -1,4 +1,5 @@
 CUCKOO_SIGNATURES = {
+  # TODO: update with categories
   "html_flash": 4,
   "js_eval": 5,
   "js_iframe": 6,
