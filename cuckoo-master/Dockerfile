@@ -62,8 +62,8 @@ ENV machinery=vmware
 #
 ## Compile and install Cuckoo and setup PostgreSQL database
 #RUN adduser cuckoo \
-#    && pip install -U pip setuptools cryptography psycopg2 \
-#    && pip install -U git+https://github.com/cccs-kevin/cuckoo.git@cuckoo-azure \
+#    && pip install --no-cache-dir -U pip setuptools cryptography psycopg2 \
+#    && pip install --no-cache-dir -U git+https://github.com/cccs-kevin/cuckoo.git@cuckoo-azure \
 #    && sed -i 's/machinery = virtualbox/machinery = ${machinery}/' .cuckoo/conf/cuckoo.conf \
 #    && sed -i 's/ip = 192.168.56.1/ip = ${host_public_ip}/' .cuckoo/conf/cuckoo.conf \
 #    && cuckoo -d \
@@ -111,16 +111,16 @@ RUN apt-get update -y -qq \
 #        psql -U postgres -c "CREATE DATABASE cuckootestimport"
 #        psql -U postgres cuckootestimport <tests/files/sql/11pg.sql >/dev/null
 
-RUN pip install -U pip setuptools
+RUN pip install --no-cache-dir -U pip setuptools
 
 # Compile and install Cuckoo and setup PostgreSQL database
 RUN adduser cuckoo \
-    && pip install -U pip setuptools \
+    && pip install --no-cache-dir -U pip setuptools \
     && git clone --single-branch --branch cuckoo-azure-2 https://github.com/cccs-kevin/cuckoo.git \
     && cd cuckoo \
     && python stuff/monitor.py \
     && python setup.py sdist \
-    && pip install cuckoo;
+    && pip install --no-cache-dir cuckoo;
 
 RUN cuckoo -d \
     && sed -i 's/machinery = virtualbox/machinery = ${machinery}/' .cuckoo/conf/cuckoo.conf \
