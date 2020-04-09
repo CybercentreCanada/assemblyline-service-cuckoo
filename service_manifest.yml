@@ -32,6 +32,8 @@ config:
   dump_memory: false
   no_monitor: false
   routing: inetsim # TODO: implement routing options
+  dedup_similar_percent: 80
+  max_dll_exports_exec: 5
 
   # Cuckoo request specification
   max_file_size: 80000000

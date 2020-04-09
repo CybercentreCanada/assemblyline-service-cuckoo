@@ -133,11 +133,8 @@ class CuckooTask(dict):
         self.file = sample
         self.update(kwargs)
         self.id = None
-        self.submitted = False
-        self.completed = False
         self.report = None
         self.errors = []
-        self.machine_info = None
 
 
 # noinspection PyBroadException
@@ -145,21 +142,10 @@ class CuckooTask(dict):
 class Cuckoo(ServiceBase):
     SERVICE_CLASSIFICATION = ""  # will default to unrestricted
 
-    SERVICE_DEFAULT_CONFIG = {
-        "dedup_similar_percent": 80,
-
-        # If given a DLL without being told what function(s) to execute,
-        # try to execute at most this many of the exports
-        "max_dll_exports_exec": 5
-    }
-
     def __init__(self, config=None):
         super(Cuckoo, self).__init__(config)
         self.cfg = config
-        self.vm_xml = None
-        self.vm_snapshot_xml = None
         self.file_name = None
-        self.base_url = None
         self.submit_url = None
         self.query_task_url = None
         self.delete_task_url = None
@@ -171,11 +157,8 @@ class Cuckoo(ServiceBase):
         self.task = None
         self.file_res = None
         self.cuckoo_task = None
-        self.al_report = None
         self.session = None
-        self.enabled_routes = None
         self.ssdeep_match_pct = 0
-        self.restart_interval = 0
         self.machines = None
         self.auth_header = None
 
@@ -199,7 +182,7 @@ class Cuckoo(ServiceBase):
     def start(self):
         self.auth_header = {'Authorization': self.cfg['auth_header_value']}
         self.import_service_deps()
-        self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent", 80))
+        self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent"))
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
@@ -215,7 +198,6 @@ class Cuckoo(ServiceBase):
         self.file_res = request.result
         file_content = request.file_contents
         self.cuckoo_task = None
-        self.al_report = None
         self.file_name = os.path.basename(request.file_name)
 
         # Check the filename to see if it's mime encoded
@@ -360,7 +342,6 @@ class Cuckoo(ServiceBase):
                     self.log.debug("Generating AL Result from Cuckoo results..")
                     success = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
-                                                 request,
                                                  file_ext,
                                                  self.cfg.get("random_ip_range"),
                                                  self.SERVICE_CLASSIFICATION)
@@ -487,10 +468,7 @@ class Cuckoo(ServiceBase):
                             )
 
                 if len(exports_available) > 0 and kwargs.get("package", "") == "dll_multi":
-                    max_dll_exports = self.cfg.get(
-                        "max_dll_exports_exec",
-                        self.SERVICE_DEFAULT_CONFIG["max_dll_exports_exec"]
-                    )
+                    max_dll_exports = self.cfg["max_dll_exports_exec"]
                     dll_multi_section = ResultSection(
                         title_text="Executed multiple DLL exports",
                         body="Executed the following exports from the DLL: %s" % ",".join(exports_available[:max_dll_exports])
@@ -612,12 +590,12 @@ class Cuckoo(ServiceBase):
             return "missing"
 
         # Detect if mismatch
-        if task_info.get("id") != self.cuckoo_task.id:
+        if task_info["id"] != self.cuckoo_task.id:
             self.log.warning("Cuckoo returned mismatched task info for task: %s. Trying again.." %
                              self.cuckoo_task.id)
             return None
 
-        if task_info.get("guest", {}).get("status") == "starting":
+        if task_info.get("guest", {})["status"] == "starting":
             return None
 
         return "started"
@@ -632,16 +610,16 @@ class Cuckoo(ServiceBase):
             return "missing"
 
         # Detect if mismatch
-        if task_info.get("id") != self.cuckoo_task.id:
+        if task_info["id"] != self.cuckoo_task.id:
             self.log.warning("Cuckoo returned mismatched task info for task: %s. Trying again.." %
                              self.cuckoo_task.id)
             return None
 
         # Check for errors first to avoid parsing exceptions
-        status = task_info.get("status")
+        status = task_info["status"]
         if "fail" in status:
             self.log.error("Analysis has failed. Check cuckoo server logs for errors.")
-            self.cuckoo_task.errors = self.cuckoo_task.errors + task_info.get('errors')
+            self.cuckoo_task.errors = self.cuckoo_task.errors + task_info['errors']
             return status
         elif status == "completed":
             self.log.debug("Analysis has completed, waiting on report to be produced.")
@@ -688,7 +666,7 @@ class Cuckoo(ServiceBase):
             return None
         else:
             resp_dict = dict(resp.json())
-            task_id = resp_dict.get("task_id")
+            task_id = resp_dict["task_id"]
             if not task_id:
                 # Spender case?
                 task_id = resp_dict.get("task_ids", [])
@@ -782,7 +760,7 @@ class Cuckoo(ServiceBase):
                 self.log.debug("Failed to query task %s. Status code: %d" % (task_id, resp.status_code))
         else:
             resp_dict = dict(resp.json())
-            task_dict = resp_dict.get('task')
+            task_dict = resp_dict['task']
             if task_dict is None or task_dict == '':
                 self.log.warning('Failed to query task. Returned task dictionary is None or empty')
         return task_dict
@@ -803,7 +781,7 @@ class Cuckoo(ServiceBase):
             self.log.debug("Failed to query machine %s. Status code: %d" % (machine_name, resp.status_code))
         else:
             resp_dict = dict(resp.json())
-            machine_dict = resp_dict.get('machine')
+            machine_dict = resp_dict['machine']
         return machine_dict
 
     @retry(wait_fixed=1000, stop_max_attempt_number=2)
@@ -924,20 +902,20 @@ class Cuckoo(ServiceBase):
             self.log.debug("Querying machine info for %s" % machine_name)
             machine_name_exists = False
             machine = None
-            for machine in self.machines.get('machines'):
-                if machine.get('name') == machine_name:
+            for machine in self.machines['machines']:
+                if machine['name'] == machine_name:
                     machine_name_exists = True
                     break
 
             if not machine_name_exists:
                 raise Exception
 
-            manager = self.cuckoo_task.report.get("info", "").get("machine", "").get("manager", "")
+            manager = self.cuckoo_task.report["info"]["machine"]["manager"]
             body = {
-                'Name': str(machine.get('name')),
+                'Name': str(machine['name']),
                 'Manager': manager,
-                'Platform': str(machine.get('platform')),
-                'IP': str(machine.get('ip')),
+                'Platform': str(machine['platform']),
+                'IP': str(machine['ip']),
                 'Tags': []}
             for tag in machine.get('tags', []):
                 body['Tags'].append(safe_str(tag).replace('_', ' '))
@@ -948,7 +926,7 @@ class Cuckoo(ServiceBase):
                                             body=json.dumps(body))
 
             self.file_res.add_section(machine_section)
-            return str(machine.get('ip', ""))
+            return str(machine['ip'])
         except Exception as exc:
             self.log.error('Unable to retrieve machine information for %s: %s' % (machine_name, safe_str(exc)))
 

@@ -1,23 +1,17 @@
 import datetime
-import hashlib
 import logging
+import uuid
 import re
-import ssdeep
 import traceback
 import json
-import os
 from ipaddress import ip_address, ip_network
 from urllib.parse import urlparse
 from ip2geotools.databases.noncommercial import DbIpCity
 
-from collections import defaultdict
 from pprint import pprint
 
-from assemblyline_v4_service.common.task import MaxExtractedExceeded
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, InvalidClassification
-from assemblyline_v4_service.common.request import ServiceRequest
-from cuckoo.clsids import clsids
 from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
 from cuckoo.signatures import check_signature
 
@@ -29,7 +23,7 @@ log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 
 
 # noinspection PyBroadException
-def generate_al_result(api_report, al_result, al_request, file_ext, random_ip_range, service_classification=Classification.UNRESTRICTED):
+def generate_al_result(api_report, al_result, file_ext, random_ip_range, service_classification=Classification.UNRESTRICTED):
     log.debug("Generating AL Result.")
     try:
         classification = Classification.max_classification(Classification.UNRESTRICTED, service_classification)
@@ -39,9 +33,9 @@ def generate_al_result(api_report, al_result, al_request, file_ext, random_ip_ra
 
     info = api_report.get('info')
     if info is not None:
-        start_time = info.get('started')
-        end_time = info.get('ended')
-        duration = info.get('duration')
+        start_time = info['started']
+        end_time = info['ended']
+        duration = info['duration']
         analysis_time = -1  # Default error time
         try:
             start_time = datetime.datetime.fromtimestamp(int(start_time)).strftime('%Y-%m-%d %H:%M:%S')
@@ -51,10 +45,10 @@ def generate_al_result(api_report, al_result, al_request, file_ext, random_ip_ra
         except:
             pass
         body = {
-            'ID': info.get('id'),
+            'ID': info['id'],
             'Duration': analysis_time,
-            'Routing': info.get('route'),
-            'Version': info.get('version')
+            'Routing': info['route'],
+            'Version': info['version']
         }
         info_res = ResultSection(title_text='Analysis Information',
                                  classification=classification,
@@ -62,116 +56,32 @@ def generate_al_result(api_report, al_result, al_request, file_ext, random_ip_ra
                                  body=json.dumps(body))
         al_result.add_section(info_res)
 
-    debug = api_report.get('debug')
+    debug = api_report.get('debug', {})
     sigs = api_report.get('signatures', [])
     network = api_report.get('network', {})
-    behavior = api_report.get('behavior')
-    # droidmon = api_report.get('droidmon')
+    behaviour = api_report.get('behavior', [])  # Note conversion from American to Canadian spelling
 
-    # executed = True
+    executed = False
     if debug:
         process_debug(debug, al_result, classification)
     if sigs:
         process_signatures(sigs, al_result, random_ip_range, classification)
     if network:
         process_network(network, al_result, random_ip_range, classification)
-    if behavior:
-        process_behavior(behavior, al_result, al_request, classification)
-
-    # if droidmon:
-    #     process_droidmon(droidmon, network, al_result, classification)
-
-    else:
-        log.debug("It doesn't look like this file executed (unsupported file type?)")
-        noexec_res = ResultSection(title_text="Notes", classification=classification)
+    if behaviour:
+        executed = process_behaviour(behaviour, al_result, classification)
+    if not executed:
+        log.debug(
+            "It doesn't look like this file executed (unsupported file type?)")
+        noexec_res = ResultSection(title_text="Notes",
+                                   classification=classification)
         noexec_res.add_line('Unrecognized file type: '
                             'No program available to execute a file with the following extension: %s'
                             % file_ext)
         al_result.add_section(noexec_res)
+
     log.debug("AL result generation completed!")
     return True
-
-
-# def process_clsid(key, result_map):
-#     clsid_map = result_map.get('clsids', defaultdict(str))
-#     for uuid in set(UUID_RE.findall(safe_str(key))):
-#         # Check if we have a matching CLSID
-#         uuid = uuid.upper()
-#         name = clsids.get(uuid)
-#         if name:
-#             clsid_map[name] = uuid
-#     result_map['clsids'] = clsid_map
-
-
-# def process_droidmon(droidmon, network, al_result, classification):
-#     droidmon_res = ResultSection(title_text="Droidmon", classification=classification)
-#
-#     if 'raw' in droidmon:
-#         classes = set()
-#         for raw_entry in droidmon['raw']:
-#             if "class" in raw_entry:
-#                 classes.add(raw_entry['class'])
-#         if len(classes) > 0:
-#             sorted_classes = sorted(safe_str(x) for x in classes)
-#             _, cls_hash_one, cls_hash_two = ssdeep.hash(''.join(sorted_classes)).split(':')
-#             droidmon_res.add_tag("dynamic.ssdeep.dynamic_classes", cls_hash_one)
-#             droidmon_res.add_tag("dynamic.ssdeep.dynamic_classes", cls_hash_two)
-#     if 'httpConnections' in droidmon:
-#         # Add this http information to the main network map:
-#         for req in droidmon['httpConnections']:
-#             match = DROIDMON_CONN_RE.match(req["request"])
-#             if match:
-#                 meth = match.group(1)
-#                 uri = match.group(2)
-#                 domain = match.group(3)
-#                 port = match.group(4)
-#                 path = match.group(5)
-#                 ver = match.group(6)
-#                 seen = False
-#                 for entry in network['http']:
-#                     if entry['uri'] == uri and entry['method'] == meth and entry['port'] == port:
-#                         entry['count'] += 1
-#                         seen = True
-#                         break
-#                 if not seen:
-#                     new_entry = {
-#                         "count": 1,
-#                         "body": "",
-#                         "uri": uri,
-#                         "user-agent": "",
-#                         "method": meth,
-#                         "host": domain,
-#                         "version": ver,
-#                         "path": path,
-#                         "data": "",
-#                         "port": int(port) if port else None
-#                     }
-#                     log.warning(new_entry)
-#                     network['http'].append(new_entry)
-#
-#     if 'sms' in droidmon:
-#         sms_res = ResultSection(title_text='SMS Activity',
-#                                 classification=classification,
-#                                 body_format=BODY_FORMAT.MEMORY_DUMP)
-#         sms_res.set_heuristic(1)
-#         sms_lines = dict_list_to_fixedwidth_str_list(droidmon['sms'])
-#         for sms_line in sms_lines:
-#             sms_res.add_line(sms_line)
-#         for sms in droidmon['sms']:
-#             droidmon_res.add_tag("info.phone_number", sms['dest_number'])
-#         al_result.add_section(sms_res)
-#
-#     if 'crypto_keys' in droidmon:
-#         crypto_res = ResultSection(title_text='Crypto Keys',
-#                                    classification=classification,
-#                                    body_format=BODY_FORMAT.MEMORY_DUMP)
-#         crypto_res.set_heuristic(2)
-#         crypto_key_lines = dict_list_to_fixedwidth_str_list(droidmon['crypto_keys'])
-#         for crypto_key_line in crypto_key_lines:
-#             crypto_res.add_line(crypto_key_line)
-#         for crypto_key in droidmon['crypto_keys']:
-#             droidmon_res.add_tag("technique.crypto", crypto_key['type'])
-#         al_result.add_section(crypto_res)
 
 
 def process_debug(debug, al_result, classification):
@@ -195,197 +105,96 @@ def process_debug(debug, al_result, classification):
     return failed
 
 
-# def process_key(key, result_map):
-#     keys = result_map.get('regkeys', [])
-#     key = USER_SID_RE.sub("S-1-5-21-<DOMAIN_ID>-<RELATIVE_ID>", key)
-#     keys.append(key)
-#     keys.append(key)
-#     # Check for CLSIDs
-#     process_clsid(key, result_map)
-#     result_map['regkeys'] = keys
-
-
-# def process_com(args, result_map):
-#     if "clsid" in args:
-#         process_clsid(args.get("clsid"), result_map)
-#     else:
-#         for arg in args:
-#             if isinstance(arg, dict):
-#                 if arg.get("name") == "ClsId":
-#                     process_clsid(arg.get("value"), result_map)
-#             elif isinstance(arg, str):
-#                 process_clsid(arg, result_map)
-
-
-def process_behavior(behavior: dict, al_result: Result, al_request: ServiceRequest, classification: str) -> bool:
+def process_behaviour(behaviour: dict, al_result: Result, classification: str) -> bool:
     log.debug("Processing behavior results.")
-    executed = True
-    result_map = {}
-    # res_sec = None
-
-    # Spender
-    # for key in behavior.get("summary", {}).get("keys", []):
-    #     process_key(key, result_map)
-    # # Cuckoobox
-    # for key in behavior.get("summary", {}).get("regkey_opened", []):
-    #     process_key(key, result_map)
-
-    result_map['processtree'] = behavior.get("processtree")
-    # for process in behavior.get("processes"):
-    #     # pid = process.get("process_id")
-    #     for call in process.get("calls"):
-    #         api = call.get("api")
-    #         if "CoCreateInstance" in api:
-    #             process_com(call.get("arguments"), result_map)
-                # TODO: More interesting API stuff.
+    executed = False
 
     # Make a Process Tree Section
-    process_tree_section = ResultSection("Spawned Process Tree", body_format=BODY_FORMAT.JSON, body=json.dumps(result_map["processtree"]))
-    al_result.add_section(process_tree_section)
+    process_tree = behaviour["processtree"]
+    # Cleaning keys, value pairs
+    for process in process_tree:
+        process = remove_process_keys(process)
+    if len(process_tree) > 0:
+        process_tree_section = ResultSection(title_text="Spawned Process Tree",
+                                             classification=classification)
+        process_tree_section.body = process_tree
+        executed = True
+        al_result.add_section(process_tree_section)
 
-    # guids = behavior.get("summary", {}).get("guid", [])
+    # Make a Processes Section
+    processes = behaviour["processes"]
+    processes_body = []
+    for process in processes:
+        process_struct = {
+            "timestamp": process["first_seen"],
+            "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # in order to identify which process the uuid relates to
+            "image": process["process_path"],
+            "command_line": process["command_line"]
+        }
+        processes_body.append(process_struct)
 
-    # result_limit = 25
+    if len(processes_body) > 0:
+        processes_section = ResultSection(title_text="Processes",
+                                          classification=classification)
+        processes_section.body = processes_body
+        executed = True
+        al_result.add_section(processes_section)
 
-    # result_queries = {"directory_created":  ["Directories Created", result_limit, None],
-    #                   "directory_removed":  ["Directories Deleted", result_limit, None],
-    #                   "dll_loaded":         ["Modules Loaded", result_limit, None],
-    #                   "file_deleted":       ["Files Deleted", result_limit, None],
-    #                   "file_exists":        ["Check File: Exists", result_limit, None],
-    #                   "file_failed":        ["Check File: Failed", result_limit, None],
-    #                   "regkey_written":     ["Registry Keys Written", result_limit, None],
-    #                   "regkey_opened":     ["Registry Keys Opened", result_limit, None],
-    #                   "regkey_deleted":     ["Registry Keys Deleted", result_limit, None],
-    #                   "command_line":       ["Commands", None, None],
-    #                   "downloads_file":     ["Files Downloaded", None, None],
-    #                   "file_written":       ["Files Written", None, "file.path"],
-    #                   "wmi_query":          ["WMI Queries", None, None],
-    #                   "mutex":              ["Mutexes", None, "dynamic.mutex"],
-    #                   }
+    # Make the RegKey Section
+    tagged_regkeys = []
+    summary = behaviour.get("summary", {})
+    regkeys_written = summary.get("regkey_written", [])
+    regkey_res_sec = None
+    if len(regkeys_written) > 0:
+        regkey_res_sec = ResultSection(title_text="Registry Keys Written",
+                                       classification=classification)
+    kv_body = {}
+    for regkey_written in regkeys_written:
+        r = regkey_written.split(",")
+        if len(r) > 1:
+            kv_body[r[0]] = r[1]
+            reg = "{0}:{1}".format(safe_str(r[0]), safe_str(r[1]))
+        else:
+            kv_body[r[0]] = ""  # TODO: what is this value then?
+            reg = "{0}".format(safe_str(r[0]))
+        if reg not in tagged_regkeys:
+            tagged_regkeys.append(reg)
+            regkey_res_sec.add_tag("dynamic.registry_key", reg)
+    if len(kv_body.items()) > 0:
+        regkey_res_sec.body_format = BODY_FORMAT.KEY_VALUE
+        regkey_res_sec.body = json.dumps(kv_body)
+        executed = True
+        al_result.add_section(regkey_res_sec)
 
-    # # Creating grandparent sections
-    # file_system_activity = ResultSection(title_text="File System Activity",
-    #                                      classification=classification)
-    #
-    # # Creating parent sections
-    # directory_activity = ResultSection(title_text="Directory Activity",
-    #                                    classification=classification)
-    # file_activity = ResultSection(title_text="File Activity",
-    #                               classification=classification)
-    # registry_key_activity = ResultSection(title_text="Registry Key Activity",
-    #                                       classification=classification)
-    #
-    # for q_name, [title, limit, tag_type] in result_queries.items():
-    #     q_res = behavior.get("summary", {}).get(q_name, [])
-    #     if q_res:
-    #         if limit is not None:
-    #             q_res = q_res[:limit]
-    #             title = "%s (Limit %i)" % (title, limit)
-    #
-    #         res_sec = ResultSection(title_text=title, classification=classification)
-    #         if q_name == "command_line":
-    #             for ln in map(safe_str, q_res):
-    #                 res_sec.add_line("$\t" + ln)
-    #                 if tag_type is not None:
-    #                     res_sec.add_tag(tag_type, ln)
-    #         else:
-    #             for ln in map(safe_str, q_res):
-    #                 res_sec.add_line(ln)
-    #                 if tag_type is not None:
-    #                     res_sec.add_tag(tag_type, ln)
-    #         # Dump out contents to a temporary file and add as an extracted file
-    #         if q_name == "command_line":
-    #             for raw_ln in q_res:
-    #                 cli_hash = hashlib.sha256(raw_ln.encode('utf-8')).hexdigest()
-    #                 temp_filepath = os.path.join(al_request._working_directory, "command_%s" % cli_hash[:10])
-    #                 with open(temp_filepath, 'wb') as temp_fh:
-    #                     temp_fh.write(raw_ln.encode())
-    #                 try:
-    #                     al_request.add_extracted(temp_filepath, "command_line_dump.txt",
-    #                                              "Extracted command_line from Cuckoo")
-    #                 except MaxExtractedExceeded:
-    #                     log.debug("The maximum amount of files to be extracted is 501, "
-    #                               "which has been exceeded in this submission")
-    #
-    #         # Display Registry Keys Written as key value pairs
-    #         if q_name in ["regkey_written"]:
-    #             kv_body = {}
-    #             for regkey in q_res:
-    #                 r = regkey.split(",")
-    #                 if len(r) > 1:
-    #                     kv_body[r[0]] = r[1]
-    #                 else:
-    #                     kv_body[r[0]] = ""
-    #             res_sec.body_format = BODY_FORMAT.KEY_VALUE
-    #             res_sec.body = json.dumps(kv_body)
-    #
-    #         # Add respective subsections to parent sections
-    #         if q_name in ["directory_created", "directory_removed"]:
-    #             directory_activity.add_subsection(res_sec)
-    #         elif q_name in ["file_written", "file_deleted", "file_exists", "file_failed", "downloads_file"]:
-    #             file_activity.add_subsection(res_sec)
-    #         elif q_name in ["regkey_written", "regkey_opened", "regkey_deleted"]:
-    #             registry_key_activity.add_subsection(res_sec)
-    #         elif q_name in ["dll_loaded"]:
-    #             file_system_activity.add_subsection(res_sec)
-    #         elif q_name in ["command_line"]:
-    #             res_sec.body_format = BODY_FORMAT.MEMORY_DUMP
-    #             al_result.add_section(res_sec)
-    #         elif q_name in ["wmi_query", "mutex"]:
-    #             al_result.add_section(res_sec)
-    #
-    # # Adding parent sections to grandparent section and grandparent to result
-    # if len(directory_activity.subsections) > 0:
-    #     file_system_activity.add_subsection(directory_activity)
-    # if len(file_activity.subsections) > 0:
-    #     file_system_activity.add_subsection(file_activity)
-    # if len(registry_key_activity.subsections) > 0:
-    #     if len(result_map.get('regkeys', [])) > 0:
-    #         sorted_regkeys = sorted(
-    #             [safe_str(x) for x in result_map['regkeys']])
-    #         regkey_hash = ssdeep.hash(''.join(sorted_regkeys))
-    #         registry_key_activity.add_tag("dynamic.ssdeep.regkeys", value=regkey_hash)
-    #     file_system_activity.add_subsection(registry_key_activity)
-    # if len(file_system_activity.subsections) > 0:
-    #     al_result.add_section(file_system_activity)
-    #
-    # if len(guids) > 0:
-    #     process_com(guids, result_map)
-    #
-    # # Make it serializable and sorted.. maybe we hash these?
-    # # Could probably do the same thing with registry keys..
-    # if result_map.get('clsids', {}) != {}:
-    #     # Hash
-    #     sorted_clsids = sorted([safe_str(x) for x in result_map['clsids'].values()])
-    #     ssdeep_clsid_hash = ssdeep.hash(''.join(sorted_clsids))
-    #
-    #     clsids_hash = hashlib.sha1((','.join(sorted_clsids)).encode('utf-8')).hexdigest()
-    #     if wlist_check_hash(clsids_hash):
-    #         # Benign activity
-    #         executed = False
-    #
-    #     # Report
-    #     clsid_res = ResultSection(title_text="CLSIDs", classification=classification)
-    #     clsid_res.add_tag("dynamic.ssdeep.cls_ids", ssdeep_clsid_hash)
-    #     for clsid in sorted(result_map['clsids'].keys()):
-    #         clsid_res.add_line(clsid + ' : ' + result_map['clsids'][clsid])
-    #     al_result.add_section(clsid_res)
-
-    log.debug("Behavior processing completed. Looks like valid execution: %s" % str(executed))
+    log.debug("Behavior processing completed.")
     return executed
 
 
-def process_signatures(sigs, al_result, random_ip_range, classification):
+def remove_process_keys(process: dict) -> dict:
+    """
+    There are several keys that we do not want in the final form of a process
+    dict. This method removes those keys
+    :param process: dict
+    :return: dict
+    """
+    list_of_keys_to_be_popped = ["track", "pid", "first_seen", "ppid"]
+    for key in list_of_keys_to_be_popped:
+        process.pop(key)
+    children = process["children"]
+    if len(children) > 0:
+        for child in children:
+            child = remove_process_keys(child)
+    return process
+
+
+def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, classification: str):
     log.debug("Processing signature results.")
     if len(sigs) <= 0:
         return
 
     sigs_res = ResultSection(title_text="Signatures", classification=classification)
-    # skipped_sigs = ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
-    skipped_sigs = []
-    # print_iocs = ['dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities',
-    #               'persistence_autorun']
-    skipped_sig_iocs = []
+    skipped_sigs = []  # ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
+    skipped_sig_iocs = []  # 'dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities', 'persistence_autorun']
     skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
@@ -397,7 +206,7 @@ def process_signatures(sigs, al_result, random_ip_range, classification):
         # then it is raised because it detects whitelisted activity. Therefore
         # this boolean flag will be used to determine this
         sig_based_on_whitelist = False
-        sig_name = sig.get('name')
+        sig_name = sig['name']
 
         if sig_name in skipped_sigs:
             continue
@@ -438,7 +247,7 @@ def process_signatures(sigs, al_result, random_ip_range, classification):
         if markcount > 0 and sig_name not in skipped_sig_iocs:
             sig_marks = sig.get('marks', [])
             for mark in sig_marks:
-                mark_type = mark.get("type")
+                mark_type = mark["type"]
                 if mark_type == "generic":
                     for item in mark:
                         # Check if key is not flagged to skip, and that we
@@ -500,79 +309,11 @@ def contains_whitelisted_value(val: str) -> bool:
     else:
         return False
 
-# def parse_protocol_data(flow_data, group_by='dst', group_fields=list()):
-#     protocol_data = defaultdict(list)
-#     for flow in flow_data:
-#         group = flow.get(group_by)
-#         flow_data = {}
-#         for field in group_fields:
-#             flow_data[field] = flow.get(field)
-#         if flow_data not in protocol_data[group]:
-#             protocol_data[group].append(flow_data)
-#     return protocol_data
-#
-#
-# def dict_list_to_fixedwidth_str_list(dict_list, print_keys=True):
-#     out_lines = []
-#     lens = {}
-#     max_lens = {}
-#     for in_dict in dict_list:
-#         for k, v in in_dict.items():
-#             k_len = len(str(k))
-#             v_len = len(str(v))
-#             max_lens[k] = max(max_lens.get(k, 0), v_len+4)
-#             lens[k] = (k_len, max_lens[k])
-#     if print_keys:
-#         fmt_template = '{0:<%d}: {1:<%d}'
-#     else:
-#         fmt_template = '{0:<%d}'
-#
-#     for in_dict in dict_list:
-#         output = ''
-#         for k in sorted(in_dict.keys()):
-#             if print_keys:
-#                 fmt = fmt_template % lens[k]
-#                 output += fmt.format(k, in_dict[k])
-#             else:
-#                 fmt = fmt_template % lens[k][1]
-#                 output += fmt.format(in_dict[k])
-#
-#         out_lines.append(output)
-#     return out_lines
 
-
-# This is probably just a temporary requirement.. the _ex http/s flow data doesn't have the same formatting
-# for the uri field.
-# def _add_ex_data(proto_data, proto_ex_data, protocol, port):
-#     # Format and add _ex data
-#     for host in proto_ex_data:
-#         for flow in proto_ex_data[host]:
-#             if flow['dport'] == port:
-#                 full_uri = "%s://%s%s" % (protocol, host, flow['uri'])
-#             else:
-#                 full_uri = "%s://%s:%d%s" % (protocol, host, flow['dport'], flow['uri'])
-#             flow['uri'] = full_uri
-#             flow['port'] = flow['dport']
-#             flow.pop('dport')
-#         if host in proto_data:
-#             for flow in proto_ex_data[host]:
-#                 if flow not in proto_data[host]:
-#                     proto_data[host].append(flow)
-#         else:
-#             proto_data[host] = proto_ex_data[host][:]
-
-
-def process_network(network, al_result, random_ip_range, classification):
+def process_network(network: dict, al_result: Result, random_ip_range: str, classification: str):
     log.debug("Processing network results.")
     network_res = ResultSection(title_text="Network Activity",
-                                # body_format=BODY_FORMAT.MEMORY_DUMP,
                                 classification=classification)
-
-    # Items that we will not be adding to the network activity table
-    skipped_protocols = ["tls", "dns_servers", "hosts", "pcap_sha256", "domains", "dead_hosts", "sorted_pcap_sha256", "http_ex", "https_ex"]
-    skipped_paths = ["", "/"]
-    skipped_ports = []
-    skipped_ips = []
 
     # Lists containing items that could be tagged multiple times,
     # which we want to avoid
@@ -580,287 +321,153 @@ def process_network(network, al_result, random_ip_range, classification):
     tagged_domains = []
     tagged_uris = []
     tagged_ports = []
+    tagged_protocols = []
 
     inetsim_network = ip_network(random_ip_range)
 
-    # This will contain the mapping of domains and their corresponding IPs
-    resolved_domains = {}
+    # DNS Section
 
-    network_table = []
+    dns_calls = network["dns"]
+    dns_res_sec = None
+    if len(dns_calls) > 0:
+        title_text = "Protocol: DNS"
+        dns_res_sec = ResultSection(title_text=title_text,
+                                    classification=classification)
 
-    # now to parse through every network call and create a nice table containing
-    # each call
-    for protocol in network:
-        if protocol not in skipped_protocols and network[protocol] != []:
-            title_text = "Protocol: %s" % protocol
-            protocol_res_sec = ResultSection(title_text=title_text,
-                                             classification=classification)
+    # This will contain the mapping of resolved IPs and their corresponding domains
+    resolved_ips = {}
+    for dns_call in dns_calls:
+        ip = dns_call["answers"][0]["data"]
+        resolved_ips[ip] = {
+            "type": dns_call["type"],
+            "domain": dns_call["request"]
+        }
 
-            # If either of these protocols contain items, then raise heuristic
-            if protocol == "dns":
-                protocol_res_sec.set_heuristic(1001)
-            elif protocol == "http":
+    # TCP and UDP section
+    network_flows_table = []
+
+    # This result section will contain all of the "flows" from src ip to dest ip
+    netflows_sec = ResultSection(title_text="Network Flows", classification=classification)
+
+    dns_servers = network["dns_servers"]
+    netflow_protocols = ["udp", "tcp"]
+    for protocol in netflow_protocols:
+        network_calls = [x for x in network.get(protocol, [])]
+        if len(network_calls) <= 0:
+            continue
+        for network_call in network_calls:
+            dst = network_call["dst"]
+            dest_country = None
+
+            # Only find the location of the IP if it is not fake
+            if dst not in dns_servers and ip_address(dst) not in inetsim_network:
+                dest_country = DbIpCity.get(dst, api_key='free').country
+            network_flow = {
+                "time": network_call["time"],
+                "proto": protocol,
+                "src_ip": network_call["src"],
+                "src_port": network_call["sport"],
+                "dom": None,
+                "res_ip": None,
+                "dom_type": None,
+                "dest_ip": dst,
+                "dest_port": network_call["dport"],
+                "dest_country": dest_country
+            }
+            if dst in resolved_ips.keys():
+                network_flow["dom"] = resolved_ips[dst]["domain"]
+                network_flow["res_ip"] = dst
+                network_flow["dom_type"] = resolved_ips[dst]["type"]
+            network_flows_table.append(network_flow)
+
+    protocol_res_sec = None
+    if len(network_flows_table) > 0:
+        protocol_res_sec = ResultSection(title_text="Protocol: TCP/UDP",
+                                         classification=classification)
+
+    # We have to copy the network table so that we can iterate through the copy
+    # and remove items from the real one at the same time
+    copy_of_network_table = network_flows_table[:]
+    for network_flow in copy_of_network_table:
+        if network_flow["dom"] and wlist_check_domain(network_flow["dom"]):
+            network_flows_table.remove(network_flow)
+        elif wlist_check_ip(network_flow["dest_ip"]) or network_flow["dest_ip"] in dns_servers:
+            network_flows_table.remove(network_flow)
+        else:
+
+            # Setting heuristics for appropriate sections
+            if dns_res_sec is not None and dns_res_sec.heuristic is None:
+                dns_res_sec.set_heuristic(1001)
+                # dns_res_sec.add_tag("network.protocol", "dns")
+            if protocol_res_sec is not None and protocol_res_sec.heuristic is None:
                 protocol_res_sec.set_heuristic(1000)
 
-            network_calls = network[protocol]
-            for network_call in network_calls:
-                if any(contains_whitelisted_value(network_call.get(item)) for item in ["host", "dst", "request", "uri"]):
-                    continue
+            # If the record has not been removed then it should be tagged for protocol, domain, ip, and port
+            protocol = network_flow["proto"]
+            if protocol not in tagged_protocols:
+                tagged_protocols.append(protocol)
+                # protocol_res_sec.add_tag("network.protocol", protocol)
 
-                network_table_record = {
-                    "timestamp": network_call.get("time", ""),
-                    "protocol": protocol,
-                    "method": network_call.get("method", ""),
-                    "source_ip": network_call.get("src", ""),
-                    "source_port": network_call.get("sport", ""),
-                    "domain": "",
-                    "resolved_ip": "",
-                    "domain_type": "",
-                    "destination_port": "",
-                    "actual_ip": "",
-                    "destination_city": "",
-                    "destination_country_code": "",
-                }
+            domain = network_flow["dom"]
+            if domain is not None and domain not in tagged_domains: # and not is_ip(domain):
+                tagged_domains.append(domain)
+                dns_res_sec.add_tag("network.dynamic.domain", domain)
 
-                req = None
-                if "host" in network_call:
-                    network_table_record["domain"] = network_call.get("host", "")
-                elif "request" in network_call:
-                    req = network_call.get("request")
-                    network_table_record["domain"] = req
-                    resolved_domains[req] = ""
-                # Grabbing uri field instead of path field because AL cannot
-                # handle path as a URI for tags
-                network_table_record["path"] = network_call.get("uri", "")
-                if "answers" in network_call:
-                    answers = network_call.get("answers")
-                    if len(answers) > 0:
-                        first_answer = answers[0]
-                        resolved_ip = first_answer.get("data", "")
-                        resolved_domains[req] = resolved_ip
-                        domain_type = first_answer.get("type", "")
-                        network_table_record["resolved_ip"] = resolved_ip
-                        network_table_record["domain_type"] = domain_type
-                if "dport" in network_call:
-                    network_table_record["destination_port"] = network_call.get("dport", "")
-                elif "port" in network_call:
-                    network_table_record["destination_port"] = network_call.get("port", "")
-                if "dst" in network_call:
-                    dst = network_call.get("dst", "")
-                    network_table_record["actual_ip"] = dst
-                    response = DbIpCity.get(dst, api_key='free')
-                    network_table_record["destination_city"] = response.city
-                    network_table_record["destination_country_code"] = response.country
+            ip = network_flow["dest_ip"]
+            if ip not in tagged_ips and ip_address(ip) not in inetsim_network:
+                tagged_ips.append(ip)
+                protocol_res_sec.add_tag("network.dynamic.ip", ip)
 
-                # It's tagging time!
+            dest_port = network_flow["dest_port"]
+            if dest_port not in tagged_ports:
+                tagged_ports.append(dest_port)
+                protocol_res_sec.add_tag("network.port", dest_port)
 
-                # We check if domain is not an IP
-                domain = network_table_record["domain"]
-                if domain != "" and domain not in tagged_domains and not is_ip(domain) and not contains_whitelisted_value(domain):
-                    tagged_domains.append(domain)
-                    protocol_res_sec.add_tag("network.dynamic.domain", domain)
+    if dns_res_sec and len(dns_res_sec.tags) > 0:
+        netflows_sec.add_subsection(dns_res_sec)
+    if protocol_res_sec and len(protocol_res_sec.tags) > 0:
+        netflows_sec.add_subsection(protocol_res_sec)
+    if len(network_flows_table) > 0:
+        netflows_sec.body = network_flows_table
+        network_res.add_subsection(netflows_sec)
 
-                # We check if the actual ip is not in the provided network
-                # because this network is randomly generated by INetSim and we
-                # do not want to tag these IPs
-                ip = network_table_record["actual_ip"]
-                if ip != "" and ip not in skipped_ips and ip not in tagged_ips and not contains_whitelisted_value(ip):
-                    if ip_address(ip) not in inetsim_network:
-                        tagged_ips.append(ip)
-                        protocol_res_sec.add_tag("network.dynamic.ip", ip)
-                        dest_port = network_table_record["destination_port"]
-                        if dest_port != "" and dest_port not in skipped_ports and dest_port not in tagged_ports:
-                            tagged_ports.append(dest_port)
-                            protocol_res_sec.add_tag("network.port", dest_port)
-                    else:
-                        for domain in resolved_domains:
-                            if ip == resolved_domains[domain]:
-                                # We only want to tag the port in this scenario
-                                dest_port = network_table_record["destination_port"]
-                                if dest_port != "" and dest_port not in skipped_ports and dest_port not in tagged_ports:
-                                    tagged_ports.append(dest_port)
-                                    protocol_res_sec.add_tag("network.port", dest_port)
-
-                path = network_table_record["path"]
-                if path != "" and path not in skipped_paths and path not in tagged_uris and not contains_whitelisted_value(path):
-                    tagged_uris.append(path)
-                    protocol_res_sec.add_tag("network.dynamic.uri", path)
-
-                network_table.append(network_table_record)
-            if len(protocol_res_sec.tags) > 0:
-                network_res.add_subsection(protocol_res_sec)
-
-    # Now for the cool stuff
-    # 1 DNS request = corresponding UDP request on port 53
-    # TODO: cool stuff
-
-    copy_of_network_table = network_table[:]
-    for network_table_record in copy_of_network_table:
-        if not network_table_record["actual_ip"]:
+    # HTTP/HTTPS section
+    req_table = []
+    http_protocols = ["http", "https"]
+    for protocol in http_protocols:
+        http_calls = [x for x in network.get(protocol, [])]
+        if len(http_calls) <= 0:
             continue
+        for http_call in http_calls:
+            host = http_call["host"]
+            if wlist_check_domain(host) is not None:
+                continue
+            path = http_call["path"]
+            req = {
+                "proto": protocol,
+                "host": http_call["host"],
+                "port": http_call["port"],
+                "method": http_call["method"],
+                "path": path,
+            }
+            req_table.append(req)
 
-        # If the network is INetSim, then the resolved IPs for domains are
-        # random. Therefore we can replace all resolved IPs with the domain
-        for domain in resolved_domains:
-            if network_table_record["actual_ip"] == resolved_domains[domain]:
-                network_table_record["actual_ip"] = domain
-                # Also resetting the geoloation of the IP since the IP is fake
-                network_table_record["destination_country_code"] = ""
-                network_table_record["destination_city"] = ""
+    if len(req_table) > 0:
+        http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS",
+                                 classification=classification)
+        http_sec.set_heuristic(1000)
+        for http_call in req_table:
+            path = http_call["path"]
+            if path not in tagged_uris:
+                tagged_uris.append(path)
+                # http_sec.add_tag("network.dynamic.uri", http_call["uri"])
+                http_sec.add_tag("network.dynamic.uri_path", path)
+        http_sec.body = req_table
+        network_res.add_subsection(http_sec)
 
-            # If there is a tcp request straight to a random IP that wasn't even resolved, then that is noise?
-        if is_ip(network_table_record["actual_ip"]) and ip_address(network_table_record["actual_ip"]) in inetsim_network:
-            network_table.remove(network_table_record)
-
-    if len(network_table) > 0:
-        network_res.body = network_table
+    if len(network_res.subsections) > 0:
         al_result.add_section(network_res)
 
-    # # IP activity
-    # hosts = network.get("hosts", [])
-    # if len(hosts) > 0 and isinstance(hosts[0], dict):
-    #     hosts = [host['ip'] for host in network.get("hosts", [])]
-    #
-    # udp = parse_protocol_data(network.get("udp", []), group_fields=['dport'])
-    # tcp = parse_protocol_data(network.get("tcp", []), group_fields=['dport'])
-    # smtp = parse_protocol_data(network.get("smtp", []), group_fields=['raw'])
-    # dns = parse_protocol_data(network.get("dns", []), group_by='request', group_fields=['answers'])
-    # icmp = parse_protocol_data(network.get("icmp", []), group_fields=['type'])
-
-    # # Domain activity
-    # domains = parse_protocol_data(network.get("domains", []), group_by='domain')
-    #
-    # http = parse_protocol_data(network.get("http", []), group_by='host',
-    #                            group_fields=['port', 'uri', 'method'])
-    # http_ex = parse_protocol_data(network.get("http_ex", []), group_by='host',
-    #                               group_fields=['dport', 'uri', 'method'])
-    # _add_ex_data(http, http_ex, 'http', 80)
-    #
-    # https = parse_protocol_data(network.get("https", []), group_by='host',
-    #                             group_fields=['port', 'uri', 'method'])
-    # https_ex = parse_protocol_data(network.get("https_ex", []), group_by='host',
-    #                                group_fields=['dport', 'uri', 'method'])
-    # _add_ex_data(https, https_ex, 'https', 443)
-
-    # Miscellaneous activity
-    # irc = network.get("irc")
-
-    # Add missing ip hosts
-#     for proto in [udp, tcp, http, https, icmp, smtp]:
-#         for hst in proto.keys():
-#             if hst not in hosts and re.match(r"^[0-9.]+$", hst):
-#                 hosts.append(hst)
-#
-#     for dom in dns:
-#         if dom not in domains:
-#             # Cuckoo has whitelisted this domain separately than AL's whitelist feature
-#             dns_query = dns.get(dom)[0]
-#             hosts = remove_whitelisted_dynamic_ip(dns_query, hosts)
-#
-#     for domain in domains:
-#         if wlist_check_domain(domain):
-#             # Now we need to omit the dynamic IP from the whitelisted domain
-#             # Get domain from dns, get mapped ip, pop ip from hosts
-#             dns_query = dns.get(domain)[0]
-#             hosts = remove_whitelisted_dynamic_ip(dns_query, hosts)
-#             continue
-#         add_flows("domain_flows", domain, 'dns', dns.get(domain), result_map)
-#         add_flows("domain_flows", domain, 'http', http.get(domain), result_map)
-#         add_flows("domain_flows", domain, 'https', https.get(domain), result_map)
-#
-#     # network['hosts'] has all unique non-local network ips.
-#     for host in hosts:
-#         if host == guest_ip or wlist_check_ip(host):
-#             continue
-#         add_flows("host_flows", host, 'udp', udp.get(host), result_map)
-#         add_flows("host_flows", host, 'tcp', tcp.get(host), result_map)
-#         add_flows("host_flows", host, 'smtp', smtp.get(host), result_map)
-#         add_flows("host_flows", host, 'icmp', icmp.get(host), result_map)
-#         add_flows("host_flows", host, 'http', http.get(host), result_map)
-#         add_flows("host_flows", host, 'https', https.get(host), result_map)
-#
-#     if hosts != [] and 'host_flows' not in result_map:
-#         # This only occurs if for some reason we don't parse corresponding flows out from the
-#         # network dump. So we'll just manually add the IPs so they're at least being reported.
-#         result_map['host_flows'] = {}
-#         for host in hosts:
-#             if host == guest_ip or wlist_check_ip(host):
-#                 continue
-#             result_map['host_flows'][host] = []
-#
-#     hosts_res = None
-#     if 'host_flows' in result_map:
-#         # host_flows is a map of host:protocol entries
-#         # protocol is a map of protocol_name:flows
-#         # flows is a set of unique flows by the groupings above
-#         host_lines = []
-#         hosts_res = ResultSection(title_text='IP Flows', classification=classification,
-#                                   body_format=BODY_FORMAT.MEMORY_DUMP)
-#         for host in sorted(result_map['host_flows']):
-#             protocols = result_map['host_flows'].get(host, [])
-#             host_cc = '??'
-#             host_cc = '('+host_cc+')'
-#             hosts_res.add_tag("network.dynamic.ip", host)
-#             for protocol in sorted(protocols):
-#                 flows = protocols[protocol]
-#                 if 'http' in protocol:
-#                     for flow in flows:
-#                         uri = flow.get('uri', None)
-#                         if uri:
-#                             hosts_res.add_tag("network.dynamic.uri", uri)
-#                 flow_lines = dict_list_to_fixedwidth_str_list(flows)
-#                 for line in flow_lines:
-#                     proto_line = "{0:<8}{1:<19}{2:<8}{3}".format(protocol, host, host_cc, line)
-#                     host_lines.append(proto_line)
-#
-#         hosts_res.add_lines(host_lines)
-#         hosts_res.set_heuristic(1001)
-#         network_res.add_subsection(hosts_res)
-#
-#     domains_res = None
-#     if 'domain_flows' in result_map:
-#         # domain_flows is a map of domain:protocol entries
-#         # protocol is a map of protocol_name:flows
-#         # flows is a set of unique flows by the groupings above
-#
-#         # Formatting..
-#         max_domain_len = 0
-#         for domain in result_map['domain_flows']:
-#             max_domain_len = max(max_domain_len, len(domain)+4)
-#         proto_fmt = "{0:<8}{1:<"+str(max_domain_len)+"}{2}"
-#         domain_lines = []
-#         domains_res = ResultSection(title_text='Domain Flows', classification=classification,
-#                                     body_format=BODY_FORMAT.MEMORY_DUMP)
-#         for domain in sorted(result_map['domain_flows']):
-#             protocols = result_map['domain_flows'][domain]
-#             domains_res.add_tag("network.dynamic.domain", domain)
-#             for protocol in sorted(protocols):
-#                 flows = protocols[protocol]
-#                 flow_lines = None
-#                 if 'http' in protocol:
-#                     for flow in flows:
-#                         uri = flow.get('uri', None)
-#                         if uri:
-#                             domains_res.add_tag("network.dynamic.uri", uri)
-#                     flow_lines = dict_list_to_fixedwidth_str_list(flows)
-#                 if 'dns' in protocol:
-#                     for flow in flows:
-#                         answers = flow.get('answers', None)
-#                         if answers:
-#                             flow_lines = dict_list_to_fixedwidth_str_list(answers)
-#                 if flow_lines:
-#                     for line in flow_lines:
-#                         proto_line = proto_fmt.format(protocol, domain, line)
-#                         domain_lines.append(proto_line)
-# #                 domain_res.add_lines(protocol_lines)
-# #             domains_res.add_section(domain_res)
-#
-#         domains_res.add_lines(domain_lines)
-#         domains_res.set_heuristic(1000)
-#         network_res.add_subsection(domains_res)
-#
-#     if (domains_res and len(domains_res.body) > 0) or (hosts_res and len(hosts_res.body) > 0):
-#         al_result.add_section(network_res)
     log.debug("Network processing complete.")
 
 
@@ -875,23 +482,6 @@ def is_ip(val) -> bool:
         pass
     return False
 
-
-# def add_flows(flow_type, key, protocol, flows, result_map):
-#     if flows is None:
-#         return
-#     current_flows = result_map.get(flow_type, defaultdict(dict))
-#     flow_key = key
-#     current_flows[flow_key][protocol] = flows
-#     result_map[flow_type] = current_flows
-
-
-# def remove_whitelisted_dynamic_ip(dns_query, hosts):
-#     ip = None
-#     if 'answers' in dns_query and len(dns_query.get('answers')) > 0:
-#         ip = dns_query.get('answers')[0].get('data', None)
-#     if ip and ip in hosts:
-#         hosts.remove(ip)
-#     return hosts
 
 #  TEST CODE
 if __name__ == "__main__":
