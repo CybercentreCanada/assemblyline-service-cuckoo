@@ -32,16 +32,17 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range, service
         return False
 
     info = api_report.get('info')
+    start_time = None
     if info is not None:
         start_time = info['started']
         end_time = info['ended']
         duration = info['duration']
         analysis_time = -1  # Default error time
         try:
-            start_time = datetime.datetime.fromtimestamp(int(start_time)).strftime('%Y-%m-%d %H:%M:%S')
-            end_time = datetime.datetime.fromtimestamp(int(end_time)).strftime('%Y-%m-%d %H:%M:%S')
-            duration = datetime.datetime.fromtimestamp(int(duration)).strftime('%Hh %Mm %Ss')
-            analysis_time = duration + "\t(" + start_time + " to " + end_time + ")"
+            start_time_str = datetime.datetime.fromtimestamp(int(start_time)).strftime('%Y-%m-%d %H:%M:%S')
+            end_time_str = datetime.datetime.fromtimestamp(int(end_time)).strftime('%Y-%m-%d %H:%M:%S')
+            duration_str = datetime.datetime.fromtimestamp(int(duration)).strftime('%Hh %Mm %Ss')
+            analysis_time = duration_str + "\t(" + start_time_str + " to " + end_time_str + ")"
         except:
             pass
         body = {
@@ -67,7 +68,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range, service
     if sigs:
         process_signatures(sigs, al_result, random_ip_range, classification)
     if network:
-        process_network(network, al_result, random_ip_range, classification)
+        process_network(network, al_result, random_ip_range, start_time, classification)
     if behaviour:
         executed = process_behaviour(behaviour, al_result, classification)
     if not executed:
@@ -126,7 +127,7 @@ def process_behaviour(behaviour: dict, al_result: Result, classification: str) -
     processes_body = []
     for process in processes:
         process_struct = {
-            "timestamp": process["first_seen"],
+            "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
             "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # in order to identify which process the uuid relates to
             "image": process["process_path"],
             "command_line": process["command_line"]
@@ -310,7 +311,7 @@ def contains_whitelisted_value(val: str) -> bool:
         return False
 
 
-def process_network(network: dict, al_result: Result, random_ip_range: str, classification: str):
+def process_network(network: dict, al_result: Result, random_ip_range: str, start_time: float, classification: str):
     log.debug("Processing network results.")
     network_res = ResultSection(title_text="Network Activity",
                                 classification=classification)
@@ -362,8 +363,9 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, clas
             # Only find the location of the IP if it is not fake
             if dst not in dns_servers and ip_address(dst) not in inetsim_network:
                 dest_country = DbIpCity.get(dst, api_key='free').country
+            action_time = network_call["time"] + start_time
             network_flow = {
-                "time": network_call["time"],
+                "time": datetime.datetime.fromtimestamp(action_time).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                 "proto": protocol,
                 "src_ip": network_call["src"],
                 "src_port": network_call["sport"],
@@ -389,9 +391,16 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, clas
     # and remove items from the real one at the same time
     copy_of_network_table = network_flows_table[:]
     for network_flow in copy_of_network_table:
-        if network_flow["dom"] and wlist_check_domain(network_flow["dom"]):
+        dom = network_flow["dom"]
+        dest_ip = network_flow["dest_ip"]
+        # if domain is whitelisted
+        if dom and wlist_check_domain(dom):
             network_flows_table.remove(network_flow)
-        elif wlist_check_ip(network_flow["dest_ip"]) or network_flow["dest_ip"] in dns_servers:
+        # if destination ip is whitelisted or is the dns server
+        elif wlist_check_ip(dest_ip) or dest_ip in dns_servers:
+            network_flows_table.remove(network_flow)
+        # if dest ip is noise
+        elif dest_ip not in resolved_ips and ip_address(dest_ip) in inetsim_network:
             network_flows_table.remove(network_flow)
         else:
 
