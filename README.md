@@ -31,6 +31,7 @@ Files that are unpacked and saved to disk are fed back into AssemblyLine.
 
 * **max_file_size** - [default: 80000000] The maximum size of an extracted file, in bytes
 * **recursion_limit** - [default: 10000] The recursion limit of the Python environment where the service is being run. This is used to traverse large JSONs generated from analysis.
+* **random_ip_range** - [default: 11.0.0.0/8] This is the IP range that INetSim (if configured) will pick from in order to return a random IP for any DNS request that the victims make (note that this requires a patch to INetSim).
 
 #### Cuckoo Host Options
 Details regarding Cuckoo API can be found [here](https://cuckoo.readthedocs.io/en/latest/usage/api/). 
@@ -55,6 +56,8 @@ option isn't set. It's not clear if this is intended or not.
 * **dump_memory** - Dump full VM memory and run volatility plugins on it. *NB*: This is very slow!
 * **no_monitor** - Run analysis without injecting the Cuckoo monitoring agent. Equivalent to passing `--options free=yes` (see [here](https://cuckoo.sh/docs/usage/packages.html) for more information)
 * **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or simulated services (`inetsim`) using [INetSim](https://www.inetsim.org/). **This functionality needs to be implemented still!**
+* **dedup_similar_percent** - SSDeep attempts to match hashes, and this is the threshold percentage for matching.
+* **max_dll_exports_exec** - Limiting the amount of DLLs executed that we report about.
 
 ### Deployment of Cuckoo Nest
 
