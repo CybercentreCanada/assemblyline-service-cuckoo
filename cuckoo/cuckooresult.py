@@ -110,11 +110,16 @@ def process_behaviour(behaviour: dict, al_result: Result, classification: str) -
     log.debug("Processing behavior results.")
     executed = False
 
+    # Skip these processes if they have no children (which would indicate that they were injected into) or calls
+    skipped_processes = ["lsass.exe"]
+
     # Make a Process Tree Section
     process_tree = behaviour["processtree"]
     # Cleaning keys, value pairs
     for process in process_tree:
-        process = remove_process_keys(process)
+        if process["process_name"] in skipped_processes and process["children"] == []:
+            process_tree.remove(process)
+        remove_process_keys(process)
     if len(process_tree) > 0:
         process_tree_section = ResultSection(title_text="Spawned Process Tree",
                                              classification=classification)
@@ -126,6 +131,8 @@ def process_behaviour(behaviour: dict, al_result: Result, classification: str) -
     processes = behaviour["processes"]
     processes_body = []
     for process in processes:
+        if process["process_name"] in skipped_processes and process["calls"] == []:
+            continue  # on to the next one
         process_struct = {
             "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
             "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # in order to identify which process the uuid relates to
@@ -184,7 +191,7 @@ def remove_process_keys(process: dict) -> dict:
     children = process["children"]
     if len(children) > 0:
         for child in children:
-            child = remove_process_keys(child)
+            remove_process_keys(child)
     return process
 
 
@@ -239,9 +246,9 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, clas
         # Getting the signature family and tagging it
         sig_families = [family for family in sig.get('families', []) if family not in skipped_families]
         if len(sig_families) > 0:
-            sigs_res.add_line('\tFamilies: ' + ','.join([safe_str(x) for x in sig_families]))
+            sig_res.add_line('\tFamilies: ' + ','.join([safe_str(x) for x in sig_families]))
             for family in sig_families:
-                sigs_res.add_tag("dynamic.signature.family", family)
+                sig_res.add_tag("dynamic.signature.family", family)
 
         # Find any indicators of compromise from the signature marks
         markcount = sig.get("markcount", 0)
@@ -258,7 +265,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, clas
                             if not contains_whitelisted_value(mark[item]):
                                 if not is_ip(mark[item]) or (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
                                     iocs.append(mark[item])
-                                    sigs_res.add_line('\tIOC: %s' % mark[item])
+                                    sig_res.add_line('\tIOC: %s' % mark[item])
                                 else:
                                     sig_based_on_whitelist = True
                             else:
@@ -270,13 +277,14 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, clas
                         if not contains_whitelisted_value(mark["ioc"]):
                             if not is_ip(mark["ioc"]) or (is_ip(mark["ioc"]) and ip_address(mark["ioc"]) not in inetsim_network):
                                 iocs.append(mark["ioc"])
-                                sigs_res.add_line('\tIOC: %s' % mark["ioc"])
+                                sig_res.add_line('\tIOC: %s' % mark["ioc"])
                             else:
                                 sig_based_on_whitelist = True
                         else:
                             sig_based_on_whitelist = True
 
         if not sig_based_on_whitelist:
+            sig_res.add_tag("dynamic.signature.name", sig_name)
             # Adding the signature result section to the parent result section
             sigs_res.add_subsection(sig_res)
     if len(sigs_res.subsections) > 0:
@@ -320,9 +328,13 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
     # which we want to avoid
     tagged_ips = []
     tagged_domains = []
+    tagged_uri_paths = []
     tagged_uris = []
     tagged_ports = []
     tagged_protocols = []
+
+    # List containing paths that are noise, or to be ignored
+    skipped_paths = ["/"]
 
     inetsim_network = ip_network(random_ip_range)
 
@@ -406,10 +418,10 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
 
             # Setting heuristics for appropriate sections
             if dns_res_sec is not None and dns_res_sec.heuristic is None:
-                dns_res_sec.set_heuristic(1001)
+                dns_res_sec.set_heuristic(1000)
                 # dns_res_sec.add_tag("network.protocol", "dns")
             if protocol_res_sec is not None and protocol_res_sec.heuristic is None:
-                protocol_res_sec.set_heuristic(1000)
+                protocol_res_sec.set_heuristic(1001)
 
             # If the record has not been removed then it should be tagged for protocol, domain, ip, and port
             protocol = network_flow["proto"]
@@ -458,19 +470,25 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
                 "port": http_call["port"],
                 "method": http_call["method"],
                 "path": path,
+                "uri": http_call["uri"]  # note that this will be removed in like twenty lines, we just need it for tagging
             }
             req_table.append(req)
 
     if len(req_table) > 0:
         http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS",
                                  classification=classification)
-        http_sec.set_heuristic(1000)
+        # http_sec.set_heuristic(1000)
         for http_call in req_table:
+            uri = http_call["uri"]
+            if uri not in tagged_uris:
+                tagged_uris.append(uri)
+                http_sec.add_tag("network.dynamic.uri", uri)
             path = http_call["path"]
-            if path not in tagged_uris:
-                tagged_uris.append(path)
-                # http_sec.add_tag("network.dynamic.uri", http_call["uri"])
+            if path not in skipped_paths and path not in tagged_uri_paths:
+                tagged_uri_paths.append(path)
                 http_sec.add_tag("network.dynamic.uri_path", path)
+            # now remove uri from the final output
+            del http_call['uri']
         http_sec.body = req_table
         network_res.add_subsection(http_sec)
 
