@@ -13,7 +13,7 @@ from pprint import pprint
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, InvalidClassification
 from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
-from cuckoo.signatures import check_signature
+from cuckoo.signatures import check_signature, CUCKOO_DROPPED_SIGNATURES
 
 UUID_RE = re.compile(r"{([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\}")
 USER_SID_RE = re.compile(r"S-1-5-21-\d+-\d+-\d+-\d+")
@@ -194,7 +194,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, clas
         return
 
     sigs_res = ResultSection(title_text="Signatures", classification=classification)
-    skipped_sigs = []  # ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
+    skipped_sigs = CUCKOO_DROPPED_SIGNATURES  # ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
     skipped_sig_iocs = []  # 'dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities', 'persistence_autorun']
     skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
@@ -224,7 +224,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, clas
         # Setting up the heuristic for each signature
         # Severity is 0-5ish with 0 being least severe.
         sig_id = check_signature(sig_name)
-        if sig_id == 3:
+        if sig_id == 9999:
             log.warning("Unknown signature detected: %s" % sig)
 
         # Setting the Mitre ATT&CK ID for the heuristic
