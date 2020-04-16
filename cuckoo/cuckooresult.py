@@ -239,9 +239,9 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, clas
         # TODO: we are only able to handle a single attack id at the moment
         if attack_ids != {}:
             attack_id = next(iter(attack_ids))  # Grab first ID
-            sig_res.set_heuristic(sig_id, attack_id=attack_id)
+            sig_res.set_heuristic(sig_id, attack_id=attack_id, signature=sig_name)
         else:
-            sig_res.set_heuristic(sig_id)
+            sig_res.set_heuristic(sig_id, signature=sig_name)
 
         # Getting the signature family and tagging it
         sig_families = [family for family in sig.get('families', []) if family not in skipped_families]
@@ -372,8 +372,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
             dst = network_call["dst"]
             dest_country = None
 
-            # Only find the location of the IP if it is not fake
-            if dst not in dns_servers and ip_address(dst) not in inetsim_network:
+            # Only find the location of the IP if it is not fake or local
+            if dst not in dns_servers and wlist_check_ip(dst) is None and ip_address(dst) not in inetsim_network:
                 dest_country = DbIpCity.get(dst, api_key='free').country
             action_time = network_call["time"] + start_time
             network_flow = {
@@ -461,12 +461,12 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
             continue
         for http_call in http_calls:
             host = http_call["host"]
-            if wlist_check_domain(host) is not None:
+            if wlist_check_ip(host) is not None or wlist_check_domain(host) is not None:
                 continue
             path = http_call["path"]
             req = {
                 "proto": protocol,
-                "host": http_call["host"],
+                "host": host,
                 "port": http_call["port"],
                 "method": http_call["method"],
                 "path": path,

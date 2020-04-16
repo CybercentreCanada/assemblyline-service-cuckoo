@@ -46,7 +46,9 @@ WHITELIST_DOMAINS = {
     "Windows Updater": ".*\.update\.microsoft\.com",
     "Windows Downloader": ".*download\.microsoft\.com",
     "Windows KMS": "kms.core.windows.net",
-    "Another Windows Updater": "ctldl\.windowsupdate\.com"
+    "Another Windows Updater": "ctldl\.windowsupdate\.com",
+    "Windows Settings": "settings\-win\.data\.microsoft\.com",
+    "Windows Cert": "crl\.microsoft\.com"
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
