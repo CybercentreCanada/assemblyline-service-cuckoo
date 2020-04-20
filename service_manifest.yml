@@ -98,7 +98,7 @@ heuristics:
     description: Attempts to detect if it is being run in virtualized environment.
 
   - heur_id: 10
-    name: Anti-Debug
+    name: Anti-debug
     score: 100
     filetype: '*'
     description: Attempts to detect if it is being debugged.
