@@ -374,7 +374,11 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
 
             # Only find the location of the IP if it is not fake or local
             if dst not in dns_servers and wlist_check_ip(dst) is None and ip_address(dst) not in inetsim_network:
-                dest_country = DbIpCity.get(dst, api_key='free').country
+                try:
+                    dest_country = DbIpCity.get(dst, api_key='free').country
+                except Exception as e:
+                    log.error("IP %s causes the ip2geotools package to crash" % dst)
+                    pass
             action_time = network_call["time"] + start_time
             network_flow = {
                 "time": datetime.datetime.fromtimestamp(action_time).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
