@@ -48,7 +48,9 @@ WHITELIST_DOMAINS = {
     "Windows KMS": "kms.core.windows.net",
     "Another Windows Updater": "ctldl\.windowsupdate\.com",
     "Windows Settings": "settings\-win\.data\.microsoft\.com",
-    "Windows Cert": "crl\.microsoft\.com"
+    "Windows Cert": "crl\.microsoft\.com",
+    "Windows Diagnostics": "vortex\-win\.data\.microsoft\.com",
+    "Office Network Requests": "config\.edge\.skype\.com"
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses

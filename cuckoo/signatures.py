@@ -708,14 +708,17 @@ CUCKOO_SIGNATURE_CATEGORIES = {
 }
 
 CUCKOO_DROPPED_SIGNATURES = [
-  'origin_langid', 'apt_cloudatlas', 'apt_carbunak', 'apt_sandworm_ip', 'apt_turlacarbon',
-  'apt_sandworm_url', 'apt_inception', 'rat_lolbot', 'backdoor_vanbot', 'rat_sdbot',
-  'backdoor_tdss', 'backdoor_whimoo', 'madness_url', 'volatility_svcscan_2', 'volatility_svcscan_3',
-  'volatility_modscan_1', 'volatility_handles_1', 'volatility_devicetree_1', 'volatility_ldrmodules_1',
-  'volatility_ldrmodules_2', 'volatility_malfind_2', 'volatility_svcscan_1', 'detect_putty', 'powerworm',
-  'powershell_ddi_rc4', 'powershell_di', 'powerfun', 'powershell_dfsp', 'powershell_c2dns',
-  'powershell_unicorn', 'spreading_autoruninf', 'sniffer_winpcap', 'mutex_winscp',
-  'sharing_rghost', 'exp_3322_dom', 'mirc_file', 'vir_napolar', 'vertex_url', 'network_http'
+  'origin_langid', 'apt_cloudatlas', 'apt_carbunak', 'apt_sandworm_ip',
+  'apt_turlacarbon', 'apt_sandworm_url', 'apt_inception', 'rat_lolbot',
+  'backdoor_vanbot', 'rat_sdbot', 'backdoor_tdss', 'backdoor_whimoo',
+  'madness_url', 'volatility_svcscan_2', 'volatility_svcscan_3',
+  'volatility_modscan_1', 'volatility_handles_1', 'volatility_devicetree_1',
+  'volatility_ldrmodules_1', 'volatility_ldrmodules_2', 'volatility_malfind_2',
+  'volatility_svcscan_1', 'detect_putty', 'powerworm', 'powershell_ddi_rc4',
+  'powershell_di', 'powerfun', 'powershell_dfsp', 'powershell_c2dns',
+  'powershell_unicorn', 'spreading_autoruninf', 'sniffer_winpcap',
+  'mutex_winscp', 'sharing_rghost', 'exp_3322_dom', 'mirc_file', 'vir_napolar',
+  'vertex_url', 'network_http', 'raises_exception', 'has_pdb'
 ]
 
 

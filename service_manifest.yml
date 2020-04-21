@@ -34,6 +34,7 @@ config:
   routing: inetsim # TODO: implement routing options
   dedup_similar_percent: 80
   max_dll_exports_exec: 5
+  dll_function:
 
   # Cuckoo request specification
   max_file_size: 80000000
@@ -344,6 +345,7 @@ heuristics:
     description: Unknown signature detected by Cuckoo
 
 docker_config:
+  allow_internet_access: true
   image: ${REGISTRY}cccs/assemblyline-service-cuckoo:latest
   cpu_cores: 0.5
   ram_mb: 256

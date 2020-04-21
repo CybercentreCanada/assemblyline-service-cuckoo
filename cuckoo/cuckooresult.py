@@ -149,7 +149,6 @@ def process_behaviour(behaviour: dict, al_result: Result, classification: str) -
         al_result.add_section(processes_section)
 
     # Make the RegKey Section
-    tagged_regkeys = []
     summary = behaviour.get("summary", {})
     regkeys_written = summary.get("regkey_written", [])
     regkey_res_sec = None
@@ -165,9 +164,7 @@ def process_behaviour(behaviour: dict, al_result: Result, classification: str) -
         else:
             kv_body[r[0]] = ""  # TODO: what is this value then?
             reg = "{0}".format(safe_str(r[0]))
-        if reg not in tagged_regkeys:
-            tagged_regkeys.append(reg)
-            regkey_res_sec.add_tag("dynamic.registry_key", reg)
+        regkey_res_sec.add_tag("dynamic.registry_key", reg)
     if len(kv_body.items()) > 0:
         regkey_res_sec.body_format = BODY_FORMAT.KEY_VALUE
         regkey_res_sec.body = json.dumps(kv_body)
@@ -324,15 +321,6 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
     network_res = ResultSection(title_text="Network Activity",
                                 classification=classification)
 
-    # Lists containing items that could be tagged multiple times,
-    # which we want to avoid
-    tagged_ips = []
-    tagged_domains = []
-    tagged_uri_paths = []
-    tagged_uris = []
-    tagged_ports = []
-    tagged_protocols = []
-
     # List containing paths that are noise, or to be ignored
     skipped_paths = ["/"]
 
@@ -350,11 +338,12 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
     # This will contain the mapping of resolved IPs and their corresponding domains
     resolved_ips = {}
     for dns_call in dns_calls:
-        ip = dns_call["answers"][0]["data"]
-        resolved_ips[ip] = {
-            "type": dns_call["type"],
-            "domain": dns_call["request"]
-        }
+        if len(dns_call["answers"]) > 0:
+            ip = dns_call["answers"][0]["data"]
+            resolved_ips[ip] = {
+                "type": dns_call["type"],
+                "domain": dns_call["request"]
+            }
 
     # TCP and UDP section
     network_flows_table = []
@@ -377,7 +366,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
                 try:
                     dest_country = DbIpCity.get(dst, api_key='free').country
                 except Exception as e:
-                    log.error("IP %s causes the ip2geotools package to crash" % dst)
+                    log.warning("IP %s causes the ip2geotools package to crash" % dst)
                     pass
             action_time = network_call["time"] + start_time
             network_flow = {
@@ -423,35 +412,28 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
             # Setting heuristics for appropriate sections
             if dns_res_sec is not None and dns_res_sec.heuristic is None:
                 dns_res_sec.set_heuristic(1000)
-                # dns_res_sec.add_tag("network.protocol", "dns")
+                dns_res_sec.add_tag("network.protocol", "dns")
             if protocol_res_sec is not None and protocol_res_sec.heuristic is None:
                 protocol_res_sec.set_heuristic(1001)
 
             # If the record has not been removed then it should be tagged for protocol, domain, ip, and port
-            protocol = network_flow["proto"]
-            if protocol not in tagged_protocols:
-                tagged_protocols.append(protocol)
-                # protocol_res_sec.add_tag("network.protocol", protocol)
+            protocol_res_sec.add_tag("network.protocol", network_flow["proto"])
 
             domain = network_flow["dom"]
-            if domain is not None and domain not in tagged_domains: # and not is_ip(domain):
-                tagged_domains.append(domain)
+            if domain is not None:  # and not is_ip(domain):
                 dns_res_sec.add_tag("network.dynamic.domain", domain)
 
             ip = network_flow["dest_ip"]
-            if ip not in tagged_ips and ip_address(ip) not in inetsim_network:
-                tagged_ips.append(ip)
+            if ip_address(ip) not in inetsim_network:
                 protocol_res_sec.add_tag("network.dynamic.ip", ip)
 
             dest_port = network_flow["dest_port"]
-            if dest_port not in tagged_ports:
-                tagged_ports.append(dest_port)
-                protocol_res_sec.add_tag("network.port", dest_port)
+            protocol_res_sec.add_tag("network.port", dest_port)
 
     if dns_res_sec and len(dns_res_sec.tags) > 0:
-        netflows_sec.add_subsection(dns_res_sec)
+        network_res.add_subsection(dns_res_sec)
     if protocol_res_sec and len(protocol_res_sec.tags) > 0:
-        netflows_sec.add_subsection(protocol_res_sec)
+        network_res.add_subsection(protocol_res_sec)
     if len(network_flows_table) > 0:
         netflows_sec.body = network_flows_table
         network_res.add_subsection(netflows_sec)
@@ -474,6 +456,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
                 "port": http_call["port"],
                 "method": http_call["method"],
                 "path": path,
+                "user-agent": http_call["user-agent"],
+                "request": http_call["data"],
                 "uri": http_call["uri"]  # note that this will be removed in like twenty lines, we just need it for tagging
             }
             req_table.append(req)
@@ -483,13 +467,18 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
                                  classification=classification)
         # http_sec.set_heuristic(1000)
         for http_call in req_table:
-            uri = http_call["uri"]
-            if uri not in tagged_uris:
-                tagged_uris.append(uri)
-                http_sec.add_tag("network.dynamic.uri", uri)
+            http_sec.add_tag("network.protocol", http_call["proto"])
+            host = http_call["host"]
+            if ":" in host:  # split on port if port exists
+                host = host.split(":")[0]
+            if is_ip(host):
+                http_sec.add_tag("network.dynamic.ip", host)
+            else:
+                http_sec.add_tag("network.dynamic.domain", host)
+            http_sec.add_tag("network.port", http_call["port"])
+            http_sec.add_tag("network.dynamic.uri", http_call["uri"])
             path = http_call["path"]
-            if path not in skipped_paths and path not in tagged_uri_paths:
-                tagged_uri_paths.append(path)
+            if path not in skipped_paths:
                 http_sec.add_tag("network.dynamic.uri_path", path)
             # now remove uri from the final output
             del http_call['uri']
@@ -502,7 +491,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
     log.debug("Network processing complete.")
 
 
-def is_ip(val) -> bool:
+def is_ip(val: str) -> bool:
     try:
         ip_address(val)
         return True
