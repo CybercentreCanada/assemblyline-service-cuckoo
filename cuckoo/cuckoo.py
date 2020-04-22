@@ -837,7 +837,7 @@ class Cuckoo(ServiceBase):
                                         skip_file = True
                                         break
                                 if skip_file is True:
-                                    dropped_sec = ResultSection(title_text='Dropped Files Information'
+                                    dropped_sec = ResultSection(title_text='Dropped Files Information')
                                     dropped_sec.add_tag("file.behavior",
                                                         "Truncated extraction set")
                                     continue

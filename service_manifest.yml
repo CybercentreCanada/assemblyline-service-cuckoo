@@ -45,30 +45,35 @@ config:
 
 heuristics:
   - heur_id: 1
+    attack_id: # one of ['T1012', 'T1082']
     name: Exploit
     score: 100
     filetype: '*'
     description: Exploits an known software vulnerability or security flaw.
 
   - heur_id: 2
+    attack_id: # one of ['T1086', 'T1197', 'T1071', 'T1112']
     name: PowerShell
     score: 100
     filetype: '*'
     description: Leverages Powershell to attack Windows operating systems.
 
   - heur_id: 3
+    attack_id: T1086
     name: Hacking tool
     score: 100
     filetype: '*'
     description: Programs designed to crack or break computer and network security measures.
 
   - heur_id: 4
+    attack_id: T1112
     name: Locker
     score: 100
     filetype: '*'
     description: Prevents access to system data and files.
 
   - heur_id: 5
+    attack_id: T1063
     name: Anti-analysis
     score: 100
     filetype: '*'
@@ -87,18 +92,21 @@ heuristics:
     description: Makes API calls not consistent with expected/standard behaviour.
 
   - heur_id: 8
+    attack_id: # one of ['T1089', 'T1031', 'T1012', 'T1112', 'T1063']
     name: Anti-antivirus
     score: 100
     filetype: '*'
     description: Attempts to conceal itself from detection by anti-virus.
 
   - heur_id: 9
+    attack_id: # one of ['T1012', 'T1057', 'T1047', 'T1083', 'T1007', 'T1082']
     name: Anti-vm
     score: 100
     filetype: '*'
     description: Attempts to detect if it is being run in virtualized environment.
 
   - heur_id: 10
+    attack_id: # one of ['T1057', 'T1083']
     name: Anti-debug
     score: 100
     filetype: '*'
@@ -123,24 +131,28 @@ heuristics:
     description: Malicious software program
 
   - heur_id: 14
+    attack_id: # one of ['T1203', 'T1179', 'T1071']
     name: Suspicious Office
     score: 100
     filetype: '*'
     description: Makes API calls not consistent with expected/standard behaviour
 
   - heur_id: 15
+    attack_id: # one of ['T1047', 'T1112']
     name: Ransomware
     score: 100
     filetype: '*'
     description: Designed to block access to a system until a sum of money is paid.
 
   - heur_id: 16
+    attack_id: # one of ['T1067', 'T1031', 'T1103', 'T1060', 'T1098', 'T1204', 'T1112', 'T1096', 'T1070', 'T1053', 'T1047', 'T1059', 'T1136', 'T1023', 'T1129']
     name: Persistence
     score: 100
     filetype: '*'
     description: Technique used to maintain presence in system(s) across interruptions that could cut off access.
 
   - heur_id: 17
+    attack_id: # one of ['T1086', 'T1055', 'T1057', 'T1071']
     name: Injection
     score: 100
     filetype: '*'
@@ -153,12 +165,14 @@ heuristics:
     description: Trojan that drops additional malware on an affected system.
 
   - heur_id: 19
+    attack_id: # one of ['T1197', 'T1059', 'T1053']
     name: Suspicious Execution Chain
     score: 100
     filetype: '*'
     description: Command shell or script process was created by unexpected parent process.
 
   - heur_id: 20
+    attack_id: T1070
     name: Trojan
     score: 100
     filetype: '*'
@@ -171,12 +185,14 @@ heuristics:
     description: Designed to provide the capability of covert surveillance and/or unauthorized access to a target.
 
   - heur_id: 22
+    attack_id: T1071
     name: C2
     score: 100
     filetype: '*'
     description: Communicates with a server controlled by a malicious actor.
 
   - heur_id: 23
+    attack_id: T1188
     name: Tor
     score: 100
     filetype: '*'
@@ -189,18 +205,21 @@ heuristics:
     description: Connects to smtp.[domain] for possible spamming or data exfiltration.
 
   - heur_id: 25
+    attack_id: # one of ['T1089', 'T1057', 'T1083', 'T1115', 'T1082']
     name: Anti-sandbox
     score: 100
     filetype: '*'
     description: Attempts to detect if it is in a sandbox.
 
   - heur_id: 26
+    attack_id: # one of ['T1089', 'T1031', 'T1036', 'T1112', 'T1071', 'T1088', 'T1096', 'T1158', 'T1070', 'T1054', 'T1143', 'T1222']
     name: Stealth
     score: 100
     filetype: '*'
     description: Leverages/modifies internal processes and settings to conceal itself.
 
   - heur_id: 27
+    attack_id: T1045
     name: Packer
     score: 100
     filetype: '*'
@@ -219,6 +238,7 @@ heuristics:
     description: Steals information related to financial transactions, including credit card information.
 
   - heur_id: 30
+    attack_id: # one of ['T1086', 'T1031', 'T1117', 'T1089']
     name: Bypass
     score: 100
     filetype: '*'
@@ -237,6 +257,7 @@ heuristics:
     description: Leverages instant-messaging.
 
   - heur_id: 33
+    attack_id: T1067
     name: Rootkit
     score: 100
     filetype: '*'
@@ -249,22 +270,25 @@ heuristics:
     description: Displays unwanted, unsolicited advertisements.
 
   - heur_id: 35
+    attack_id: # one of ['T1003', 'T1089', 'T1005', 'T1112', 'T1040', 'T1115', 'T1081']
     name: Infostealer
     score: 100
     filetype: '*'
     description: Collects and disseminates information such as login details, usernames, passwords, etc.
 
   - heur_id: 36
+    attack_id: T1047
     name: WMI
     score: 100
     filetype: '*'
     description: Leverages Windows Management Instrumentation (WMI) to gather information and/or execute a process.
 
   - heur_id: 37
+    attack_id: # one of ['T1129', 'T1071'}]
     name: Downloader
     score: 100
     filetype: '*'
-    description: Trojan that downloads installs files.
+    description: Trojan that downloads / installs files.
 
   - heur_id: 38
     name: DynDNS
@@ -297,6 +321,7 @@ heuristics:
     description: Leverages URL shortening to obfuscate malicious destination.
 
   - heur_id: 43
+    attack_id: T1057
     name: Anti-emulation
     score: 100
     filetype: '*'
@@ -314,12 +339,14 @@ heuristics:
     filetype: '*'
     description: Allows a resource to be sent or received across a network.
 
+# Note: Heuristic is not currently used
   - heur_id: 998
     name: SMS Activity
     score: 500
     filetype: '*'
     description: Cuckoo detected SMS activity.
 
+# Note: Heuristic is not currently used
   - heur_id: 999
     name: Crypto Keys
     score: 10
@@ -327,19 +354,19 @@ heuristics:
     description: Cuckoo detected Crypto Keys.
 
   - heur_id: 1000
-    name: domain_detected
+    name: Domain detected
     score: 100
     filetype: '*'
     description: Cuckoo detected Domains
 
   - heur_id: 1001
-    name: host_detected
+    name: Host detected
     score: 100
     filetype: '*'
     description: Cuckoo detected Hosts
 
   - heur_id: 9999
-    name: unknown
+    name: Unknown
     score: 0
     filetype: '*'
     description: Unknown signature detected by Cuckoo
