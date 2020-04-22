@@ -11,7 +11,7 @@ from ip2geotools.databases.noncommercial import DbIpCity
 from pprint import pprint
 
 from assemblyline.common.str_utils import safe_str
-from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, InvalidClassification
+from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification
 from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
 from cuckoo.signatures import check_signature, CUCKOO_DROPPED_SIGNATURES
 
@@ -23,14 +23,8 @@ log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 
 
 # noinspection PyBroadException
-def generate_al_result(api_report, al_result, file_ext, random_ip_range, service_classification=Classification.UNRESTRICTED):
+def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     log.debug("Generating AL Result.")
-    try:
-        classification = Classification.max_classification(Classification.UNRESTRICTED, service_classification)
-    except InvalidClassification as e:
-        log.warning("Could not get the service classification: %s" % e.message)
-        return False
-
     info = api_report.get('info')
     start_time = None
     if info is not None:
@@ -52,7 +46,6 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range, service
             'Version': info['version']
         }
         info_res = ResultSection(title_text='Analysis Information',
-                                 classification=classification,
                                  body_format=BODY_FORMAT.KEY_VALUE,
                                  body=json.dumps(body))
         al_result.add_section(info_res)
@@ -64,18 +57,19 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range, service
 
     executed = False
     if debug:
-        process_debug(debug, al_result, classification)
+        process_debug(debug, al_result)
+    if behaviour["processes"]:
+        process_map = get_process_map(behaviour["processes"])
     if sigs:
-        process_signatures(sigs, al_result, random_ip_range, classification)
+        process_signatures(sigs, al_result, random_ip_range, process_map)
     if network:
-        process_network(network, al_result, random_ip_range, start_time, classification)
+        process_network(network, al_result, random_ip_range, start_time, process_map)
     if behaviour:
-        executed = process_behaviour(behaviour, al_result, classification)
+        executed = process_behaviour(behaviour, al_result, process_map)
     if not executed:
         log.debug(
             "It doesn't look like this file executed (unsupported file type?)")
-        noexec_res = ResultSection(title_text="Notes",
-                                   classification=classification)
+        noexec_res = ResultSection(title_text="Notes")
         noexec_res.add_line('Unrecognized file type: '
                             'No program available to execute a file with the following extension: %s'
                             % file_ext)
@@ -85,10 +79,10 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range, service
     return True
 
 
-def process_debug(debug, al_result, classification):
+def process_debug(debug, al_result):
     failed = False
     if 'errors' in debug:
-        error_res = ResultSection(title_text='Analysis Errors', classification=classification)
+        error_res = ResultSection(title_text='Analysis Errors')
         for error in debug['errors']:
             err_str = str(error)
             err_str = err_str.lower()
@@ -106,7 +100,7 @@ def process_debug(debug, al_result, classification):
     return failed
 
 
-def process_behaviour(behaviour: dict, al_result: Result, classification: str) -> bool:
+def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> bool:
     log.debug("Processing behavior results.")
     executed = False
 
@@ -121,8 +115,7 @@ def process_behaviour(behaviour: dict, al_result: Result, classification: str) -
             process_tree.remove(process)
         remove_process_keys(process)
     if len(process_tree) > 0:
-        process_tree_section = ResultSection(title_text="Spawned Process Tree",
-                                             classification=classification)
+        process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = process_tree
         executed = True
         al_result.add_section(process_tree_section)
@@ -142,8 +135,7 @@ def process_behaviour(behaviour: dict, al_result: Result, classification: str) -
         processes_body.append(process_struct)
 
     if len(processes_body) > 0:
-        processes_section = ResultSection(title_text="Processes",
-                                          classification=classification)
+        processes_section = ResultSection(title_text="Processes")
         processes_section.body = processes_body
         executed = True
         al_result.add_section(processes_section)
@@ -153,8 +145,7 @@ def process_behaviour(behaviour: dict, al_result: Result, classification: str) -
     regkeys_written = summary.get("regkey_written", [])
     regkey_res_sec = None
     if len(regkeys_written) > 0:
-        regkey_res_sec = ResultSection(title_text="Registry Keys Written",
-                                       classification=classification)
+        regkey_res_sec = ResultSection(title_text="Registry Keys Written")
     kv_body = {}
     for regkey_written in regkeys_written:
         r = regkey_written.split(",")
@@ -192,12 +183,12 @@ def remove_process_keys(process: dict) -> dict:
     return process
 
 
-def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, classification: str):
+def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, process_map: dict):
     log.debug("Processing signature results.")
     if len(sigs) <= 0:
         return
 
-    sigs_res = ResultSection(title_text="Signatures", classification=classification)
+    sigs_res = ResultSection(title_text="Signatures")
     skipped_sigs = CUCKOO_DROPPED_SIGNATURES  # ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
     skipped_sig_iocs = []  # 'dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities', 'persistence_autorun']
     skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
@@ -221,7 +212,6 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, clas
         description = sig.get('description', 'No description for signature.')
         sig_res = ResultSection(
             title_text=title,
-            classification=classification,
             body=description
         )
 
@@ -316,10 +306,9 @@ def contains_whitelisted_value(val: str) -> bool:
         return False
 
 
-def process_network(network: dict, al_result: Result, random_ip_range: str, start_time: float, classification: str):
+def process_network(network: dict, al_result: Result, random_ip_range: str, start_time: float, process_map: dict):
     log.debug("Processing network results.")
-    network_res = ResultSection(title_text="Network Activity",
-                                classification=classification)
+    network_res = ResultSection(title_text="Network Activity")
 
     # List containing paths that are noise, or to be ignored
     skipped_paths = ["/"]
@@ -332,24 +321,36 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
     dns_res_sec = None
     if len(dns_calls) > 0:
         title_text = "Protocol: DNS"
-        dns_res_sec = ResultSection(title_text=title_text,
-                                    classification=classification)
+        dns_res_sec = ResultSection(title_text=title_text)
 
     # This will contain the mapping of resolved IPs and their corresponding domains
     resolved_ips = {}
     for dns_call in dns_calls:
         if len(dns_call["answers"]) > 0:
             ip = dns_call["answers"][0]["data"]
-            resolved_ips[ip] = {
-                "type": dns_call["type"],
-                "domain": dns_call["request"]
-            }
+            domain = dns_call["request"]
+            # now map process_name to the dns_call
+            for process in process_map:
+                process_details = process_map[process]
+                for network_call in process_details["network_calls"]:
+                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {})
+                    if dns != {} and dns["hostname"] == domain:
+                        resolved_ips[ip] = {
+                            "type": dns_call["type"],
+                            "domain": domain,
+                            "process_name": process_details["name"]
+                        }
+                    else:
+                        resolved_ips[ip] = {
+                            "type": dns_call["type"],
+                            "domain": domain,
+                        }
 
     # TCP and UDP section
     network_flows_table = []
 
     # This result section will contain all of the "flows" from src ip to dest ip
-    netflows_sec = ResultSection(title_text="Network Flows", classification=classification)
+    netflows_sec = ResultSection(title_text="Network Flows")
 
     dns_servers = network["dns_servers"]
     netflow_protocols = ["udp", "tcp"]
@@ -379,18 +380,19 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
                 "dom_type": None,
                 "dest_ip": dst,
                 "dest_port": network_call["dport"],
-                "dest_country": dest_country
+                "dest_country": dest_country,
+                "process_name": None
             }
             if dst in resolved_ips.keys():
                 network_flow["dom"] = resolved_ips[dst]["domain"]
                 network_flow["res_ip"] = dst
                 network_flow["dom_type"] = resolved_ips[dst]["type"]
+                network_flow["process_name"] = resolved_ips[dst].get("process_name")  # this may or may now exist in DNS
             network_flows_table.append(network_flow)
 
     protocol_res_sec = None
     if len(network_flows_table) > 0:
-        protocol_res_sec = ResultSection(title_text="Protocol: TCP/UDP",
-                                         classification=classification)
+        protocol_res_sec = ResultSection(title_text="Protocol: TCP/UDP")
 
     # We have to copy the network table so that we can iterate through the copy
     # and remove items from the real one at the same time
@@ -408,6 +410,14 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
         elif dest_ip not in resolved_ips and ip_address(dest_ip) in inetsim_network:
             network_flows_table.remove(network_flow)
         else:
+            # if process name does not exist from DNS, then find processes that made connection calls
+            if network_flow["process_name"] is None:
+                for process in process_map:
+                    process_details = process_map[process]
+                    for network_call in process_details["network_calls"]:
+                        connect = network_call.get("connect", {}) or network_call.get("InternetConnectW", {})
+                        if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or connect.get("hostname", "") == network_flow["dest_ip"]) and connect["port"] == network_flow["dest_port"]:
+                            network_flow["process_name"] = process_details["name"]
 
             # Setting heuristics for appropriate sections
             if dns_res_sec is not None and dns_res_sec.heuristic is None:
@@ -450,6 +460,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
             if wlist_check_ip(host) is not None or wlist_check_domain(host) is not None:
                 continue
             path = http_call["path"]
+            request = http_call["data"]
             req = {
                 "proto": protocol,
                 "host": host,
@@ -457,14 +468,20 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
                 "method": http_call["method"],
                 "path": path,
                 "user-agent": http_call["user-agent"],
-                "request": http_call["data"],
+                "request": request,
+                "process_name": None,
                 "uri": http_call["uri"]  # note that this will be removed in like twenty lines, we just need it for tagging
             }
+            for process in process_map:
+                process_details = process_map[process]
+                for network_call in process_details["network_calls"]:
+                    send = network_call.get("send", {}) or network_call.get("InternetConnectW", {})
+                    if send != {} and (send.get("service", 0) == 3 or send.get("buffer", "") == request):
+                        req["process_name"] = process_details["name"]
             req_table.append(req)
 
     if len(req_table) > 0:
-        http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS",
-                                 classification=classification)
+        http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS")
         # http_sec.set_heuristic(1000)
         for http_call in req_table:
             http_sec.add_tag("network.protocol", http_call["proto"])
@@ -501,6 +518,41 @@ def is_ip(val: str) -> bool:
         # domains
         pass
     return False
+
+
+def get_process_map(processes: dict = {}) -> dict:
+    process_map = {}
+    network_calls = []
+    api_calls_of_interest = {
+        "getaddrinfo": ["hostname"],  # DNS
+        "connect": ["ip_address", "port"],  # Connecting to IP
+        "InternetConnectW": ["username", "service", "password", "hostname", "port"],  # DNS and Connecting to IP, if service = 3 then HTTP
+        "send": ["buffer"],  # HTTP Request
+        # "HttpOpenRequestW": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
+        # "InternetOpenW": ["user-agent"],  # HTTP Request TODO not sure what to do with this yet
+        # "recv": ["buffer"]  # HTTP Response, TODO not sure what to do with this yet
+        # "InternetReadFile": ["buffer"]  # HTTP Response, TODO not sure what to do with this yet
+    }
+    for process in processes:
+        if process["process_name"] == "lsass.exe":
+            continue
+        calls = process["calls"]
+        for call in calls:
+            category = call["category"]
+            api = call["api"]
+            if category == "network" and api in api_calls_of_interest.keys():
+                args = call["arguments"]
+                args_of_interest = {}
+                for arg in api_calls_of_interest.get(api, []):
+                    if arg in args:
+                        args_of_interest[arg] = args[arg]
+                network_calls.append({api: args_of_interest})
+        pid = process["pid"]
+        process_map[pid] = {
+            "name": process["process_name"],
+            "network_calls": network_calls
+        }
+    return process_map
 
 
 #  TEST CODE

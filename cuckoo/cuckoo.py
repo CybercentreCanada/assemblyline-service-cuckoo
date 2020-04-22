@@ -14,7 +14,7 @@ import requests
 from retrying import retry, RetryError
 
 from assemblyline_v4_service.common.task import MaxExtractedExceeded
-from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT, Heuristic
+from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT
 from assemblyline_v4_service.common.base import ServiceBase
 
 from assemblyline.common.str_utils import safe_str
@@ -23,7 +23,6 @@ from assemblyline.common.exceptions import RecoverableError, ChainException
 
 from cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 
-# CUCKOO_API_PORT = "8090"
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
 CUCKOO_API_DELETE_TASK = "tasks/delete/%s"
@@ -140,8 +139,6 @@ class CuckooTask(dict):
 # noinspection PyBroadException
 # noinspection PyGlobalUndefined
 class Cuckoo(ServiceBase):
-    SERVICE_CLASSIFICATION = ""  # will default to unrestricted
-
     def __init__(self, config=None):
         super(Cuckoo, self).__init__(config)
         self.cfg = config
@@ -343,8 +340,7 @@ class Cuckoo(ServiceBase):
                     success = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
                                                  file_ext,
-                                                 self.cfg.get("random_ip_range"),
-                                                 self.SERVICE_CLASSIFICATION)
+                                                 self.cfg.get("random_ip_range"))
                     if success is False:
                         err_str = self.get_errors()
                         if self.cuckoo_task and self.cuckoo_task.id is not None:
@@ -489,7 +485,6 @@ class Cuckoo(ServiceBase):
                     # Attach report as json as the last result section
                     report_json_section = ResultSection(
                         'Full Cuckoo report',
-                        self.SERVICE_CLASSIFICATION,
                         body_format=BODY_FORMAT.JSON,
                         body=self.cuckoo_task.report
                     )
@@ -842,8 +837,7 @@ class Cuckoo(ServiceBase):
                                         skip_file = True
                                         break
                                 if skip_file is True:
-                                    dropped_sec = ResultSection(title_text='Dropped Files Information',
-                                                                classification=self.SERVICE_CLASSIFICATION)
+                                    dropped_sec = ResultSection(title_text='Dropped Files Information'
                                     dropped_sec.add_tag("file.behavior",
                                                         "Truncated extraction set")
                                     continue
@@ -921,7 +915,6 @@ class Cuckoo(ServiceBase):
                 body['Tags'].append(safe_str(tag).replace('_', ' '))
 
             machine_section = ResultSection(title_text='Machine Information',
-                                            classification=self.SERVICE_CLASSIFICATION,
                                             body_format=BODY_FORMAT.KEY_VALUE,
                                             body=json.dumps(body))
 
