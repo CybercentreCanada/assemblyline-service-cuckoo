@@ -173,7 +173,6 @@ class Cuckoo(ServiceBase):
 
     def start(self):
         self.auth_header = {'Authorization': self.cfg['auth_header_value']}
-        self.import_service_deps()
         self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent", 80))
         self.log.debug("Cuckoo started!")
 
