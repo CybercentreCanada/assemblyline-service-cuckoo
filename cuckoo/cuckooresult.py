@@ -55,27 +55,35 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     network = api_report.get('network', {})
     behaviour = api_report.get('behavior', [])  # Note conversion from American to Canadian spelling
 
-    executed = False
-
     if debug:
         process_debug(debug, al_result)
 
     process_map = get_process_map(behaviour.get("processes", {}))
+    network_events = []
+    process_events = []
 
     if sigs:
         process_signatures(sigs, al_result, random_ip_range)
     if network:
-        process_network(network, al_result, random_ip_range, start_time, process_map)
+        network_events = process_network(network, al_result, random_ip_range, process_map)
     if behaviour:
-        executed = process_behaviour(behaviour, al_result)
-    if not executed:
-        log.debug(
-            "It doesn't look like this file executed (unsupported file type?)")
-        noexec_res = ResultSection(title_text="Notes")
-        noexec_res.add_line('Unrecognized file type: '
-                            'No program available to execute a file with the following extension: %s'
-                            % file_ext)
-        al_result.add_section(noexec_res)
+        sample_executed = [len(behaviour["processtree"]),
+                           len(behaviour["processes"]),
+                           len(behaviour["summary"])]
+        if not any(item > 0 for item in sample_executed):
+            log.debug(
+                "It doesn't look like this file executed (unsupported file type?)")
+            noexec_res = ResultSection(title_text="Notes")
+            noexec_res.add_line('Unrecognized file type: '
+                                'No program available to execute a file with the following extension: %s'
+                                % file_ext)
+            al_result.add_section(noexec_res)
+        else:
+            # Otherwise, moving on!
+            process_events = process_behaviour(behaviour, al_result)
+
+    if len(network_events) > 0 or len(process_events) > 0:
+        process_all_events(al_result, network_events, process_events)
 
     log.debug("AL result generation completed!")
     return True
@@ -102,29 +110,29 @@ def process_debug(debug, al_result):
     return failed
 
 
-def process_behaviour(behaviour: dict, al_result: Result) -> bool:
+def process_behaviour(behaviour: dict, al_result: Result) -> list:
     log.debug("Processing behavior results.")
-    executed = False
-
+    events = []  # This will contain all network events
     # Skip these processes if they have no children (which would indicate that they were injected into) or calls
     skipped_processes = ["lsass.exe"]
 
     # Make a Process Tree Section
     process_tree = behaviour["processtree"]
-    # Cleaning keys, value pairs
-    for process in process_tree:
+    copy_of_process_tree = process_tree[:]
+    # Removing skipped processes
+    for process in copy_of_process_tree:
         if process["process_name"] in skipped_processes and process["children"] == []:
             process_tree.remove(process)
-        remove_process_keys(process)
+    # Cleaning keys, value pairs
+    for process in process_tree:
+        process = remove_process_keys(process)
     if len(process_tree) > 0:
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = process_tree
-        executed = True
         al_result.add_section(process_tree_section)
 
-    # Make a Processes Section
+    # Get information about processes to return as events
     processes = behaviour["processes"]
-    processes_body = []
     for process in processes:
         if process["process_name"] in skipped_processes and process["calls"] == []:
             continue  # on to the next one
@@ -134,13 +142,9 @@ def process_behaviour(behaviour: dict, al_result: Result) -> bool:
             "image": process["process_path"],
             "command_line": process["command_line"]
         }
-        processes_body.append(process_struct)
 
-    if len(processes_body) > 0:
-        processes_section = ResultSection(title_text="Processes")
-        processes_section.body = processes_body
-        executed = True
-        al_result.add_section(processes_section)
+        # add process to events list
+        events.append(process_struct)
 
     # Make the RegKey Section
     summary = behaviour.get("summary", {})
@@ -161,11 +165,10 @@ def process_behaviour(behaviour: dict, al_result: Result) -> bool:
     if len(kv_body.items()) > 0:
         regkey_res_sec.body_format = BODY_FORMAT.KEY_VALUE
         regkey_res_sec.body = json.dumps(kv_body)
-        executed = True
         al_result.add_section(regkey_res_sec)
 
     log.debug("Behavior processing completed.")
-    return executed
+    return events
 
 
 def remove_process_keys(process: dict) -> dict:
@@ -181,7 +184,7 @@ def remove_process_keys(process: dict) -> dict:
     children = process["children"]
     if len(children) > 0:
         for child in children:
-            remove_process_keys(child)
+            child = remove_process_keys(child)
     return process
 
 
@@ -313,8 +316,9 @@ def contains_whitelisted_value(val: str) -> bool:
         return False
 
 
-def process_network(network: dict, al_result: Result, random_ip_range: str, start_time: float, process_map: dict):
+def process_network(network: dict, al_result: Result, random_ip_range: str, process_map: dict) -> list:
     log.debug("Processing network results.")
+    events = []  # This will contain all network events
     network_res = ResultSection(title_text="Network Activity")
 
     # List containing paths that are noise, or to be ignored
@@ -377,9 +381,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
                 except Exception as e:
                     log.warning(f"IP {dst} causes the ip2geotools package to crash: {str(e)}")
                     pass
-            action_time = network_call["time"] + start_time
             network_flow = {
-                "time": datetime.datetime.fromtimestamp(action_time).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                "timestamp": datetime.datetime.fromtimestamp(network_call["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                 "proto": protocol,
                 "src_ip": network_call["src"],
                 "src_port": network_call["sport"],
@@ -450,6 +453,9 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
             dest_port = network_flow["dest_port"]
             protocol_res_sec.add_tag("network.port", dest_port)
 
+            # add each network flow to the events list
+            events.append(network_flow)
+
     if dns_res_sec and len(dns_res_sec.tags) > 0:
         network_res.add_subsection(dns_res_sec)
     if protocol_res_sec and len(protocol_res_sec.tags) > 0:
@@ -516,6 +522,21 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
         al_result.add_section(network_res)
 
     log.debug("Network processing complete.")
+    return events
+
+
+def process_all_events(al_result: Result, network_events: list = [], process_events: list = []):
+    events_section = ResultSection(title_text="Events")
+    for event in network_events:
+        event["event_type"] = "network"
+    for event in process_events:
+        event["event_type"] = "process"
+        events_section.add_tag("dynamic.process.command_line", event["command_line"])
+        events_section.add_tag("dynamic.process.file_name", event["image"])
+    all_events = network_events + process_events
+    sorted_events = sorted(all_events, key=lambda k: k["timestamp"])
+    events_section.body = sorted_events
+    al_result.add_section(events_section)
 
 
 def is_ip(val: str) -> bool:
