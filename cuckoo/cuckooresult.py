@@ -3,7 +3,6 @@ import logging
 import uuid
 import re
 import traceback
-import json
 from ipaddress import ip_address, ip_network
 from urllib.parse import urlparse
 from ip2geotools.databases.noncommercial import DbIpCity
@@ -37,7 +36,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
             end_time_str = datetime.datetime.fromtimestamp(int(end_time)).strftime('%Y-%m-%d %H:%M:%S')
             duration_str = datetime.datetime.fromtimestamp(int(duration)).strftime('%Hh %Mm %Ss')
             analysis_time = duration_str + "\t(" + start_time_str + " to " + end_time_str + ")"
-        except:
+        except Exception:
             pass
         body = {
             'ID': info['id'],
@@ -56,16 +55,18 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     behaviour = api_report.get('behavior', [])  # Note conversion from American to Canadian spelling
 
     executed = False
+
     if debug:
         process_debug(debug, al_result)
-    if behaviour["processes"]:
-        process_map = get_process_map(behaviour["processes"])
+
+    process_map = get_process_map(behaviour.get("processes", {}))
+
     if sigs:
-        process_signatures(sigs, al_result, random_ip_range, process_map)
+        process_signatures(sigs, al_result, random_ip_range)
     if network:
         process_network(network, al_result, random_ip_range, start_time, process_map)
     if behaviour:
-        executed = process_behaviour(behaviour, al_result, process_map)
+        executed = process_behaviour(behaviour, al_result)
     if not executed:
         log.debug(
             "It doesn't look like this file executed (unsupported file type?)")
@@ -100,7 +101,7 @@ def process_debug(debug, al_result):
     return failed
 
 
-def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> bool:
+def process_behaviour(behaviour: dict, al_result: Result) -> bool:
     log.debug("Processing behavior results.")
     executed = False
 
@@ -128,7 +129,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
             continue  # on to the next one
         process_struct = {
             "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-            "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # in order to identify which process the uuid relates to
+            "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # identify which process the uuid relates to
             "image": process["process_path"],
             "command_line": process["command_line"]
         }
@@ -183,14 +184,16 @@ def remove_process_keys(process: dict) -> dict:
     return process
 
 
-def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, process_map: dict):
+def process_signatures(sigs: dict, al_result: Result, random_ip_range: str):
     log.debug("Processing signature results.")
     if len(sigs) <= 0:
         return
 
     sigs_res = ResultSection(title_text="Signatures")
-    skipped_sigs = CUCKOO_DROPPED_SIGNATURES  # ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
-    skipped_sig_iocs = []  # 'dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities', 'persistence_autorun']
+    # ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
+    skipped_sigs = CUCKOO_DROPPED_SIGNATURES
+    # 'dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities', 'persistence_autorun']
+    skipped_sig_iocs = []
     skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
@@ -250,7 +253,8 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, proc
                         if item not in skipped_mark_items and mark[item] not in iocs:
                             # Now check if any item in signature is whitelisted explicitly or in inetsim network
                             if not contains_whitelisted_value(mark[item]):
-                                if not is_ip(mark[item]) or (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
+                                if not is_ip(mark[item]) or \
+                                        (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
                                     iocs.append(mark[item])
                                     sig_res.add_line('\tIOC: %s' % mark[item])
                                 else:
@@ -262,7 +266,8 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, proc
                     if mark.get('category') not in skipped_category_iocs and mark["ioc"] not in iocs:
                         # Now check if any item in signature is whitelisted explicitly or in inetsim network
                         if not contains_whitelisted_value(mark["ioc"]):
-                            if not is_ip(mark["ioc"]) or (is_ip(mark["ioc"]) and ip_address(mark["ioc"]) not in inetsim_network):
+                            if not is_ip(mark["ioc"]) or \
+                                    (is_ip(mark["ioc"]) and ip_address(mark["ioc"]) not in inetsim_network):
                                 iocs.append(mark["ioc"])
                                 sig_res.add_line('\tIOC: %s' % mark["ioc"])
                             else:
@@ -282,8 +287,9 @@ def contains_whitelisted_value(val: str) -> bool:
     if not val or not isinstance(val, str):
         return False
     ip = re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', val)
-    url = re.search(r"((\w+:\/\/)[-a-zA-Z0-9:@;?&=\/%\+\.\*!'\(\),\$_\{\}\^~\[\]`#|]+)", val)
-    domain = re.search(r'((xn--|_{1,1})?(xn--|_{1,1})?([a-z0-9A-Z]{2,24}\.))*[a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*', val)
+    url = re.search(r"((\w+://)[-a-zA-Z0-9:@;?&=/%+.*!'(),$_{}^~\[\]`#|]+)", val)
+    domain = re.search(r'((xn--|_)?(xn--|_)?([a-z0-9A-Z]{2,24}\.))*[a-z0-9-]+'
+                       r'\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*', val)
     md5_hash = re.search(r"([a-fA-F\d]{32})", val)
     if ip is not None:
         ip = ip.group()
@@ -364,10 +370,11 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
 
             # Only find the location of the IP if it is not fake or local
             if dst not in dns_servers and wlist_check_ip(dst) is None and ip_address(dst) not in inetsim_network:
+                # noinspection PyBroadException
                 try:
                     dest_country = DbIpCity.get(dst, api_key='free').country
                 except Exception as e:
-                    log.warning("IP %s causes the ip2geotools package to crash" % dst)
+                    log.warning(f"IP {dst} causes the ip2geotools package to crash: {str(e)}")
                     pass
             action_time = network_call["time"] + start_time
             network_flow = {
@@ -416,7 +423,9 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
                     process_details = process_map[process]
                     for network_call in process_details["network_calls"]:
                         connect = network_call.get("connect", {}) or network_call.get("InternetConnectW", {})
-                        if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or connect.get("hostname", "") == network_flow["dest_ip"]) and connect["port"] == network_flow["dest_port"]:
+                        if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or
+                                              connect.get("hostname", "") == network_flow["dest_ip"]) and \
+                                connect["port"] == network_flow["dest_port"]:
                             network_flow["process_name"] = process_details["name"]
 
             # Setting heuristics for appropriate sections
@@ -470,7 +479,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, star
                 "user-agent": http_call["user-agent"],
                 "request": request,
                 "process_name": None,
-                "uri": http_call["uri"]  # note that this will be removed in like twenty lines, we just need it for tagging
+                "uri": http_call["uri"]  # Note: will be removed in like twenty lines, we just need it for tagging
             }
             for process in process_map:
                 process_details = process_map[process]
@@ -520,13 +529,16 @@ def is_ip(val: str) -> bool:
     return False
 
 
-def get_process_map(processes: dict = {}) -> dict:
+def get_process_map(processes: dict = None) -> dict:
+    if processes is None:
+        processes = {}
     process_map = {}
     network_calls = []
     api_calls_of_interest = {
         "getaddrinfo": ["hostname"],  # DNS
         "connect": ["ip_address", "port"],  # Connecting to IP
-        "InternetConnectW": ["username", "service", "password", "hostname", "port"],  # DNS and Connecting to IP, if service = 3 then HTTP
+        "InternetConnectW": ["username", "service", "password", "hostname", "port"],
+        # DNS and Connecting to IP, if service = 3 then HTTP
         "send": ["buffer"],  # HTTP Request
         # "HttpOpenRequestW": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
         # "InternetOpenW": ["user-agent"],  # HTTP Request TODO not sure what to do with this yet

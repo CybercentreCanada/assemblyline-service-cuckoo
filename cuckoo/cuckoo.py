@@ -21,6 +21,7 @@ from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 
+from cuckoo.cuckooresult import generate_al_result
 from cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
@@ -159,12 +160,6 @@ class Cuckoo(ServiceBase):
         self.machines = None
         self.auth_header = None
 
-    # noinspection PyUnresolvedReferences
-    def import_service_deps(self):
-        global generate_al_result, pefile
-        from cuckoo.cuckooresult import generate_al_result
-        import pefile
-
     def set_urls(self):
         base_url = "http://%s:%s" % (self.cfg['remote_host_ip'], self.cfg['remote_host_port'])
         self.submit_url = "%s/%s" % (base_url, CUCKOO_API_SUBMIT)
@@ -206,7 +201,7 @@ class Cuckoo(ServiceBase):
                 new_filename = decoded_filename[0][0].decode(decoded_filename[0][1])
                 self.log.info("Using decoded filename %s" % new_filename)
                 self.file_name = new_filename
-            except:
+            except Exception:
                 new_filename = generate_random_words(1)
                 self.log.error(
                     "Problem decoding filename. Using randomly generated filename %s. Error: %s " %
@@ -333,9 +328,9 @@ class Cuckoo(ServiceBase):
 
                     if machine_name is None:
                         self.log.debug('Unable to retrieve machine name from result.')
-                        guest_ip = ""
-                    else:
-                        guest_ip = self.report_machine_info(machine_name)
+                    #     guest_ip = ""
+                    # else:
+                    #     guest_ip = self.report_machine_info(machine_name)
                     self.log.debug("Generating AL Result from Cuckoo results..")
                     success = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
@@ -379,7 +374,7 @@ class Cuckoo(ServiceBase):
                             report_file.close()
                             self.task.add_supplementary(tar_report_path, tar_file_name,
                                                         "Cuckoo Sandbox analysis report archive (tar.gz)")
-                        except:
+                        except Exception:
                             self.log.exception(
                                 "Unable to add tar of complete report for task %s" % self.cuckoo_task.id)
 
@@ -396,7 +391,7 @@ class Cuckoo(ServiceBase):
                                     "Cuckoo Sandbox report (json)"
                                 )
                             tar_obj.close()
-                        except:
+                        except Exception:
                             self.log.exception(
                                 "Unable to add report.json for task %s. Exception: %s" %
                                 (self.cuckoo_task.id, traceback.format_exc())
@@ -457,7 +452,7 @@ class Cuckoo(ServiceBase):
                                 tar_obj.extract(f, path=self.working_directory)
                                 self.task.add_extracted(extracted_file_path, f, "Cuckoo extracted file")
                             tar_obj.close()
-                        except:
+                        except Exception:
                             self.log.exception(
                                 "Unable to extra file(s) for task %s. Exception: %s" %
                                 (self.cuckoo_task.id, traceback.format_exc())
@@ -467,7 +462,8 @@ class Cuckoo(ServiceBase):
                     max_dll_exports = self.cfg["max_dll_exports_exec"]
                     dll_multi_section = ResultSection(
                         title_text="Executed multiple DLL exports",
-                        body="Executed the following exports from the DLL: %s" % ",".join(exports_available[:max_dll_exports])
+                        body=f"Executed the following exports from the DLL: "
+                             f"{','.join(exports_available[:max_dll_exports])}"
                     )
                     if len(exports_available) > max_dll_exports:
                         dll_multi_section.add_line("There were %d other exports: %s" %
@@ -623,7 +619,7 @@ class Cuckoo(ServiceBase):
 
             try:
                 self.cuckoo_task.report = self.cuckoo_query_report(self.cuckoo_task.id)
-            except MissingCuckooReportException as e:
+            except MissingCuckooReportException:
                 return "missing_report"
             if self.cuckoo_task.report and isinstance(self.cuckoo_task.report, dict):
                 return status
@@ -705,7 +701,9 @@ class Cuckoo(ServiceBase):
                 report_data = resp_dict
             except Exception:
                 url = self.query_report_url % task_id + '/' + fmt
-                self.log.exception("Exception converting cuckoo report http response into json: report url: %s, file_name: %s", url, self.file_name)
+                self.log.exception("Exception converting cuckoo report http response into json: "
+                                   "report url: %s, file_name: %s", url, self.file_name)
+                report_data = None
         else:
             report_data = resp.content
 
