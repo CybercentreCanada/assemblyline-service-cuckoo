@@ -58,6 +58,8 @@ option isn't set. It's not clear if this is intended or not.
 * **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or simulated services (`inetsim`) using [INetSim](https://www.inetsim.org/). **This functionality needs to be implemented still!**
 * **dedup_similar_percent** - SSDeep attempts to match hashes, and this is the threshold percentage for matching.
 * **max_dll_exports_exec** - Limiting the amount of DLLs executed that we report about.
+* **platform** - Name of the platform to select the analysis machine from (e.g. “windows”).
+* **clock** - Set virtual machine clock (format %m-%d-%Y %H:%M:%S).
 
 ### Deployment of Cuckoo Nest
 

@@ -442,7 +442,7 @@ class Cuckoo(ServiceBase):
                                                  (f, mem_filesize, max_extracted_size)
                                         ))
 
-                            # Extract buffers and anything extracted
+                            # Extract buffers, screenshots and anything extracted
                             extracted_buffers = [x.name for x in tar_obj.getmembers()
                                                  if x.name.startswith("buffer") and x.isfile()]
                             for f in extracted_buffers:
@@ -454,10 +454,16 @@ class Cuckoo(ServiceBase):
                                 extracted_file_path = os.path.join(self.working_directory, f)
                                 tar_obj.extract(f, path=self.working_directory)
                                 self.task.add_extracted(extracted_file_path, f, "Cuckoo extracted file")
+                            # There is an api option for this: https://cuckoo.readthedocs.io/en/latest/usage/api/#tasks-shots
+                            for f in [x.name for x in tar_obj.getmembers() if
+                                      x.name.startswith("shots") and x.isfile()]:
+                                screenshot_file_path = os.path.join(self.working_directory, f)
+                                tar_obj.extract(f, path=self.working_directory)
+                                self.task.add_extracted(screenshot_file_path, f, "Screenshots from Cuckoo analysis")
                             tar_obj.close()
                         except Exception:
                             self.log.exception(
-                                "Unable to extra file(s) for task %s. Exception: %s" %
+                                "Unable to add extra file(s) for task %s. Exception: %s" %
                                 (self.cuckoo_task.id, traceback.format_exc())
                             )
 
