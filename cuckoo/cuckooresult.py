@@ -63,7 +63,10 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     process_events = []
 
     if sigs:
-        process_signatures(sigs, al_result, random_ip_range)
+        target = api_report.get("target", {})
+        target_file = target.get("file", {})
+        target_filename = target_file.get("name")
+        process_signatures(sigs, al_result, random_ip_range, target_filename)
     if network:
         network_events = process_network(network, al_result, random_ip_range, process_map)
     if behaviour:
@@ -188,7 +191,7 @@ def remove_process_keys(process: dict) -> dict:
     return process
 
 
-def process_signatures(sigs: dict, al_result: Result, random_ip_range: str):
+def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, target_filename: str):
     log.debug("Processing signature results.")
     if len(sigs) <= 0:
         return
@@ -201,6 +204,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str):
     skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
+    false_positive_sigs = ["creates_doc"]  # Signatures that need to be double checked in case they return false positives
     iocs = []
     inetsim_network = ip_network(random_ip_range)
 
@@ -213,6 +217,18 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str):
 
         if sig_name in skipped_sigs:
             continue
+
+        # Check if signature is a false positive
+        fp = False
+        if sig_name in false_positive_sigs:
+            marks = sig["marks"]
+            for mark in marks:
+                if sig_name == "creates_doc" and len(marks) < 2 and target_filename in mark.get("ioc"):
+                    # Nothing to see here, false positive because this signature
+                    # thinks that the submitted file is a "new doc file"
+                    fp = True
+            if fp:
+                continue
 
         # Setting up result section for each signature
         title = "Signature: %s" % sig_name
