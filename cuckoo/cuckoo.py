@@ -277,6 +277,10 @@ class Cuckoo(ServiceBase):
                 kwargs['enforce_timeout'] = self.cfg.get(param, None)
             elif param == "custom_options":
                 custom_options = self.cfg.get(param, None)
+            elif param == "platform":
+                kwargs["platform"] = self.cfg.get(param, None)
+            elif param == "clock":
+                kwargs["clock"] = self.cfg.get(param, None)
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
