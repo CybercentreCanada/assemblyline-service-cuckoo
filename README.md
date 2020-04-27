@@ -70,7 +70,32 @@ See the official documentation: https://cuckoo.readthedocs.io/en/latest/installa
 See the official documentation: https://cuckoo.readthedocs.io/en/latest/installation/guest/
 
 ### Using Community Signatures
-As per the official documentation, `$ cuckoo community` can be run on the nest machine in order to install signatures.
+As per the official documentation, `$ cuckoo community` can be run on the nest machine in order to install signatures. 
+
+
+### Cuckoo Service Heuristics
+The heuristics for the service determine the scoring of the result, and can cover a variety of behaviours. Heuristics are 
+raised for network calls, signature hits etc. Specifically for signature hits, we have grouped all 500+ signatures into 
+categories where each category is a heuristic and is representive of the signatures that fall under that category. 
+
+#### Scoring
+The scores for these categories are based on the average of the signature severities (which can be found in the Cuckoo Community 
+repo on Github) for all of the signatures in that category. This average was then rounded (up >= .5, down < .5) and applied to 
+the following range map:
+
+> &lt;= 1: 100 (informative)
+>
+> &gt; 1 and &lt;= 2: 500 (suspicious)
+>
+> &gt; 2 and &lt;= 4: 1000 (highly suspicious)
+>
+> &gt; 4: 2000 (malicious)
+
+#### ATT&CK IDs
+For these categories, we have attempted to give default Mitre ATT&CK IDs to them by looking through all signatures in a category,
+ and then taking the set of all ATT&CK IDs for these signatures (called `ttp` in the signature code), and if the set was a single ID
+ that ID would be the default for the category. Progress is being made on finding generic IDs that can apply loosely to all signatures
+ in a category when the above tactic doesn't work, such that there are defaults for all heuristics.
 
 ### Azure Deployment
 A document has been prepared on our side to assist with the deployment of Cuckoo using Azure resources. The release date of this document is TBD.
