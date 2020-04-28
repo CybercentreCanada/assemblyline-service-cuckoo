@@ -486,15 +486,6 @@ class Cuckoo(ServiceBase):
                 self.check_dropped(request, self.cuckoo_task.id)
                 self.check_pcap(self.cuckoo_task.id)
 
-                if BODY_FORMAT.contains_value("JSON") and request.task.deep_scan:
-                    # Attach report as json as the last result section
-                    report_json_section = ResultSection(
-                        'Full Cuckoo report',
-                        body_format=BODY_FORMAT.JSON,
-                        body=self.cuckoo_task.report
-                    )
-                    self.file_res.add_section(report_json_section)
-
             else:
                 # We didn't get a report back.. cuckoo has failed us
                 self.log.info("Raising recoverable error for running job.")

@@ -149,27 +149,6 @@ def process_behaviour(behaviour: dict, al_result: Result) -> list:
         # add process to events list
         events.append(process_struct)
 
-    # Make the RegKey Section
-    summary = behaviour.get("summary", {})
-    regkeys_written = summary.get("regkey_written", [])
-    regkey_res_sec = None
-    if len(regkeys_written) > 0:
-        regkey_res_sec = ResultSection(title_text="Registry Keys Written")
-    kv_body = {}
-    for regkey_written in regkeys_written:
-        r = regkey_written.split(",")
-        if len(r) > 1:
-            kv_body[r[0]] = r[1]
-            reg = "{0}:{1}".format(safe_str(r[0]), safe_str(r[1]))
-        else:
-            kv_body[r[0]] = ""  # TODO: what is this value then?
-            reg = "{0}".format(safe_str(r[0]))
-        regkey_res_sec.add_tag("dynamic.registry_key", reg)
-    if len(kv_body.items()) > 0:
-        regkey_res_sec.body_format = BODY_FORMAT.KEY_VALUE
-        regkey_res_sec.body = json.dumps(kv_body)
-        al_result.add_section(regkey_res_sec)
-
     log.debug("Behavior processing completed.")
     return events
 
@@ -204,7 +183,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
     skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
-    false_positive_sigs = ["creates_doc"]  # Signatures that need to be double checked in case they return false positives
+    false_positive_sigs = ["creates_doc", "creates_hidden_file"]  # Signatures that need to be double checked in case they return false positives
     iocs = []
     inetsim_network = ip_network(random_ip_range)
 
@@ -227,6 +206,13 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     # Nothing to see here, false positive because this signature
                     # thinks that the submitted file is a "new doc file"
                     fp = True
+                elif sig_name == "creates_hidden_file" and len(marks) < 2:
+                    filepath = mark.get("call", {}).get("arguments", {}).get("filepath", "")
+                    if target_filename in filepath:
+                        # Nothing to see here, false positive because this signature
+                        # thinks that the submitted file is a "hidden" file because
+                        # it's in the tmp directory
+                        fp = True
             if fp:
                 continue
 

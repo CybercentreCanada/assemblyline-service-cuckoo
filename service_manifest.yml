@@ -89,7 +89,7 @@ heuristics:
     description: Makes PDF API calls not consistent with expected/standard behaviour.
 
   - heur_id: 7
-    attack_id: 1106
+    attack_id: T1106
     name: Suspicious Android API
     score: 1000
     filetype: '*'
@@ -361,7 +361,7 @@ heuristics:
 
   - heur_id: 1000
     name: Domain detected
-    score: 1000
+    score: 100
     filetype: '*'
     description: Cuckoo detected Domains
 
