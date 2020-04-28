@@ -123,7 +123,7 @@ heuristics:
     description: Attempts to replicate itself in order to spread to other systems.
 
   - heur_id: 12
-    attack_id: T1526
+    attack_id: # TODO: T1526  # This is waiting for the build pipelines for Core to succeed
     name: Cloud
     score: 500
     filetype: '*'
