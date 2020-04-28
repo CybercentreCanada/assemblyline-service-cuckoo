@@ -70,9 +70,9 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     if network:
         network_events = process_network(network, al_result, random_ip_range, process_map)
     if behaviour:
-        sample_executed = [len(behaviour["processtree"]),
-                           len(behaviour["processes"]),
-                           len(behaviour["summary"])]
+        sample_executed = [len(behaviour.get("processtree", [])),
+                           len(behaviour.get("processes", [])),
+                           len(behaviour.get("summary", []))]
         if not any(item > 0 for item in sample_executed):
             log.debug(
                 "It doesn't look like this file executed (unsupported file type?)")

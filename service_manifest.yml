@@ -47,14 +47,14 @@ config:
 
 heuristics:
   - heur_id: 1
-    attack_id: # one of ['T1012', 'T1082']
+    attack_id: # one of ['T1190', 'T1212', 'T1082', 'T1211', 'T1068']
     name: Exploit
     score: 1000
     filetype: '*'
     description: Exploits an known software vulnerability or security flaw.
 
   - heur_id: 2
-    attack_id: # one of ['T1086', 'T1197', 'T1071', 'T1112']
+    attack_id: T1086
     name: PowerShell
     score: 1000
     filetype: '*'
@@ -82,33 +82,35 @@ heuristics:
     description: Constructed to conceal or obfuscate itself to prevent analysis.
 
   - heur_id: 6
+    attack_id: T1106
     name: Suspicious PDF API
     score: 500
     filetype: '*'
-    description: Makes API calls not consistent with expected/standard behaviour.
+    description: Makes PDF API calls not consistent with expected/standard behaviour.
 
   - heur_id: 7
+    attack_id: 1106
     name: Suspicious Android API
     score: 1000
     filetype: '*'
-    description: Makes API calls not consistent with expected/standard behaviour.
+    description: Makes Android API calls not consistent with expected/standard behaviour.
 
   - heur_id: 8
-    attack_id: # one of ['T1089', 'T1031', 'T1012', 'T1112', 'T1063']
+    attack_id: T1063
     name: Anti-antivirus
     score: 1000
     filetype: '*'
     description: Attempts to conceal itself from detection by anti-virus.
 
   - heur_id: 9
-    attack_id: # one of ['T1012', 'T1057', 'T1047', 'T1083', 'T1007', 'T1082']
+    attack_id: T1497
     name: Anti-vm
     score: 1000
     filetype: '*'
     description: Attempts to detect if it is being run in virtualized environment.
 
   - heur_id: 10
-    attack_id: # one of ['T1057', 'T1083']
+    attack_id: # one of ['T1057', 'T1063']
     name: Anti-debug
     score: 500
     filetype: '*'
@@ -121,6 +123,7 @@ heuristics:
     description: Attempts to replicate itself in order to spread to other systems.
 
   - heur_id: 12
+    attack_id: T1526
     name: Cloud
     score: 500
     filetype: '*'
@@ -133,28 +136,28 @@ heuristics:
     description: Malicious software program
 
   - heur_id: 14
-    attack_id: # one of ['T1203', 'T1179', 'T1071']
+    attack_id: T1203
     name: Suspicious Office
     score: 500
     filetype: '*'
     description: Makes API calls not consistent with expected/standard behaviour
 
   - heur_id: 15
-    attack_id: # one of ['T1047', 'T1112']
+    attack_id: T1486
     name: Ransomware
     score: 1000
     filetype: '*'
     description: Designed to block access to a system until a sum of money is paid.
 
   - heur_id: 16
-    attack_id: # one of ['T1067', 'T1031', 'T1103', 'T1060', 'T1098', 'T1204', 'T1112', 'T1096', 'T1070', 'T1053', 'T1047', 'T1059', 'T1136', 'T1023', 'T1129']
+    attack_id: # one of ['T1060', 'T1103', 'T1098']
     name: Persistence
     score: 1000
     filetype: '*'
     description: Technique used to maintain presence in system(s) across interruptions that could cut off access.
 
   - heur_id: 17
-    attack_id: # one of ['T1086', 'T1055', 'T1057', 'T1071']
+    attack_id: # one of ['T1086', 'T1055']
     name: Injection
     score: 1000
     filetype: '*'
@@ -167,7 +170,7 @@ heuristics:
     description: Trojan that drops additional malware on an affected system.
 
   - heur_id: 19
-    attack_id: # one of ['T1197', 'T1059', 'T1053']
+    attack_id: T1059
     name: Suspicious Execution Chain
     score: 1000
     filetype: '*'
@@ -181,6 +184,7 @@ heuristics:
     description: Presents itself as legitimate in attempt to infiltrate a system.
 
   - heur_id: 21
+    attack_id: T1219
     name: RAT
     score: 1000
     filetype: '*'
@@ -207,14 +211,14 @@ heuristics:
     description: Connects to smtp.[domain] for possible spamming or data exfiltration.
 
   - heur_id: 25
-    attack_id: # one of ['T1089', 'T1057', 'T1083', 'T1115', 'T1082']
+    attack_id: T1497
     name: Anti-sandbox
     score: 1000
     filetype: '*'
     description: Attempts to detect if it is in a sandbox.
 
   - heur_id: 26
-    attack_id: # one of ['T1089', 'T1031', 'T1036', 'T1112', 'T1071', 'T1088', 'T1096', 'T1158', 'T1070', 'T1054', 'T1143', 'T1222']
+    attack_id: # one of ['T1036', 'T1158', 'T1070']
     name: Stealth
     score: 1000
     filetype: '*'
@@ -240,7 +244,7 @@ heuristics:
     description: Steals information related to financial transactions, including credit card information.
 
   - heur_id: 30
-    attack_id: # one of ['T1086', 'T1031', 'T1117', 'T1089']
+    attack_id: T1089
     name: Bypass
     score: 1000
     filetype: '*'
@@ -259,7 +263,7 @@ heuristics:
     description: Leverages instant-messaging.
 
   - heur_id: 33
-    attack_id: T1067
+    attack_id: T1014
     name: Rootkit
     score: 1000
     filetype: '*'
@@ -272,7 +276,7 @@ heuristics:
     description: Displays unwanted, unsolicited advertisements.
 
   - heur_id: 35
-    attack_id: # one of ['T1003', 'T1089', 'T1005', 'T1112', 'T1040', 'T1115', 'T1081']
+    attack_id: # one of ['T1003', 'T1005']
     name: Infostealer
     score: 1000
     filetype: '*'
@@ -286,7 +290,7 @@ heuristics:
     description: Leverages Windows Management Instrumentation (WMI) to gather information and/or execute a process.
 
   - heur_id: 37
-    attack_id: # one of ['T1129', 'T1071'}]
+    attack_id: T1071
     name: Downloader
     score: 1000
     filetype: '*'
