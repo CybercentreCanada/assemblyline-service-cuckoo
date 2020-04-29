@@ -12,7 +12,7 @@ from pprint import pprint
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification
-from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_hash
+from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_uri, wlist_check_hash
 from cuckoo.signatures import check_signature, CUCKOO_DROPPED_SIGNATURES
 
 UUID_RE = re.compile(r"{([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\}")
@@ -475,7 +475,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             continue
         for http_call in http_calls:
             host = http_call["host"]
-            if wlist_check_ip(host) is not None or wlist_check_domain(host) is not None:
+            uri = http_call["uri"]
+            if wlist_check_ip(host) is not None or wlist_check_domain(host) is not None or wlist_check_uri(uri) is not None:
                 continue
             path = http_call["path"]
             request = http_call["data"]
@@ -488,7 +489,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 "user-agent": http_call["user-agent"],
                 "request": request,
                 "process_name": None,
-                "uri": http_call["uri"]  # Note: will be removed in like twenty lines, we just need it for tagging
+                "uri": uri  # Note: will be removed in like twenty lines, we just need it for tagging
             }
             for process in process_map:
                 process_details = process_map[process]
