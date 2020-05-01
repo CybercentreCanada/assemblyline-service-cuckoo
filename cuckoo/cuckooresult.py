@@ -11,8 +11,8 @@ from ip2geotools.databases.noncommercial import DbIpCity
 from pprint import pprint
 
 from assemblyline.common.str_utils import safe_str
-from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification
-from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_uri, wlist_check_hash
+from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, Heuristic
+from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_uri, wlist_check_hash, wlist_check_dropped
 from cuckoo.signatures import check_signature, CUCKOO_DROPPED_SIGNATURES
 
 UUID_RE = re.compile(r"{([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\}")
@@ -183,7 +183,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
     skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
-    false_positive_sigs = ["creates_doc", "creates_hidden_file"]  # Signatures that need to be double checked in case they return false positives
+    false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut"]  # Signatures that need to be double checked in case they return false positives
     iocs = []
     inetsim_network = ip_network(random_ip_range)
 
@@ -198,21 +198,39 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
             continue
 
         # Check if signature is a false positive
+        # Flag that represents if false positive exists
         fp = False
+        # Sometimes the filename gets shortend
+        target_filename_remainder = target_filename
+        if len(target_filename) > 30:
+            target_filename_remainder = target_filename[-29:]
         if sig_name in false_positive_sigs:
             marks = sig["marks"]
+            # If all marks are false positives, then flag as false positive sig
+            fp_count = 0
             for mark in marks:
-                if sig_name == "creates_doc" and len(marks) < 2 and target_filename in mark.get("ioc"):
+                if sig_name == "creates_doc" and (target_filename in mark.get("ioc") or target_filename_remainder in mark.get("ioc")):
                     # Nothing to see here, false positive because this signature
                     # thinks that the submitted file is a "new doc file"
-                    fp = True
-                elif sig_name == "creates_hidden_file" and len(marks) < 2:
+                    fp_count += 1
+                elif sig_name == "creates_hidden_file":
                     filepath = mark.get("call", {}).get("arguments", {}).get("filepath", "")
-                    if target_filename in filepath:
+                    if target_filename in filepath or target_filename_remainder in filepath:
                         # Nothing to see here, false positive because this signature
                         # thinks that the submitted file is a "hidden" file because
                         # it's in the tmp directory
-                        fp = True
+                        fp_count += 1
+                    elif wlist_check_dropped(filepath):
+                        fp_count += 1
+                elif sig_name in ["creates_exe", "creates_shortcut"]:
+                    if target_filename.split(".")[0] in mark.get("ioc") and ".lnk" in mark.get("ioc").lower():
+                        # Microsoft Word creates temporary .lnk files when a Word doc is opened
+                        fp_count += 1
+                    elif 'AppData\\Roaming\\Microsoft\\Office\\Recent\\Temp.LNK' in mark.get("ioc"):
+                        # Microsoft Word creates temporary .lnk files when a Word doc is opened
+                        fp_count += 1
+                if fp_count == len(marks):
+                    fp = True
             if fp:
                 continue
 
@@ -231,17 +249,19 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
             log.warning("Unknown signature detected: %s" % sig)
 
         # Creating heuristic
-        sig_res.set_heuristic(sig_id)
+        sig_heur = Heuristic(sig_id)
 
         # Adding signature and score
         score = sig["severity"]
         translated_score = translate_score(score)
-        sig_res.heuristic.add_signature_id(sig_name, score=translated_score)
+        sig_heur.add_signature_id(sig_name, score=translated_score)
 
         # Setting the Mitre ATT&CK ID for the heuristic
         attack_ids = sig.get('ttp', [])
         for attack_id in attack_ids:
-            sig_res.heuristic.add_attack_id(attack_id)
+            sig_heur.add_attack_id(attack_id)
+
+        sig_res.heuristic = sig_heur
 
         # Getting the signature family and tagging it
         sig_families = [family for family in sig.get('families', []) if family not in skipped_families]

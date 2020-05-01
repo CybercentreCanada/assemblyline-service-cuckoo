@@ -291,6 +291,7 @@ WHITELIST_COMMON_PATTERNS = {
     'Office Blocks': r'\\Microsoft\\Document Building Blocks\\[0-9]{4}\\',
     'Office ACL': r'AppData\\Roaming\\MicrosoftOffice\\.*\.acl$',
     'Office Dictionary': r'AppData\\Roaming\\Microsoft\\UProof\\CUSTOM.DIC$',
+    'Office 2003 Dictionary': r'.*AppData\\Roaming\\Microsoft\\Proof\\\~\$CUSTOM.DIC$',
     'Office Form': r'AppData\\Local\\Temp\\Word...\\MSForms.exd$'
 }
 
