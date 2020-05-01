@@ -53,7 +53,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     debug = api_report.get('debug', {})
     sigs = api_report.get('signatures', [])
     network = api_report.get('network', {})
-    behaviour = api_report.get('behavior', [])  # Note conversion from American to Canadian spelling
+    behaviour = api_report.get('behavior', {})  # Note conversion from American to Canadian spelling
 
     if debug:
         process_debug(debug, al_result)
@@ -230,14 +230,18 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
         if sig_id == 9999:
             log.warning("Unknown signature detected: %s" % sig)
 
+        # Creating heuristic
+        sig_res.set_heuristic(sig_id)
+
+        # Adding signature and score
+        score = sig["severity"]
+        translated_score = translate_score(score)
+        sig_res.heuristic.add_signature_id(sig_name, score=translated_score)
+
         # Setting the Mitre ATT&CK ID for the heuristic
-        attack_ids = sig.get('ttp', {})
-        # TODO: we are only able to handle a single attack id at the moment
-        if attack_ids != {}:
-            attack_id = next(iter(attack_ids))  # Grab first ID
-            sig_res.set_heuristic(sig_id, attack_id=attack_id, signature=sig_name)
-        else:
-            sig_res.set_heuristic(sig_id, signature=sig_name)
+        attack_ids = sig.get('ttp', [])
+        for attack_id in attack_ids:
+            sig_res.heuristic.add_attack_id(attack_id)
 
         # Getting the signature family and tagging it
         sig_families = [family for family in sig.get('families', []) if family not in skipped_families]
@@ -552,6 +556,18 @@ def is_ip(val: str) -> bool:
         # domains
         pass
     return False
+
+
+def translate_score(score: int) -> int:
+    score_translation = {
+        1: 10,
+        2: 100,
+        3: 250,
+        4: 500,
+        5: 750,
+        6: 1000
+    }
+    return score_translation[score]
 
 
 def get_process_map(processes: dict = None) -> dict:

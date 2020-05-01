@@ -589,6 +589,12 @@ class Cuckoo(ServiceBase):
         if task_info.get("guest", {})["status"] == "starting":
             return None
 
+        errors = task_info.get("errors", [])
+        if len(errors) > 0:
+            for error in errors:
+                self.log.error(error)
+            return None
+
         return "started"
 
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
@@ -785,7 +791,9 @@ class Cuckoo(ServiceBase):
             raise Exception("Cuckoo timed out after while trying to delete task %s" % task_id)
         except requests.ConnectionError:
             raise RecoverableError("Unable to reach the Cuckoo nest while trying to delete task %s" % task_id)
-        if resp.status_code != 200:
+        if resp.status_code == 500 and json.loads(resp.text).get("message") == "The task is currently being processed, cannot delete":
+            raise RecoverableError("The task %s is currently being processed, cannot delete" % task_id)
+        elif resp.status_code != 200:
             self.log.debug("Failed to delete task %s. Status code: %d" % (task_id, resp.status_code))
         else:
             self.log.debug("Deleted task: %s." % task_id)

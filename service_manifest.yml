@@ -47,7 +47,7 @@ config:
 
 heuristics:
   - heur_id: 1
-    attack_id: # one of ['T1190', 'T1212', 'T1082', 'T1211', 'T1068']
+    attack_id: ['T1190', 'T1212', 'T1082', 'T1211', 'T1068']
     name: Exploit
     score: 1000
     filetype: '*'
@@ -96,21 +96,21 @@ heuristics:
     description: Makes Android API calls not consistent with expected/standard behaviour.
 
   - heur_id: 8
-    attack_id: T1063
+    attack_id: ['T1063', 'T1089']
     name: Anti-antivirus
     score: 1000
     filetype: '*'
     description: Attempts to conceal itself from detection by anti-virus.
 
   - heur_id: 9
-    attack_id: T1497
+    attack_id: ['T1497', 'T1007']
     name: Anti-vm
     score: 1000
     filetype: '*'
     description: Attempts to detect if it is being run in virtualized environment.
 
   - heur_id: 10
-    attack_id: # one of ['T1057', 'T1063']
+    attack_id: ['T1057', 'T1063']
     name: Anti-debug
     score: 500
     filetype: '*'
@@ -123,7 +123,7 @@ heuristics:
     description: Attempts to replicate itself in order to spread to other systems.
 
   - heur_id: 12
-    attack_id: # TODO: T1526  # This is waiting for the build pipelines for Core to succeed
+    attack_id: T1526
     name: Cloud
     score: 500
     filetype: '*'
@@ -150,14 +150,14 @@ heuristics:
     description: Designed to block access to a system until a sum of money is paid.
 
   - heur_id: 16
-    attack_id: # one of ['T1060', 'T1103', 'T1098']
+    attack_id: ['T1060', 'T1103', 'T1098']
     name: Persistence
     score: 1000
     filetype: '*'
     description: Technique used to maintain presence in system(s) across interruptions that could cut off access.
 
   - heur_id: 17
-    attack_id: # one of ['T1086', 'T1055']
+    attack_id: ['T1086', 'T1055']
     name: Injection
     score: 1000
     filetype: '*'
@@ -177,7 +177,6 @@ heuristics:
     description: Command shell or script process was created by unexpected parent process.
 
   - heur_id: 20
-    attack_id: T1070
     name: Trojan
     score: 1000
     filetype: '*'
@@ -198,7 +197,7 @@ heuristics:
     description: Communicates with a server controlled by a malicious actor.
 
   - heur_id: 23
-    attack_id: T1188
+    attack_id: ['T1090', 'T1188']
     name: Tor
     score: 1000
     filetype: '*'
@@ -218,7 +217,7 @@ heuristics:
     description: Attempts to detect if it is in a sandbox.
 
   - heur_id: 26
-    attack_id: # one of ['T1036', 'T1158', 'T1070']
+    attack_id: ['T1036', 'T1158', 'T1070']
     name: Stealth
     score: 1000
     filetype: '*'
@@ -276,7 +275,7 @@ heuristics:
     description: Displays unwanted, unsolicited advertisements.
 
   - heur_id: 35
-    attack_id: # one of ['T1003', 'T1005']
+    attack_id: ['T1003', 'T1005']
     name: Infostealer
     score: 1000
     filetype: '*'
@@ -290,7 +289,7 @@ heuristics:
     description: Leverages Windows Management Instrumentation (WMI) to gather information and/or execute a process.
 
   - heur_id: 37
-    attack_id: T1071
+    attack_id: ['T1071', 'T1129']
     name: Downloader
     score: 1000
     filetype: '*'
@@ -327,7 +326,7 @@ heuristics:
     description: Leverages URL shortening to obfuscate malicious destination.
 
   - heur_id: 43
-    attack_id: T1057
+    attack_id: T1497
     name: Anti-emulation
     score: 1000
     filetype: '*'
