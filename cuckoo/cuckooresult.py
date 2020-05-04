@@ -26,7 +26,6 @@ log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     log.debug("Generating AL Result.")
     info = api_report.get('info')
-    start_time = None
     if info is not None:
         start_time = info['started']
         end_time = info['ended']
@@ -276,7 +275,6 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
             sig_marks = sig.get('marks', [])
             process_name_added = False
             injected_processes = []
-            max_console_output = 0
             for mark in sig_marks:
                 mark_type = mark["type"]
                 if mark_type == "generic" and sig_name != "process_martian":
@@ -330,18 +328,11 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     if process_name and process_name not in injected_processes:
                         injected_processes.append(process_name)
                         sig_res.add_line('\tInjected Process: %s' % process_name)
-                # Display the console output
-                if mark_type == "call" and sig_name == "console_output":
-                    buffer = mark["call"].get("arguments", {}).get(
-                        "buffer")
-                    if buffer and max_console_output < 20:
-                        sig_res.add_line('\tBuffer: %s' % safe_str(buffer))
-                        max_console_output += 1
                 # If exception occurs, display the stack trace
                 elif mark_type == "call" and sig_name == "raises_exception":
                     stacktrace = mark["call"].get("arguments", {}).get(
                         "stacktrace")
-                    if stacktrace and max_console_output < 20:
+                    if stacktrace:
                         sig_res.add_line('\tStacktrace: %s' % safe_str(stacktrace))
 
 
