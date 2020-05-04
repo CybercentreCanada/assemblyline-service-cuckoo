@@ -13,7 +13,7 @@ from pprint import pprint
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, Heuristic
 from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_uri, wlist_check_hash, wlist_check_dropped
-from cuckoo.signatures import check_signature, CUCKOO_DROPPED_SIGNATURES
+from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 
 UUID_RE = re.compile(r"{([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\}")
 USER_SID_RE = re.compile(r"S-1-5-21-\d+-\d+-\d+-\d+")
@@ -66,7 +66,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         target = api_report.get("target", {})
         target_file = target.get("file", {})
         target_filename = target_file.get("name")
-        process_signatures(sigs, al_result, random_ip_range, target_filename)
+        process_signatures(sigs, al_result, random_ip_range, target_filename, process_map)
     if network:
         network_events = process_network(network, al_result, random_ip_range, process_map)
     if behaviour:
@@ -89,7 +89,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         process_all_events(al_result, network_events, process_events)
 
     log.debug("AL result generation completed!")
-    return True
+    return True, process_map
 
 
 def process_debug(debug, al_result):
@@ -170,7 +170,7 @@ def remove_process_keys(process: dict) -> dict:
     return process
 
 
-def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, target_filename: str):
+def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, target_filename: str, process_map: dict):
     log.debug("Processing signature results.")
     if len(sigs) <= 0:
         return
@@ -180,7 +180,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
     skipped_sigs = CUCKOO_DROPPED_SIGNATURES
     # 'dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities', 'persistence_autorun']
     skipped_sig_iocs = []
-    skipped_mark_items = ["type", "suspicious_features", "description", "entropy", "process", "useragent"]
+    skipped_mark_items = ["type", "suspicious_features", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
     false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut"]  # Signatures that need to be double checked in case they return false positives
@@ -244,7 +244,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
 
         # Setting up the heuristic for each signature
         # Severity is 0-5ish with 0 being least severe.
-        sig_id = check_signature(sig_name)
+        sig_id = get_category_id(sig_name)
         if sig_id == 9999:
             log.warning("Unknown signature detected: %s" % sig)
 
@@ -274,9 +274,12 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
         markcount = sig.get("markcount", 0)
         if markcount > 0 and sig_name not in skipped_sig_iocs:
             sig_marks = sig.get('marks', [])
+            process_name_added = False
+            injected_processes = []
+            max_console_output = 0
             for mark in sig_marks:
                 mark_type = mark["type"]
-                if mark_type == "generic":
+                if mark_type == "generic" and sig_name != "process_martian":
                     for item in mark:
                         # Check if key is not flagged to skip, and that we
                         # haven't already raised this ioc
@@ -286,24 +289,61 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                 if not is_ip(mark[item]) or \
                                         (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
                                     iocs.append(mark[item])
-                                    sig_res.add_line('\tIOC: %s' % mark[item])
+                                    if item == "description":
+                                        sig_res.add_line('\tFun fact: %s' % mark[item])
+                                    else:
+                                        sig_res.add_line('\tIOC: %s' % mark[item])
                                 else:
                                     sig_based_on_whitelist = True
                             else:
                                 sig_based_on_whitelist = True
-
+                elif mark_type == "generic" and sig_name == "process_martian":
+                    sig_res.add_line('\tParent process %s did the following: %s' % (mark["parent_process"], safe_str(mark["martian_process"])))
                 elif mark_type == "ioc":
                     if mark.get('category') not in skipped_category_iocs and mark["ioc"] not in iocs:
                         # Now check if any item in signature is whitelisted explicitly or in inetsim network
                         if not contains_whitelisted_value(mark["ioc"]):
                             if not is_ip(mark["ioc"]) or \
                                     (is_ip(mark["ioc"]) and ip_address(mark["ioc"]) not in inetsim_network):
+                                # If process ID in ioc, replace with process name
+                                for key in process_map:
+                                    if str(key) in mark["ioc"]:
+                                        mark["ioc"] = mark["ioc"].replace(str(key), process_map[key]["name"])
                                 iocs.append(mark["ioc"])
                                 sig_res.add_line('\tIOC: %s' % mark["ioc"])
                             else:
                                 sig_based_on_whitelist = True
                         else:
                             sig_based_on_whitelist = True
+
+                # Mapping the process name to the process id and displaying the process name
+                elif mark_type == "call" and not process_name_added:
+                    pid = mark.get("pid")
+                    process_name = process_map.get(pid, {}).get("name")
+                    if process_name:
+                        sig_res.add_line('\tProcess Name: %s' % process_name)
+                        process_name_added = True
+                # Displaying the injected process
+                if mark_type == "call" and get_signature_category(sig_name) == "Injection":
+                    injected_process = mark["call"].get("arguments", {}).get("process_identifier")
+                    process_name = process_map.get(injected_process, {}).get("name")
+                    if process_name and process_name not in injected_processes:
+                        injected_processes.append(process_name)
+                        sig_res.add_line('\tInjected Process: %s' % process_name)
+                # Display the console output
+                if mark_type == "call" and sig_name == "console_output":
+                    buffer = mark["call"].get("arguments", {}).get(
+                        "buffer")
+                    if buffer and max_console_output < 20:
+                        sig_res.add_line('\tBuffer: %s' % safe_str(buffer))
+                        max_console_output += 1
+                # If exception occurs, display the stack trace
+                elif mark_type == "call" and sig_name == "raises_exception":
+                    stacktrace = mark["call"].get("arguments", {}).get(
+                        "stacktrace")
+                    if stacktrace and max_console_output < 20:
+                        sig_res.add_line('\tStacktrace: %s' % safe_str(stacktrace))
+
 
         if not sig_based_on_whitelist:
             sig_res.add_tag("dynamic.signature.name", sig_name)
@@ -462,7 +502,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             if dns_res_sec is not None and dns_res_sec.heuristic is None:
                 dns_res_sec.set_heuristic(1000)
                 dns_res_sec.add_tag("network.protocol", "dns")
-            if protocol_res_sec is not None and protocol_res_sec.heuristic is None:
+            # Host is only detected if the ip was hardcoded, otherwise it is noise
+            if protocol_res_sec is not None and protocol_res_sec.heuristic is None and dest_ip not in resolved_ips:
                 protocol_res_sec.set_heuristic(1001)
 
             # If the record has not been removed then it should be tagged for protocol, domain, ip, and port
@@ -510,7 +551,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 "port": http_call["port"],
                 "method": http_call["method"],
                 "path": path,
-                "user-agent": http_call["user-agent"],
+                "user-agent": http_call.get("user-agent"),
                 "request": request,
                 "process_name": None,
                 "uri": uri  # Note: will be removed in like twenty lines, we just need it for tagging

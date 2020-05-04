@@ -521,7 +521,8 @@ CUCKOO_SIGNATURES = {
   "spyrecorder": "RAT",
   "uroburos_file": "RAT",
   "vnc_mutexes": "RAT",
-  "wakbot": "RAT"
+  "wakbot": "RAT",
+  "generates_crypto_key": "Stealth"
 }
 
 CUCKOO_SIGNATURE_CATEGORIES = {
@@ -722,7 +723,11 @@ CUCKOO_DROPPED_SIGNATURES = [
 ]
 
 
-def check_signature(sig):
+def get_category_id(sig: str) -> int:
     category = CUCKOO_SIGNATURES.get(sig, "unknown")
     metadata = CUCKOO_SIGNATURE_CATEGORIES.get(category, {})
     return metadata.get("id", 9999)
+
+
+def get_signature_category(sig: str) -> str:
+    return CUCKOO_SIGNATURES.get(sig, "unknown")

@@ -287,7 +287,7 @@ WHITELIST_COMMON_PATTERNS = {
     'Office File': r'\\Microsoft\\OFFICE\\DATA\\[a-z0-9]+\.dat$',
     'Internet file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.MSO\\',
     'Word file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.Word\\~WRS',
-    'Word Temp Files': r'\\Temp\\~$[a-f0-9]+\.doc',
+    'Word Temp Files': r'.*\\Temp\\~$[a-f0-9]+\.doc',
     'Office Blocks': r'\\Microsoft\\Document Building Blocks\\[0-9]{4}\\',
     'Office ACL': r'AppData\\Roaming\\MicrosoftOffice\\.*\.acl$',
     'Office Dictionary': r'AppData\\Roaming\\Microsoft\\UProof\\CUSTOM.DIC$',

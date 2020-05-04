@@ -335,7 +335,7 @@ class Cuckoo(ServiceBase):
                     # else:
                     #     guest_ip = self.report_machine_info(machine_name)
                     self.log.debug("Generating AL Result from Cuckoo results..")
-                    success = generate_al_result(self.cuckoo_task.report,
+                    success, process_map = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
                                                  file_ext,
                                                  self.cfg.get("random_ip_range"))
@@ -427,6 +427,10 @@ class Cuckoo(ServiceBase):
                                 # Lookup a more descriptive name, depending the filename suffix
                                 filename_suffix = f.split(".")[-1]
                                 memdesc = memdesc_lookup.get(filename_suffix, "Process Memory Artifact")
+                                # If PID is in file name, replace it with process name
+                                for pid in process_map:
+                                    if str(pid) in f:
+                                        f = f.replace(str(pid), process_map[pid]["name"])
                                 if filename_suffix == "py":
                                     self.task.add_supplementary(mem_file_path, memdesc, display_name=f)
                                 else:
