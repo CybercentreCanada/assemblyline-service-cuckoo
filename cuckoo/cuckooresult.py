@@ -82,7 +82,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
             al_result.add_section(noexec_res)
         else:
             # Otherwise, moving on!
-            process_events = process_behaviour(behaviour, al_result)
+            process_events = process_behaviour(behaviour, al_result, process_map)
 
     if len(network_events) > 0 or len(process_events) > 0:
         process_all_events(al_result, network_events, process_events)
@@ -112,7 +112,7 @@ def process_debug(debug, al_result):
     return failed
 
 
-def process_behaviour(behaviour: dict, al_result: Result) -> list:
+def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> list:
     log.debug("Processing behavior results.")
     events = []  # This will contain all network events
     # Skip these processes if they have no children (which would indicate that they were injected into) or calls
@@ -128,6 +128,9 @@ def process_behaviour(behaviour: dict, al_result: Result) -> list:
     # Cleaning keys, value pairs
     for process in process_tree:
         process = remove_process_keys(process)
+        for pid in process_map:
+            if process_map[pid]["name"] == process["process_name"]:
+                process["process_name"] = "(" + str(pid) + ")" + " " + process["process_name"]
     if len(process_tree) > 0:
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = process_tree
@@ -406,7 +409,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                         resolved_ips[ip] = {
                             "type": dns_call["type"],
                             "domain": domain,
-                            "process_name": process_details["name"]
+                            "process_name": process_details["name"],
+                            "process_id": process
                         }
                     else:
                         resolved_ips[ip] = {
@@ -441,10 +445,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             network_flow = {
                 "timestamp": datetime.datetime.fromtimestamp(network_call["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                 "proto": protocol,
-                "src_ip": network_call["src"],
-                "src_port": network_call["sport"],
                 "dom": None,
-                "res_ip": None,
                 "dom_type": None,
                 "dest_ip": dst,
                 "dest_port": network_call["dport"],
@@ -453,9 +454,12 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             }
             if dst in resolved_ips.keys():
                 network_flow["dom"] = resolved_ips[dst]["domain"]
-                network_flow["res_ip"] = dst
                 network_flow["dom_type"] = resolved_ips[dst]["type"]
-                network_flow["process_name"] = resolved_ips[dst].get("process_name")  # this may or may now exist in DNS
+                process_name = resolved_ips[dst].get("process_name")
+                if process_name:
+                    network_flow["process_name"] = process_name + "(" + str(resolved_ips[dst]["process_id"]) + ")"  # this may or may now exist in DNS
+                else:
+                    network_flow["process_name"] = process_name
             network_flows_table.append(network_flow)
 
     protocol_res_sec = None
@@ -487,7 +491,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                         if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or
                                               connect.get("hostname", "") == network_flow["dest_ip"]) and \
                                 connect["port"] == network_flow["dest_port"]:
-                            network_flow["process_name"] = process_details["name"]
+                            network_flow["process_name"] = process_details["name"] + " (" + str(process) + ")"
 
             # Setting heuristics for appropriate sections
             if dns_res_sec is not None and dns_res_sec.heuristic is None:
@@ -511,8 +515,11 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             dest_port = network_flow["dest_port"]
             protocol_res_sec.add_tag("network.port", dest_port)
 
-            # add each network flow to the events list
-            events.append(network_flow)
+            # add a shallow copy of network flow to the events list
+            events.append(network_flow.copy())
+
+            # We want all key values for all network flows except for timestamps and event_type
+            del network_flow["timestamp"]
 
     if dns_res_sec and len(dns_res_sec.tags) > 0:
         network_res.add_subsection(dns_res_sec)
@@ -552,7 +559,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 for network_call in process_details["network_calls"]:
                     send = network_call.get("send", {}) or network_call.get("InternetConnectW", {})
                     if send != {} and (send.get("service", 0) == 3 or send.get("buffer", "") == request):
-                        req["process_name"] = process_details["name"]
+                        req["process_name"] = process_details["name"] + " (" + str(process) + ")"
             req_table.append(req)
 
     if len(req_table) > 0:

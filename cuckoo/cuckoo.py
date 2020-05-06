@@ -331,9 +331,7 @@ class Cuckoo(ServiceBase):
 
                     if machine_name is None:
                         self.log.debug('Unable to retrieve machine name from result.')
-                    #     guest_ip = ""
-                    # else:
-                    #     guest_ip = self.report_machine_info(machine_name)
+
                     self.log.debug("Generating AL Result from Cuckoo results..")
                     success, process_map = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
