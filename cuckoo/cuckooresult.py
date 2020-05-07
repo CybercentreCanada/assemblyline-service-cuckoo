@@ -194,6 +194,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
         # then it is raised because it detects whitelisted activity. Therefore
         # this boolean flag will be used to determine this
         sig_based_on_whitelist = False
+        sig_injected_itself = False  # this also indicates a false positive
         sig_name = sig['name']
 
         if sig_name in skipped_sigs:
@@ -202,10 +203,10 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
         # Check if signature is a false positive
         # Flag that represents if false positive exists
         fp = False
-        # Sometimes the filename gets shortend
+        # Sometimes the filename gets shortened
         target_filename_remainder = target_filename
-        if len(target_filename) > 30:
-            target_filename_remainder = target_filename[-29:]
+        if len(target_filename) > 19:
+            target_filename_remainder = target_filename[-18:]
         if sig_name in false_positive_sigs:
             marks = sig["marks"]
             # If all marks are false positives, then flag as false positive sig
@@ -276,10 +277,13 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
         markcount = sig.get("markcount", 0)
         if markcount > 0 and sig_name not in skipped_sig_iocs:
             sig_marks = sig.get('marks', [])
-            process_name_added = False
+            process_names = []
             injected_processes = []
             for mark in sig_marks:
                 mark_type = mark["type"]
+                # Mapping the process name to the process id
+                pid = mark.get("pid")
+                process_name = process_map.get(pid, {}).get("name")
                 if mark_type == "generic" and sig_name != "process_martian":
                     for item in mark:
                         # Check if key is not flagged to skip, and that we
@@ -301,46 +305,56 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 elif mark_type == "generic" and sig_name == "process_martian":
                     sig_res.add_line('\tParent process %s did the following: %s' % (mark["parent_process"], safe_str(mark["martian_process"])))
                 elif mark_type == "ioc":
-                    if mark.get('category') not in skipped_category_iocs and mark["ioc"] not in iocs:
+                    ioc = mark["ioc"]
+                    category = mark.get("category")
+                    if category and category not in skipped_category_iocs and ioc not in iocs:
                         # Now check if any item in signature is whitelisted explicitly or in inetsim network
-                        if not contains_whitelisted_value(mark["ioc"]):
-                            if not is_ip(mark["ioc"]) or \
-                                    (is_ip(mark["ioc"]) and ip_address(mark["ioc"]) not in inetsim_network):
+                        if not contains_whitelisted_value(ioc):
+                            if not is_ip(ioc) or \
+                                    (is_ip(ioc) and ip_address(ioc) not in inetsim_network):
                                 # If process ID in ioc, replace with process name
                                 for key in process_map:
-                                    if str(key) in mark["ioc"]:
-                                        mark["ioc"] = mark["ioc"].replace(str(key), process_map[key]["name"])
-                                iocs.append(mark["ioc"])
-                                sig_res.add_line('\tIOC: %s' % mark["ioc"])
+                                    if str(key) in ioc:
+                                        ioc = ioc.replace(str(key), process_map[key]["name"])
+                                iocs.append(ioc)
+                                sig_res.add_line('\tIOC: %s' % ioc)
                             else:
                                 sig_based_on_whitelist = True
                         else:
                             sig_based_on_whitelist = True
+                    if category and category == "file":
+                        # Tag this ioc as file path
+                        sig_res.add_tag("dynamic.process.file_name", ioc)
 
-                # Mapping the process name to the process id and displaying the process name
-                elif mark_type == "call" and not process_name_added:
-                    pid = mark.get("pid")
-                    process_name = process_map.get(pid, {}).get("name")
-                    if process_name:
-                        sig_res.add_line('\tProcess Name: %s' % process_name)
-                        process_name_added = True
+                # Displaying the process name
+                elif mark_type == "call" and process_name is not None and len(process_names) == 0:
+                    sig_res.add_line('\tProcess Name: %s' % process_name)
+                    process_names.append(process_name)
                 # Displaying the injected process
                 if mark_type == "call" and get_signature_category(sig_name) == "Injection":
                     injected_process = mark["call"].get("arguments", {}).get("process_identifier")
-                    process_name = process_map.get(injected_process, {}).get("name")
-                    if process_name and process_name not in injected_processes:
-                        injected_processes.append(process_name)
-                        sig_res.add_line('\tInjected Process: %s' % process_name)
+                    injected_process_name = process_map.get(injected_process, {}).get("name")
+                    if injected_process_name and injected_process_name not in injected_processes:
+                        injected_processes.append(injected_process_name)
+                        sig_res.add_line('\tInjected Process: %s' % injected_process_name)
                 # If exception occurs, display the stack trace
                 elif mark_type == "call" and sig_name == "raises_exception":
                     stacktrace = mark["call"].get("arguments", {}).get(
                         "stacktrace")
                     if stacktrace:
                         sig_res.add_line('\tStacktrace: %s' % safe_str(stacktrace))
+                # If hidden file is created and wasn't a false positive, tag the file path
+                elif mark_type == "call" and sig_name == "creates_hidden_file":
+                    filepath = mark["call"].get("arguments", {}).get("filepath")
+                    if filepath:
+                        sig_res.add_tag("dynamic.process.file_name", filepath)
+                # If there is only one process name and one injected process and
+                # they have the same name, skip sig because it most likely is a
+                # false positive
+                if process_names == injected_processes:
+                    sig_injected_itself = True
 
-
-        if not sig_based_on_whitelist:
-            sig_res.add_tag("dynamic.signature.name", sig_name)
+        if not sig_based_on_whitelist and not sig_injected_itself:
             # Adding the signature result section to the parent result section
             sigs_res.add_subsection(sig_res)
     if len(sigs_res.subsections) > 0:

@@ -136,7 +136,6 @@ heuristics:
     description: Malicious software program
 
   - heur_id: 14
-    attack_id: T1203
     name: Suspicious Office
     score: 100
     filetype: '*'
@@ -160,7 +159,7 @@ heuristics:
     description: Technique used to maintain presence in system(s) across interruptions that could cut off access.
 
   - heur_id: 17
-    attack_id: [T1086, T1055]
+    attack_id: T1055
     name: Injection
     score: 250
     signature_score_map:
