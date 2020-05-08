@@ -13,6 +13,7 @@ import requests
 
 from retrying import retry, RetryError
 
+from assemblyline_v4_service.common.request import ServiceRequest
 from assemblyline_v4_service.common.task import MaxExtractedExceeded
 from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT
 from assemblyline_v4_service.common.base import ServiceBase
@@ -142,7 +143,6 @@ class CuckooTask(dict):
 class Cuckoo(ServiceBase):
     def __init__(self, config=None):
         super(Cuckoo, self).__init__(config)
-        self.cfg = config
         self.file_name = None
         self.submit_url = None
         self.query_task_url = None
@@ -156,12 +156,12 @@ class Cuckoo(ServiceBase):
         self.file_res = None
         self.cuckoo_task = None
         self.session = None
-        self.ssdeep_match_pct = 0
+        self.ssdeep_match_pct = None
         self.machines = None
         self.auth_header = None
 
     def set_urls(self):
-        base_url = "http://%s:%s" % (self.cfg['remote_host_ip'], self.cfg['remote_host_port'])
+        base_url = "http://%s:%s" % (self.config['remote_host_ip'], self.config['remote_host_port'])
         self.submit_url = "%s/%s" % (base_url, CUCKOO_API_SUBMIT)
         self.query_task_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_TASK)
         self.delete_task_url = "%s/%s" % (base_url, CUCKOO_API_DELETE_TASK)
@@ -172,12 +172,12 @@ class Cuckoo(ServiceBase):
         self.query_host_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_HOST_STATUS)
 
     def start(self):
-        self.auth_header = {'Authorization': self.cfg['auth_header_value']}
-        self.ssdeep_match_pct = int(self.cfg.get("dedup_similar_percent", 80))
+        self.auth_header = {'Authorization': self.config['auth_header_value']}
+        self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
-    def execute(self, request):
+    def execute(self, request: ServiceRequest):
         self.session = requests.Session()
         self.set_urls()
         self.task = request.task
@@ -250,37 +250,16 @@ class Cuckoo(ServiceBase):
             self.file_name = original_ext[0] + file_ext
 
         # Parse user args
-        generate_report = None
-        dump_processes = None
-        dll_function = None
-        arguments = None
-        dump_memory = None
-        no_monitor = None
-        custom_options = None
-
-        for param in self.cfg:
-            if param == "analysis_timeout":
-                kwargs['timeout'] = self.cfg.get(param, None)
-            elif param == "generate_report":
-                generate_report = self.cfg.get(param, None)
-            elif param == "dump_processes":
-                dump_processes = self.cfg.get(param, None)
-            elif param == "dll_function":
-                dll_function = self.cfg.get(param, None)
-            elif param == "arguments":
-                arguments = self.cfg.get(param, None)
-            elif param == "dump_memory":
-                dump_memory = self.cfg.get(param, None)
-            elif param == "no_monitor":
-                no_monitor = self.cfg.get(param, None)
-            elif param == "enforce_timeout":
-                kwargs['enforce_timeout'] = self.cfg.get(param, None)
-            elif param == "custom_options":
-                custom_options = self.cfg.get(param, None)
-            elif param == "platform":
-                kwargs["platform"] = self.cfg.get(param, None)
-            elif param == "clock":
-                kwargs["clock"] = self.cfg.get(param, None)
+        kwargs['timeout'] = request.get_param("analysis_timeout")
+        generate_report = request.get_param("generate_report")
+        dump_processes = request.get_param("dump_processes")
+        dll_function = request.get_param("dll_function")
+        arguments = request.get_param("arguments")
+        dump_memory = request.get_param("dump_memory")
+        no_monitor = request.get_param("no_monitor")
+        kwargs['enforce_timeout'] = request.get_param("enforce_timeout")
+        custom_options = request.get_param("custom_options")
+        kwargs["clock"] = request.get_param("clock")
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
@@ -336,7 +315,7 @@ class Cuckoo(ServiceBase):
                     success, process_map = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
                                                  file_ext,
-                                                 self.cfg.get("random_ip_range"))
+                                                 self.config.get("random_ip_range"))
                     if success is False:
                         err_str = self.get_errors()
                         if self.cuckoo_task and self.cuckoo_task.id is not None:
@@ -358,7 +337,7 @@ class Cuckoo(ServiceBase):
                     )
 
                 # Get the max size for extract files, used a few times after this
-                request.max_file_size = self.cfg['max_file_size']
+                request.max_file_size = self.config['max_file_size']
                 max_extracted_size = request.max_file_size
 
                 if generate_report is True:
@@ -470,7 +449,7 @@ class Cuckoo(ServiceBase):
                             )
 
                 if len(exports_available) > 0 and kwargs.get("package", "") == "dll_multi":
-                    max_dll_exports = self.cfg["max_dll_exports_exec"]
+                    max_dll_exports = self.config["max_dll_exports_exec"]
                     dll_multi_section = ResultSection(
                         title_text="Executed multiple DLL exports",
                         body=f"Executed the following exports from the DLL: "
@@ -704,7 +683,7 @@ class Cuckoo(ServiceBase):
         if fmt == "json":
             try:
                 # Setting environment recursion limit for large JSONs
-                sys.setrecursionlimit(int(self.cfg['recursion_limit']))
+                sys.setrecursionlimit(int(self.config['recursion_limit']))
                 resp_dict = dict(resp.json())
                 report_data = resp_dict
             except Exception:

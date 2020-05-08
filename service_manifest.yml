@@ -22,28 +22,81 @@ config:
   remote_host_port: 8090
   auth_header_value: Bearer sample_api_token
 
-  # Cuckoo analysis specifications
-  analysis_timeout: 120
-  enforce_timeout: false
-  generate_report: true
-  dump_processes: false
-  arguments:
-  custom_options:
-  dump_memory: false
-  no_monitor: false
-  routing: inetsim # TODO: implement routing options
-  dedup_similar_percent: 80
-  max_dll_exports_exec: 5
-  dll_function:
-  platform:
-  clock:  # format %m-%d-%Y %H:%H:%S
-
   # Cuckoo request specification
   max_file_size: 80000000
   recursion_limit: 10000
 
-  # InetSim specifications
+  # INetSim specifications
   random_ip_range: 11.0.0.0/8
+
+  # Cuckoo Service specifications
+  dedup_similar_percent: 40
+  max_dll_exports_exec: 5
+
+submission_params:
+  # Cuckoo analysis specifications
+  - default: 120
+    name: analysis_timeout
+    type: int
+    value: 120
+
+  - default: false
+    name: enforce_timeout
+    type: bool
+    value: false
+
+  - default: true
+    name: generate_report
+    type: bool
+    value: true
+
+  - default: false
+    name: dump_processes
+    type: bool
+    value: false
+
+  - default: ""
+    name: dll_function
+    type: str
+    value: ""
+
+  - default: ""
+    name: arguments
+    type: str
+    value: ""
+
+  - default: ""
+    name: custom_options
+    type: str
+    value: ""
+
+  - default: false
+    name: dump_memory
+    type: bool
+    value: false
+
+  - default: false
+    name: no_monitor
+    type: bool
+    value: false
+
+  # format %m-%d-%Y %H:%M:%S
+  - default: ""
+    name: clock
+    type: str
+    value: ""
+
+# TODO: implement routing options
+#  - default: inetsim
+#    name: routing
+#    type: str
+#    value: inetsim
+
+# TODO: implement platform options
+#  - default: "windows"
+#    name: platform
+#    type: str
+#    value: "windows"
 
 heuristics:
   - heur_id: 1
