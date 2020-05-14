@@ -42,6 +42,7 @@ SUPPORTED_EXTENSIONS = [
     "exe",
     "pdf",
     "doc",
+    "docm",
     "docx",
     "rtf",
     "mht",
@@ -567,7 +568,7 @@ class Cuckoo(ServiceBase):
                              self.cuckoo_task.id)
             return None
 
-        if task_info.get("guest", {})["status"] == "starting":
+        if task_info.get("guest", {}).get("status") == "starting":
             return None
 
         errors = task_info.get("errors", [])
