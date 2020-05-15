@@ -522,7 +522,8 @@ CUCKOO_SIGNATURES = {
   "uroburos_file": "RAT",
   "vnc_mutexes": "RAT",
   "wakbot": "RAT",
-  "generates_crypto_key": "Stealth"
+  "generates_crypto_key": "Stealth",
+  "network_http": "C2"
 }
 
 CUCKOO_SIGNATURE_CATEGORIES = {
@@ -719,7 +720,7 @@ CUCKOO_DROPPED_SIGNATURES = [
   'powershell_di', 'powerfun', 'powershell_dfsp', 'powershell_c2dns',
   'powershell_unicorn', 'spreading_autoruninf', 'sniffer_winpcap',
   'mutex_winscp', 'sharing_rghost', 'exp_3322_dom', 'mirc_file', 'vir_napolar',
-  'vertex_url', 'network_http', 'raises_exception', 'has_pdb'
+  'vertex_url', 'has_pdb'
 ]
 
 

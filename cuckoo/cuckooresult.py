@@ -188,12 +188,12 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
     false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut"]  # Signatures that need to be double checked in case they return false positives
     iocs = []
     inetsim_network = ip_network(random_ip_range)
+    # Sometimes the filename gets shortened
+    target_filename_remainder = target_filename
+    if len(target_filename) > 19:
+        target_filename_remainder = target_filename[-18:]
 
     for sig in sigs:
-        # Sometime a signature is not initially meant to be skipped, but
-        # then it is raised because it detects whitelisted activity. Therefore
-        # this boolean flag will be used to determine this
-        sig_based_on_whitelist = False
         sig_injected_itself = False  # this also indicates a false positive
         sig_name = sig['name']
 
@@ -203,10 +203,6 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
         # Check if signature is a false positive
         # Flag that represents if false positive exists
         fp = False
-        # Sometimes the filename gets shortened
-        target_filename_remainder = target_filename
-        if len(target_filename) > 19:
-            target_filename_remainder = target_filename[-18:]
         if sig_name in false_positive_sigs:
             marks = sig["marks"]
             # If all marks are false positives, then flag as false positive sig
@@ -275,6 +271,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
 
         # Find any indicators of compromise from the signature marks
         markcount = sig.get("markcount", 0)
+        fp_count = 0
         if markcount > 0 and sig_name not in skipped_sig_iocs:
             sig_marks = sig.get('marks', [])
             process_names = []
@@ -299,9 +296,9 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                     else:
                                         sig_res.add_line('\tIOC: %s' % mark[item])
                                 else:
-                                    sig_based_on_whitelist = True
+                                    fp_count += 1
                             else:
-                                sig_based_on_whitelist = True
+                                fp_count += 1
                 elif mark_type == "generic" and sig_name == "process_martian":
                     sig_res.add_line('\tParent process %s did the following: %s' % (mark["parent_process"], safe_str(mark["martian_process"])))
                 elif mark_type == "ioc":
@@ -319,9 +316,9 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                 iocs.append(ioc)
                                 sig_res.add_line('\tIOC: %s' % ioc)
                             else:
-                                sig_based_on_whitelist = True
+                                fp_count += 1
                         else:
-                            sig_based_on_whitelist = True
+                            fp_count += 1
                     if category and category == "file":
                         # Tag this ioc as file path
                         sig_res.add_tag("dynamic.process.file_name", ioc)
@@ -351,10 +348,10 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 # If there is only one process name and one injected process and
                 # they have the same name, skip sig because it most likely is a
                 # false positive
-                if process_names == injected_processes:
+                if process_names != [] and injected_processes != [] and process_names == injected_processes:
                     sig_injected_itself = True
 
-        if not sig_based_on_whitelist and not sig_injected_itself:
+        if fp_count < markcount and not sig_injected_itself:
             # Adding the signature result section to the parent result section
             sigs_res.add_subsection(sig_res)
     if len(sigs_res.subsections) > 0:
