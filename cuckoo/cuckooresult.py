@@ -335,7 +335,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                         injected_processes.append(injected_process_name)
                         sig_res.add_line('\tInjected Process: %s' % injected_process_name)
                 # If exception occurs, display the stack trace
-                elif mark_type == "call" and sig_name == "raises_exception":
+                elif mark_type == "call" and sig_name in ["raises_exception", "applcation_raises_exception"]:
                     stacktrace = mark["call"].get("arguments", {}).get(
                         "stacktrace")
                     if stacktrace:
