@@ -537,7 +537,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
     if protocol_res_sec and len(protocol_res_sec.tags) > 0:
         network_res.add_subsection(protocol_res_sec)
     if len(network_flows_table) > 0:
-        netflows_sec.body = network_flows_table
+        netflows_sec.body = json.dumps(network_flows_table)
+        netflows_sec.body_format = BODY_FORMAT.TABLE
         network_res.add_subsection(netflows_sec)
 
     # HTTP/HTTPS section
@@ -592,7 +593,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 http_sec.add_tag("network.dynamic.uri_path", path)
             # now remove uri from the final output
             del http_call['uri']
-        http_sec.body = req_table
+        http_sec.body = json.dumps(req_table)
+        http_sec.body_format = BODY_FORMAT.TABLE
         network_res.add_subsection(http_sec)
 
     if len(network_res.subsections) > 0:
@@ -612,7 +614,8 @@ def process_all_events(al_result: Result, network_events: list = [], process_eve
         events_section.add_tag("dynamic.process.file_name", event["image"])
     all_events = network_events + process_events
     sorted_events = sorted(all_events, key=lambda k: k["timestamp"])
-    events_section.body = sorted_events
+    events_section.body = json.dumps(sorted_events)
+    events_section.body_format = BODY_FORMAT.TABLE
     al_result.add_section(events_section)
 
 
