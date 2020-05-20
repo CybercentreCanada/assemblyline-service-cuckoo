@@ -133,7 +133,8 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
                 process["process_name"] = "(" + str(pid) + ")" + " " + process["process_name"]
     if len(process_tree) > 0:
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
-        process_tree_section.body = process_tree
+        process_tree_section.body = json.dumps(process_tree)
+        process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
         al_result.add_section(process_tree_section)
 
     # Get information about processes to return as events
