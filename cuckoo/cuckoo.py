@@ -312,7 +312,8 @@ class Cuckoo(ServiceBase):
 
                     if machine_name is None:
                         self.log.debug('Unable to retrieve machine name from result.')
-
+                    else:
+                        self.report_machine_info(machine_name)
                     self.log.debug("Generating AL Result from Cuckoo results..")
                     success, process_map = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
@@ -545,7 +546,7 @@ class Cuckoo(ServiceBase):
             raise Exception("Retrying after missing_report status")
 
         if err_msg:
-            self.log.error(err_msg)
+            self.log.error("error is: %s" % err_msg)
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
             raise RecoverableError(err_msg)
@@ -908,7 +909,6 @@ class Cuckoo(ServiceBase):
                                             body=json.dumps(body))
 
             self.file_res.add_section(machine_section)
-            return str(machine['ip'])
         except Exception as exc:
             self.log.error('Unable to retrieve machine information for %s: %s' % (machine_name, safe_str(exc)))
 

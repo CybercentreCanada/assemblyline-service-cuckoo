@@ -66,8 +66,6 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         target_file = target.get("file", {})
         target_filename = target_file.get("name")
         process_signatures(sigs, al_result, random_ip_range, target_filename, process_map)
-    if network:
-        network_events = process_network(network, al_result, random_ip_range, process_map)
     if behaviour:
         sample_executed = [len(behaviour.get("processtree", [])),
                            len(behaviour.get("processes", [])),
@@ -83,6 +81,8 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         else:
             # Otherwise, moving on!
             process_events = process_behaviour(behaviour, al_result, process_map)
+    if network:
+        network_events = process_network(network, al_result, random_ip_range, process_map)
 
     if len(network_events) > 0 or len(process_events) > 0:
         process_all_events(al_result, network_events, process_events)
@@ -141,6 +141,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
             continue  # on to the next one
         process_struct = {
             "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+            "process_name": process["process_name"],
             # "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # identify which process the uuid relates to
             "image": process["process_path"],
             "command_line": process["command_line"]
@@ -280,7 +281,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 # Mapping the process name to the process id
                 pid = mark.get("pid")
                 process_name = process_map.get(pid, {}).get("name")
-                if mark_type == "generic" and sig_name not in ["process_martian", "network_cnc_http"]:
+                if mark_type == "generic" and sig_name not in ["process_martian", "network_cnc_http", "nolookup_communication"]:
                     for item in mark:
                         # Check if key is not flagged to skip, and that we
                         # haven't already raised this ioc
@@ -303,6 +304,9 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     http_string = mark["suspicious_request"].split()
                     sig_res.add_tag("network.dynamic.uri", http_string[1])
                     sig_res.add_line('\tIOC: %s' % mark["suspicious_request"])
+                elif mark_type == "generic" and sig_name == "nolookup_communication":
+                    sig_res.add_tag("network.dynamic.ip", mark["host"])
+                    sig_res.add_line('\tIOC: %s' % mark["host"])
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")
@@ -330,6 +334,9 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     if category and category == "file":
                         # Tag this ioc as file path
                         sig_res.add_tag("dynamic.process.file_name", ioc)
+                    elif category and category == "cmdline":
+                        # Tag this ioc as cmdline
+                        sig_res.add_tag("dynamic.process.command_line", ioc)
 
                 # Displaying the process name
                 elif mark_type == "call" and process_name is not None and len(process_names) == 0:
@@ -461,11 +468,12 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 except Exception as e:
                     log.warning(f"IP {dst} causes the ip2geotools package to crash: {str(e)}")
                     pass
+            elif ip_address(dst)  in inetsim_network:
+                dest_country = "INetSim"  # if INetSim-resolved IP, set country to INetSim
             network_flow = {
                 "timestamp": datetime.datetime.fromtimestamp(network_call["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                 "proto": protocol,
                 "dom": None,
-                "dom_type": None,
                 "dest_ip": dst,
                 "dest_port": network_call["dport"],
                 "dest_country": dest_country,
@@ -473,7 +481,6 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             }
             if dst in resolved_ips.keys():
                 network_flow["dom"] = resolved_ips[dst]["domain"]
-                network_flow["dom_type"] = resolved_ips[dst]["type"]
                 process_name = resolved_ips[dst].get("process_name")
                 if process_name:
                     network_flow["process_name"] = process_name + "(" + str(resolved_ips[dst]["process_id"]) + ")"  # this may or may now exist in DNS
@@ -566,10 +573,9 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             req = {
                 "proto": protocol,
                 "host": host,
-                "port": http_call["port"],
-                "method": http_call["method"],
-                "path": path,
-                "user-agent": http_call.get("user-agent"),
+                "port": http_call["port"],  # Note: will be removed in like twenty lines, we just need it for tagging
+                "path": path,  # Note: will be removed in like twenty lines, we just need it for tagging
+                "user-agent": http_call.get("user-agent"),  # Note: will be removed in like twenty lines, we just need it for tagging
                 "request": request,
                 "process_name": None,
                 "uri": uri  # Note: will be removed in like twenty lines, we just need it for tagging
@@ -599,8 +605,12 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             path = http_call["path"]
             if path not in skipped_paths:
                 http_sec.add_tag("network.dynamic.uri_path", path)
-            # now remove uri from the final output
+            # TODO: tag user-agent
+            # now remove path, uri, port, user-agent from the final output
+            del http_call['path']
             del http_call['uri']
+            del http_call['port']
+            del http_call['user-agent']
         http_sec.body = json.dumps(req_table)
         http_sec.body_format = BODY_FORMAT.TABLE
         network_res.add_subsection(http_sec)
@@ -616,23 +626,24 @@ def process_all_events(al_result: Result, network_events: list = [], process_eve
     # Each item in the events table will follow the structure below:
     # {
     #   "timestamp": timestamp,
-    #   "process_name": process_name,
     #   "event_type": event_type,
+    #   "process_name": process_name,
     #   "details": {}
     # }
     events_section = ResultSection(title_text="Events")
     for event in network_events:
         event["event_type"] = "network"
+        event["process_name"] = event.pop("process_name", None)  # doing this so that process name comes after event type in the UI
         event["details"] = {
             "proto": event.pop("proto", None),
             "dom": event.pop("dom", None),
-            "dom_type": event.pop("dom_type", None),
             "dest_ip": event.pop("dest_ip", None),
             "dest_port": event.pop("dest_port", None),
             "dest_country": event.pop("dest_country", None)
         }
     for event in process_events:
         event["event_type"] = "process"
+        event["process_name"] = event.pop("process_name", None)  # doing this so that process name comes after event type in the UI
         events_section.add_tag("dynamic.process.command_line", event["command_line"])
         events_section.add_tag("dynamic.process.file_name", event["image"])
         event["details"] = {
