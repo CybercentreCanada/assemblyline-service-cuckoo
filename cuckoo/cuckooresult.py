@@ -141,7 +141,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
             continue  # on to the next one
         process_struct = {
             "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-            "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # identify which process the uuid relates to
+            # "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # identify which process the uuid relates to
             "image": process["process_path"],
             "command_line": process["command_line"]
         }
@@ -613,13 +613,32 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
 
 
 def process_all_events(al_result: Result, network_events: list = [], process_events: list = []):
+    # Each item in the events table will follow the structure below:
+    # {
+    #   "timestamp": timestamp,
+    #   "process_name": process_name,
+    #   "event_type": event_type,
+    #   "details": {}
+    # }
     events_section = ResultSection(title_text="Events")
     for event in network_events:
         event["event_type"] = "network"
+        event["details"] = {
+            "proto": event.pop("proto", None),
+            "dom": event.pop("dom", None),
+            "dom_type": event.pop("dom_type", None),
+            "dest_ip": event.pop("dest_ip", None),
+            "dest_port": event.pop("dest_port", None),
+            "dest_country": event.pop("dest_country", None)
+        }
     for event in process_events:
         event["event_type"] = "process"
         events_section.add_tag("dynamic.process.command_line", event["command_line"])
         events_section.add_tag("dynamic.process.file_name", event["image"])
+        event["details"] = {
+            "image": event.pop("image", None),
+            "command_line": event.pop("command_line", None),
+        }
     all_events = network_events + process_events
     sorted_events = sorted(all_events, key=lambda k: k["timestamp"])
     events_section.body = json.dumps(sorted_events)
