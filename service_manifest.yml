@@ -429,6 +429,12 @@ heuristics:
     filetype: '*'
     description: Cuckoo detected Hosts
 
+  - heur_id: 1002
+    name: HTTP/HTTPS detected
+    score: 100
+    filetype: '*'
+    description: Cuckoo detected HTTP/HTTPS requests
+
   - heur_id: 9999
     name: Unknown
     score: 0

@@ -73,7 +73,7 @@ WHITELIST_DOMAINS = {
     # Windows
     'Windows Settings': r'settings-win\.data\.microsoft\.com$',
     'Windows Diagnostics': r'.*vortex-win\.data\.microsoft\.com$',
-    'Windows Update': r'ctldl\.windowsupdate\.com$',
+    'Windows Update': r'.*\.windowsupdate\.com$',
     'Windows Time Server': r'time\.(microsoft|windows)\.com$',
     'Windows': r'.*\.windows\.com$',
     'Windows Updater': r'.*\.update\.microsoft\.com$',

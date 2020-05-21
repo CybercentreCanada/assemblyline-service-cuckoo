@@ -186,7 +186,6 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
     false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut"]  # Signatures that need to be double checked in case they return false positives
-    iocs = []
     inetsim_network = ip_network(random_ip_range)
     # Sometimes the filename gets shortened
     target_filename_remainder = target_filename
@@ -281,16 +280,15 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 # Mapping the process name to the process id
                 pid = mark.get("pid")
                 process_name = process_map.get(pid, {}).get("name")
-                if mark_type == "generic" and sig_name != "process_martian":
+                if mark_type == "generic" and sig_name not in ["process_martian", "network_cnc_http"]:
                     for item in mark:
                         # Check if key is not flagged to skip, and that we
                         # haven't already raised this ioc
-                        if item not in skipped_mark_items and mark[item] not in iocs:
+                        if item not in skipped_mark_items:
                             # Now check if any item in signature is whitelisted explicitly or in inetsim network
                             if not contains_whitelisted_value(mark[item]):
                                 if not is_ip(mark[item]) or \
                                         (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
-                                    iocs.append(mark[item])
                                     if item == "description":
                                         sig_res.add_line('\tFun fact: %s' % mark[item])
                                     else:
@@ -301,19 +299,29 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                 fp_count += 1
                 elif mark_type == "generic" and sig_name == "process_martian":
                     sig_res.add_line('\tParent process %s did the following: %s' % (mark["parent_process"], safe_str(mark["martian_process"])))
+                elif mark_type == "generic" and sig_name == "network_cnc_http":
+                    http_string = mark["suspicious_request"].split()
+                    sig_res.add_tag("network.dynamic.uri", http_string[1])
+                    sig_res.add_line('\tIOC: %s' % mark["suspicious_request"])
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")
-                    if category and category not in skipped_category_iocs and ioc not in iocs:
+                    if category and category not in skipped_category_iocs:
                         # Now check if any item in signature is whitelisted explicitly or in inetsim network
                         if not contains_whitelisted_value(ioc):
-                            if not is_ip(ioc) or \
+                            if sig_name in ["network_http", "network_http_post"]:
+                                http_string = ioc.split()
+                                sig_res.add_tag("network.dynamic.uri", http_string[1])
+                                sig_res.add_line('\tIOC: %s' % ioc)
+                            elif not is_ip(ioc) or \
                                     (is_ip(ioc) and ip_address(ioc) not in inetsim_network):
-                                # If process ID in ioc, replace with process name
-                                for key in process_map:
-                                    if str(key) in ioc:
-                                        ioc = ioc.replace(str(key), process_map[key]["name"])
-                                iocs.append(ioc)
+                                if sig_name in ["p2p_cnc"]:
+                                    sig_res.add_tag("network.dynamic.ip", ioc)
+                                else:
+                                    # If process ID in ioc, replace with process name
+                                    for key in process_map:
+                                        if str(key) in ioc:
+                                            ioc = ioc.replace(str(key), process_map[key]["name"])
                                 sig_res.add_line('\tIOC: %s' % ioc)
                             else:
                                 fp_count += 1
@@ -576,7 +584,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
 
     if len(req_table) > 0:
         http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS")
-        # http_sec.set_heuristic(1000)
+        http_sec.set_heuristic(1002)
         for http_call in req_table:
             http_sec.add_tag("network.protocol", http_call["proto"])
             host = http_call["host"]
