@@ -128,9 +128,6 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
     # Cleaning keys, value pairs
     for process in process_tree:
         process = remove_process_keys(process)
-        for pid in process_map:
-            if process_map[pid]["name"] == process["process_name"]:
-                process["process_pid"] = pid
     if len(process_tree) > 0:
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = json.dumps(process_tree)
@@ -163,9 +160,11 @@ def remove_process_keys(process: dict) -> dict:
     :param process: dict
     :return: dict
     """
-    list_of_keys_to_be_popped = ["track", "pid", "first_seen", "ppid"]
+    list_of_keys_to_be_popped = ["track", "first_seen", "ppid"]
     for key in list_of_keys_to_be_popped:
         process.pop(key)
+    # Rename pid to process_id
+    process["process_id"] = process.pop("pid", None)
     children = process["children"]
     if len(children) > 0:
         for child in children:
