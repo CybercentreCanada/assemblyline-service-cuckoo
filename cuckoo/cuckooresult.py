@@ -305,8 +305,9 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     sig_res.add_tag("network.dynamic.uri", http_string[1])
                     sig_res.add_line('\tIOC: %s' % mark["suspicious_request"])
                 elif mark_type == "generic" and sig_name == "nolookup_communication":
-                    sig_res.add_tag("network.dynamic.ip", mark["host"])
-                    sig_res.add_line('\tIOC: %s' % mark["host"])
+                    if ip_address(mark["host"]) not in inetsim_network:
+                        sig_res.add_tag("network.dynamic.ip", mark["host"])
+                        sig_res.add_line('\tIOC: %s' % mark["host"])
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")
