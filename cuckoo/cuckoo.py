@@ -793,7 +793,7 @@ class Cuckoo(ServiceBase):
         except requests.exceptions.Timeout:
             raise Exception("Cuckoo timed out after while trying to query machines")
         except requests.ConnectionError:
-            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query machines")
+            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query machines. Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside of Assemblyline first before running the service.")
         if resp.status_code != 200:
             self.log.debug("Failed to query machines: %s" % resp.status_code)
             raise CuckooVMBusyException()

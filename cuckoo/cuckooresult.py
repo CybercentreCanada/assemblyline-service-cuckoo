@@ -165,7 +165,7 @@ def remove_process_keys(process: dict) -> dict:
     for key in list_of_keys_to_be_popped:
         process.pop(key)
     # Rename pid to process_id
-    process["process_id"] = process.pop("pid", None)
+    process["process_pid"] = process.pop("pid", None)
     children = process["children"]
     if len(children) > 0:
         for child in children:
@@ -437,23 +437,18 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
         if len(dns_call["answers"]) > 0:
             ip = dns_call["answers"][0]["data"]
             domain = dns_call["request"]
+            resolved_ips[ip] = {
+                "type": dns_call["type"],
+                "domain": domain,
+            }
             # now map process_name to the dns_call
             for process in process_map:
                 process_details = process_map[process]
                 for network_call in process_details["network_calls"]:
-                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {})
+                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or network_call.get("InternetConnectA", {})
                     if dns != {} and dns["hostname"] == domain:
-                        resolved_ips[ip] = {
-                            "type": dns_call["type"],
-                            "domain": domain,
-                            "process_name": process_details["name"],
-                            "process_id": process
-                        }
-                    else:
-                        resolved_ips[ip] = {
-                            "type": dns_call["type"],
-                            "domain": domain,
-                        }
+                        resolved_ips[ip]["process_name"] = process_details["name"]
+                        resolved_ips[ip]["process_id"] = process
 
     # TCP and UDP section
     network_flows_table = []
@@ -524,7 +519,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 for process in process_map:
                     process_details = process_map[process]
                     for network_call in process_details["network_calls"]:
-                        connect = network_call.get("connect", {}) or network_call.get("InternetConnectW", {})
+                        connect = network_call.get("connect", {}) or network_call.get("InternetConnectW", {}) or network_call.get("InternetConnectA", {})
                         if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or
                                               connect.get("hostname", "") == network_flow["dest_ip"]) and \
                                 connect["port"] == network_flow["dest_port"]:
@@ -594,7 +589,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             for process in process_map:
                 process_details = process_map[process]
                 for network_call in process_details["network_calls"]:
-                    send = network_call.get("send", {}) or network_call.get("InternetConnectW", {})
+                    send = network_call.get("send", {}) or network_call.get("InternetConnectW", {}) or network_call.get("InternetConnectA", {})
                     if send != {} and (send.get("service", 0) == 3 or send.get("buffer", "") == request):
                         req["process_name"] = process_details["name"] + " (" + str(process) + ")"
             req_table.append(req)
@@ -699,14 +694,15 @@ def get_process_map(processes: dict = None) -> dict:
     if processes is None:
         processes = {}
     process_map = {}
-    network_calls = []
     api_calls_of_interest = {
         "getaddrinfo": ["hostname"],  # DNS
         "connect": ["ip_address", "port"],  # Connecting to IP
         "InternetConnectW": ["username", "service", "password", "hostname", "port"],
+        "InternetConnectA": ["username", "service", "password", "hostname", "port"],
         # DNS and Connecting to IP, if service = 3 then HTTP
         "send": ["buffer"],  # HTTP Request
         # "HttpOpenRequestW": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
+        # "HttpOpenRequestA": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
         # "InternetOpenW": ["user-agent"],  # HTTP Request TODO not sure what to do with this yet
         # "recv": ["buffer"]  # HTTP Response, TODO not sure what to do with this yet
         # "InternetReadFile": ["buffer"]  # HTTP Response, TODO not sure what to do with this yet
@@ -714,6 +710,7 @@ def get_process_map(processes: dict = None) -> dict:
     for process in processes:
         if process["process_name"] == "lsass.exe":
             continue
+        network_calls = []
         calls = process["calls"]
         for call in calls:
             category = call["category"]

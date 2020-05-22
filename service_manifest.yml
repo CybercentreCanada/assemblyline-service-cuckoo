@@ -9,7 +9,7 @@ stage: CORE
 category: Dynamic Analysis
 
 file_required: true
-timeout: 300
+timeout: 800
 disable_cache: false
 
 enabled: false
