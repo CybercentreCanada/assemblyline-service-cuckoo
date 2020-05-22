@@ -360,6 +360,17 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     filepath = mark["call"].get("arguments", {}).get("filepath")
                     if filepath:
                         sig_res.add_tag("dynamic.process.file_name", filepath)
+                # If file was moved, display the old and new file paths
+                elif mark_type == "call" and sig_name == "moves_self":
+                    oldfilepath = mark["call"].get("arguments", {}).get("oldfilepath")
+                    newfilepath = mark["call"].get("arguments", {}).get("newfilepath")
+                    if oldfilepath and newfilepath:
+                        sig_res.add_line('\tOld file path: %s, New file path: %s' % (safe_str(oldfilepath), safe_str(newfilepath)))
+                elif mark_type == "call" and sig_name == "creates_service":
+                    service_name = mark["call"].get("arguments", {}).get("service_name")
+                    if service_name:
+                        sig_res.add_line('\tNew service name: %s' % safe_str(service_name))
+
                 # If there is only one process name and one injected process and
                 # they have the same name, skip sig because it most likely is a
                 # false positive
@@ -677,7 +688,9 @@ def translate_score(score: int) -> int:
         3: 250,
         4: 500,
         5: 750,
-        6: 1000
+        6: 1000,
+        7: 1000,
+        8: 1000  # dead_host signature
     }
     return score_translation[score]
 
