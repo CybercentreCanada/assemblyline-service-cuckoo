@@ -468,7 +468,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 except Exception as e:
                     log.warning(f"IP {dst} causes the ip2geotools package to crash: {str(e)}")
                     pass
-            elif ip_address(dst)  in inetsim_network:
+            elif ip_address(dst) in inetsim_network:
                 dest_country = "INetSim"  # if INetSim-resolved IP, set country to INetSim
             network_flow = {
                 "timestamp": datetime.datetime.fromtimestamp(network_call["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
@@ -572,7 +572,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             request = http_call["data"]
             req = {
                 "proto": protocol,
-                "host": host,
+                "host": host,  # Note: will be removed in like twenty lines, we just need it for tagging
                 "port": http_call["port"],  # Note: will be removed in like twenty lines, we just need it for tagging
                 "path": path,  # Note: will be removed in like twenty lines, we just need it for tagging
                 "user-agent": http_call.get("user-agent"),  # Note: will be removed in like twenty lines, we just need it for tagging
@@ -611,6 +611,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             del http_call['uri']
             del http_call['port']
             del http_call['user-agent']
+            del http_call["host"]
         http_sec.body = json.dumps(req_table)
         http_sec.body_format = BODY_FORMAT.TABLE
         network_res.add_subsection(http_sec)
