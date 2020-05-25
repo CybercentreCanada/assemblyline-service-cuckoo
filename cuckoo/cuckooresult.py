@@ -141,7 +141,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
             continue  # on to the next one
         process_struct = {
             "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-            "process_name": process["process_name"],
+            "process_name": process["process_name"] + " (" + str(process["pid"]) + ")",
             # "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # identify which process the uuid relates to
             "image": process["process_path"],
             "command_line": process["command_line"]
@@ -490,7 +490,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 network_flow["dom"] = resolved_ips[dst]["domain"]
                 process_name = resolved_ips[dst].get("process_name")
                 if process_name:
-                    network_flow["process_name"] = process_name + "(" + str(resolved_ips[dst]["process_id"]) + ")"  # this may or may now exist in DNS
+                    network_flow["process_name"] = process_name + " (" + str(resolved_ips[dst]["process_id"]) + ")"  # this may or may now exist in DNS
                 else:
                     network_flow["process_name"] = process_name
             network_flows_table.append(network_flow)
