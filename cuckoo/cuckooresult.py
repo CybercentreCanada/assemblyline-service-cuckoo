@@ -76,7 +76,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
             noexec_res = ResultSection(title_text="Notes")
             noexec_res.add_line('Unrecognized file type: '
                                 'No program available to execute a file with the following extension: %s'
-                                % file_ext)
+                                % safe_str(file_ext))
             al_result.add_section(noexec_res)
         else:
             # Otherwise, moving on!
@@ -99,14 +99,7 @@ def process_debug(debug, al_result):
             err_str = str(error)
             err_str = err_str.lower()
             if err_str is not None and len(err_str) > 0:
-                # Timeouts - ok, just means the process never exited
-                # Start Error - probably a corrupt file..
-                # Initialization Error - restart the docker container
                 error_res.add_line(error)
-                # if "analysis hit the critical timeout" not in err_str and \
-                #     "Unable to execute the initial process" not in err_str:
-                #     raise RecoverableError("An error prevented cuckoo from "
-                #                            "generating complete results: %s" % safe_str(error))
         if error_res.body and len(error_res.body) > 0:
             al_result.add_section(error_res)
     return failed
@@ -291,24 +284,24 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                 if not is_ip(mark[item]) or \
                                         (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
                                     if item == "description":
-                                        sig_res.add_line('\tFun fact: %s' % mark[item])
+                                        sig_res.add_line('\tFun fact: %s' % safe_str(mark[item]))
                                     else:
-                                        sig_res.add_line('\tIOC: %s' % mark[item])
+                                        sig_res.add_line('\tIOC: %s' % safe_str(mark[item]))
                                 else:
                                     fp_count += 1
                             else:
                                 fp_count += 1
                 elif mark_type == "generic" and sig_name == "process_martian":
-                    sig_res.add_line('\tParent process %s did the following: %s' % (mark["parent_process"], safe_str(mark["martian_process"])))
+                    sig_res.add_line('\tParent process %s did the following: %s' % (safe_str(mark["parent_process"]), safe_str(mark["martian_process"])))
                 elif mark_type == "generic" and sig_name == "network_cnc_http":
                     http_string = mark["suspicious_request"].split()
                     if not contains_whitelisted_value(http_string[1]):
                         sig_res.add_tag("network.dynamic.uri", http_string[1])
-                        sig_res.add_line('\tIOC: %s' % mark["suspicious_request"])
+                        sig_res.add_line('\tIOC: %s' % safe_str(mark["suspicious_request"]))
                 elif mark_type == "generic" and sig_name == "nolookup_communication":
                     if not contains_whitelisted_value(mark["host"]) and ip_address(mark["host"]) not in inetsim_network:
                         sig_res.add_tag("network.dynamic.ip", mark["host"])
-                        sig_res.add_line('\tIOC: %s' % mark["host"])
+                        sig_res.add_line('\tIOC: %s' % safe_str(mark["host"]))
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")
@@ -317,7 +310,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                         if not contains_whitelisted_value(ioc):
                             if sig_name in ["network_http", "network_http_post"]:
                                 http_string = ioc.split()
-                                sig_res.add_tag("network.dynamic.uri", http_string[1])
+                                sig_res.add_tag("network.dynamic.uri", safe_str(http_string[1]))
                                 sig_res.add_line('\tIOC: %s' % ioc)
                             elif not is_ip(ioc) or \
                                     (is_ip(ioc) and ip_address(ioc) not in inetsim_network):
@@ -328,7 +321,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                     for key in process_map:
                                         if str(key) in ioc:
                                             ioc = ioc.replace(str(key), process_map[key]["name"])
-                                sig_res.add_line('\tIOC: %s' % ioc)
+                                sig_res.add_line('\tIOC: %s' % safe_str(ioc))
                             else:
                                 fp_count += 1
                         else:
@@ -342,7 +335,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
 
                 # Displaying the process name
                 elif mark_type == "call" and process_name is not None and len(process_names) == 0:
-                    sig_res.add_line('\tProcess Name: %s' % process_name)
+                    sig_res.add_line('\tProcess Name: %s' % safe_str(process_name))
                     process_names.append(process_name)
                 # Displaying the injected process
                 if mark_type == "call" and get_signature_category(sig_name) == "Injection":
@@ -350,7 +343,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     injected_process_name = process_map.get(injected_process, {}).get("name")
                     if injected_process_name and injected_process_name not in injected_processes:
                         injected_processes.append(injected_process_name)
-                        sig_res.add_line('\tInjected Process: %s' % injected_process_name)
+                        sig_res.add_line('\tInjected Process: %s' % safe_str(injected_process_name))
                 # If exception occurs, display the stack trace
                 elif mark_type == "call" and sig_name in ["raises_exception", "applcation_raises_exception"]:
                     stacktrace = mark["call"].get("arguments", {}).get(
