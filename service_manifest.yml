@@ -86,6 +86,11 @@ submission_params:
     type: str
     value: ""
 
+  - default: true
+    name: force_sleepskip
+    type: bool
+    value: true
+
 # TODO: implement routing options
 #  - default: inetsim
 #    name: routing

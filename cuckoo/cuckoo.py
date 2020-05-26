@@ -262,6 +262,7 @@ class Cuckoo(ServiceBase):
         kwargs['enforce_timeout'] = request.get_param("enforce_timeout")
         custom_options = request.get_param("custom_options")
         kwargs["clock"] = request.get_param("clock")
+        force_sleepskip = request.get_param("force_sleepskip")
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
@@ -289,6 +290,9 @@ class Cuckoo(ServiceBase):
 
         if no_monitor:
             task_options.append("free=yes")
+
+        if force_sleepskip:
+            task_options.append("force-sleepskip=1")
 
         kwargs['options'] = ','.join(task_options)
         if custom_options is not None:
