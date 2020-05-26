@@ -60,6 +60,11 @@ option isn't set. It's not clear if this is intended or not.
 * **max_dll_exports_exec** - Limiting the amount of DLLs executed that we report about.
 * **platform** - Name of the platform to select the analysis machine from (e.g. “windows”).
 * **clock** - Set virtual machine clock (format %m-%d-%Y %H:%M:%S).
+* **force-sleepskip** - Forces a sample that attempts to sleep to wake up and skip the attempted sleep.
+* **take_screenshots** - Enables screenshots to be taken every second.
+
+
+
 
 ### Deployment of Cuckoo Nest
 

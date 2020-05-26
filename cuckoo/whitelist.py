@@ -69,8 +69,8 @@ WHITELIST_DOMAINS = {
     'FS': r'fs\.microsoft\.com$',
     'ConnectTest': r'www\.msftconnecttest\.com$',
     'NCSI': r'www\.msftncsi\.com$',
-    'Internet Explorer': r'iecvlist.microsoft.com$',
-    'Internet Explorer Too': r'r20swj13mr.microsoft.com$',
+    'Internet Explorer': r'iecvlist\.microsoft\.com$',
+    'Internet Explorer Too': r'r20swj13mr\.microsoft\.com$',
 
     # Windows
     'Windows Settings': r'settings-win\.data\.microsoft\.com$',

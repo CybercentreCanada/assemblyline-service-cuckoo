@@ -35,7 +35,7 @@ config:
 
 submission_params:
   # Cuckoo analysis specifications
-  - default: 120
+  - default: 60
     name: analysis_timeout
     type: int
     value: 120
@@ -90,6 +90,11 @@ submission_params:
     name: force_sleepskip
     type: bool
     value: true
+
+  - default: false
+    name: take_screenshots
+    type: bool
+    value: false
 
 # TODO: implement routing options
 #  - default: inetsim

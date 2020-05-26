@@ -263,6 +263,7 @@ class Cuckoo(ServiceBase):
         custom_options = request.get_param("custom_options")
         kwargs["clock"] = request.get_param("clock")
         force_sleepskip = request.get_param("force_sleepskip")
+        take_screenshots = request.get_param("take_screenshots")
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
@@ -293,6 +294,11 @@ class Cuckoo(ServiceBase):
 
         if force_sleepskip:
             task_options.append("force-sleepskip=1")
+
+        if not take_screenshots:
+            task_options.append("screenshots=0")
+        else:
+            task_options.append("screenshots=1")
 
         kwargs['options'] = ','.join(task_options)
         if custom_options is not None:
@@ -443,11 +449,11 @@ class Cuckoo(ServiceBase):
                                 tar_obj.extract(f, path=self.working_directory)
                                 self.task.add_extracted(extracted_file_path, f, "Cuckoo extracted file")
                             # There is an api option for this: https://cuckoo.readthedocs.io/en/latest/usage/api/#tasks-shots
-                            # for f in [x.name for x in tar_obj.getmembers() if
-                            #           x.name.startswith("shots") and x.isfile()]:
-                            #     screenshot_file_path = os.path.join(self.working_directory, f)
-                            #     tar_obj.extract(f, path=self.working_directory)
-                            #     self.task.add_extracted(screenshot_file_path, f, "Screenshots from Cuckoo analysis")
+                            for f in [x.name for x in tar_obj.getmembers() if
+                                      x.name.startswith("shots") and x.isfile()]:
+                                screenshot_file_path = os.path.join(self.working_directory, f)
+                                tar_obj.extract(f, path=self.working_directory)
+                                self.task.add_extracted(screenshot_file_path, f, "Screenshots from Cuckoo analysis")
                             tar_obj.close()
                         except Exception:
                             self.log.exception(
@@ -685,7 +691,6 @@ class Cuckoo(ServiceBase):
                 raise MissingCuckooReportException("Task or report not found")
             else:
                 self.log.error("Failed to query report %s. Status code: %d" % (task_id, resp.status_code))
-                self.log.error(resp.text)
                 return None
         if fmt == "json":
             try:
