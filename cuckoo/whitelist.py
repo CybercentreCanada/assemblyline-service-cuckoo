@@ -100,6 +100,7 @@ WHITELIST_DOMAINS = {
     'Azure Monitoring Blob': r'.*\.blob\.core\.windows\.net',
     'Azure OpInsights': r'.*\.opinsights\.azure\.com',
     'Reddog': r'.*reddog\.microsoft\.com$',
+    'Agent Service Api': r'agentserviceapi\.azure-automation\.net$',
 
     # Office
     'Office Network Requests': r'config\.edge\.skype\.com',

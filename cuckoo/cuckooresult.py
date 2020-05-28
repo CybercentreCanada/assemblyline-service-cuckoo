@@ -298,10 +298,14 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     if not contains_whitelisted_value(http_string[1]):
                         sig_res.add_tag("network.dynamic.uri", http_string[1])
                         sig_res.add_line('\tIOC: %s' % safe_str(mark["suspicious_request"]))
+                    else:
+                        fp_count += 1
                 elif mark_type == "generic" and sig_name == "nolookup_communication":
                     if not contains_whitelisted_value(mark["host"]) and ip_address(mark["host"]) not in inetsim_network:
                         sig_res.add_tag("network.dynamic.ip", mark["host"])
                         sig_res.add_line('\tIOC: %s' % safe_str(mark["host"]))
+                    else:
+                        fp_count += 1
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")
@@ -344,12 +348,6 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     if injected_process_name and injected_process_name not in injected_processes:
                         injected_processes.append(injected_process_name)
                         sig_res.add_line('\tInjected Process: %s' % safe_str(injected_process_name))
-                # If exception occurs, display the stack trace
-                elif mark_type == "call" and sig_name in ["raises_exception", "applcation_raises_exception"]:
-                    stacktrace = mark["call"].get("arguments", {}).get(
-                        "stacktrace")
-                    if stacktrace:
-                        sig_res.add_line('\tStacktrace: %s' % safe_str(stacktrace))
                 # If hidden file is created and wasn't a false positive, tag the file path
                 elif mark_type == "call" and sig_name == "creates_hidden_file":
                     filepath = mark["call"].get("arguments", {}).get("filepath")

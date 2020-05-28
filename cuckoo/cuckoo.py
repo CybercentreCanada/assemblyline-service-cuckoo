@@ -690,7 +690,7 @@ class Cuckoo(ServiceBase):
                     self.cuckoo_delete_task(self.cuckoo_task.id)
                 raise MissingCuckooReportException("Task or report not found")
             else:
-                self.log.error("Failed to query report %s. Status code: %d" % (task_id, resp.status_code))
+                self.log.error("Failed to query report %s. Status code: %d. There is a strong chance that this is due to the large size of file attempted to retrieve via API request." % (task_id, resp.status_code))
                 return None
         if fmt == "json":
             try:

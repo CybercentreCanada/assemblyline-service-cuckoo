@@ -38,7 +38,7 @@ submission_params:
   - default: 60
     name: analysis_timeout
     type: int
-    value: 120
+    value: 60
 
   - default: false
     name: enforce_timeout
