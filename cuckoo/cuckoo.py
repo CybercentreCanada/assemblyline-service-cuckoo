@@ -48,6 +48,7 @@ SUPPORTED_EXTENSIONS = [
     "rtf",
     "mht",
     "xls",
+    "xlsm",
     "xlsx",
     "ppt",
     "pptx",
@@ -78,7 +79,6 @@ SUPPORTED_EXTENSIONS = [
     "lnk",
     "hwp",
     "pub",
-    "zip",
 ]
 
 

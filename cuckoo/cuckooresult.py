@@ -93,15 +93,24 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
 
 def process_debug(debug, al_result):
     failed = False
+    error_res = ResultSection(title_text='Analysis Errors')
     if 'errors' in debug:
-        error_res = ResultSection(title_text='Analysis Errors')
         for error in debug['errors']:
             err_str = str(error)
             err_str = err_str.lower()
             if err_str is not None and len(err_str) > 0:
                 error_res.add_line(error)
-        if error_res.body and len(error_res.body) > 0:
-            al_result.add_section(error_res)
+
+    # Including error that is not reported for whatever reason
+    if 'cuckoo' in debug:
+        previous_log = None
+        for log in debug['cuckoo']:
+            if log == "\n": # There is always a newline character following a stacktrace
+                error_res.add_line(previous_log)
+            previous_log = log
+
+    if error_res.body and len(error_res.body) > 0:
+        al_result.add_section(error_res)
     return failed
 
 
