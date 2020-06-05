@@ -445,6 +445,12 @@ heuristics:
     filetype: '*'
     description: Cuckoo detected HTTP/HTTPS requests
 
+  - heur_id: 1003
+    name: Access Remote File
+    score: 100
+    filetype: '*'
+    description: Cuckoo detected an attempt to access a remote file
+
   - heur_id: 9999
     name: Unknown
     score: 0

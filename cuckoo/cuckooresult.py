@@ -593,7 +593,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 "user-agent": http_call.get("user-agent"),  # Note: will be removed in like twenty lines, we just need it for tagging
                 "request": request,
                 "process_name": None,
-                "uri": uri  # Note: will be removed in like twenty lines, we just need it for tagging
+                "uri": uri,  # Note: will be removed in like twenty lines, we just need it for tagging
+                "method": http_call["method"]  # Note: will be removed in like twenty lines, we just need it to check if a remote file was accessed
             }
             for process in process_map:
                 process_details = process_map[process]
@@ -605,6 +606,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
 
     if len(req_table) > 0:
         http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS")
+        remote_file_access_sec = ResultSection(title_text="Access Remote File")
         http_sec.set_heuristic(1002)
         for http_call in req_table:
             http_sec.add_tag("network.protocol", http_call["proto"])
@@ -620,6 +622,13 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             path = http_call["path"]
             if path not in skipped_paths:
                 http_sec.add_tag("network.dynamic.uri_path", path)
+                # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
+                if http_call["method"] == "GET":
+                    split_path = path.rsplit("/", 1)
+                    if len(split_path) > 1 and re.search(r'[^\\]*\.(\w+)$', split_path[-1]):
+                        remote_file_access_sec.add_tag("network.dynamic.uri", http_call["uri"])
+                        if not remote_file_access_sec.heuristic:
+                            remote_file_access_sec.set_heuristic(1003)
             # TODO: tag user-agent
             # now remove path, uri, port, user-agent from the final output
             del http_call['path']
@@ -627,8 +636,11 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             del http_call['port']
             del http_call['user-agent']
             del http_call["host"]
+            del http_call["method"]
         http_sec.body = json.dumps(req_table)
         http_sec.body_format = BODY_FORMAT.TABLE
+        if remote_file_access_sec.heuristic:
+            http_sec.add_subsection(remote_file_access_sec)
         network_res.add_subsection(http_sec)
 
     if len(network_res.subsections) > 0:
@@ -713,7 +725,7 @@ def get_process_map(processes: dict = None) -> dict:
         # "HttpOpenRequestW": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
         # "HttpOpenRequestA": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
         # "InternetOpenW": ["user-agent"],  # HTTP Request TODO not sure what to do with this yet
-        # "recv": ["buffer"]  # HTTP Response, TODO not sure what to do with this yet
+        # "recv": ["buffer"],  # HTTP Response, TODO not sure what to do with this yet
         # "InternetReadFile": ["buffer"]  # HTTP Response, TODO not sure what to do with this yet
     }
     for process in processes:
