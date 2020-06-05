@@ -26,6 +26,7 @@ log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     log.debug("Generating AL Result.")
     info = api_report.get('info')
+    failed = False
     if info is not None:
         start_time = info['started']
         end_time = info['ended']
@@ -55,7 +56,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     behaviour = api_report.get('behavior', {})  # Note conversion from American to Canadian spelling
 
     if debug:
-        process_debug(debug, al_result)
+        failed = process_debug(debug, al_result)
 
     process_map = get_process_map(behaviour.get("processes", {}))
     network_events = []
@@ -88,7 +89,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         process_all_events(al_result, network_events, process_events)
 
     log.debug("AL result generation completed!")
-    return True, process_map
+    return failed, process_map
 
 
 def process_debug(debug, al_result):
@@ -110,6 +111,7 @@ def process_debug(debug, al_result):
             previous_log = log
 
     if error_res.body and len(error_res.body) > 0:
+        failed = True
         al_result.add_section(error_res)
     return failed
 
@@ -188,7 +190,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
     skipped_mark_items = ["type", "suspicious_features", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
-    false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut"]  # Signatures that need to be double checked in case they return false positives
+    false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut", "process_martian"]  # Signatures that need to be double checked in case they return false positives
     inetsim_network = ip_network(random_ip_range)
     # Sometimes the filename gets shortened
     target_filename_remainder = target_filename
@@ -229,6 +231,11 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                         fp_count += 1
                     elif 'AppData\\Roaming\\Microsoft\\Office\\Recent\\Temp.LNK' in mark.get("ioc"):
                         # Microsoft Word creates temporary .lnk files when a Word doc is opened
+                        fp_count += 1
+                elif sig_name == "process_martian":
+                    # This signature is hit just by the sample being run, therefore a false positive
+                    filepath = "AppData\\Local\\Temp\\" + target_filename
+                    if filepath in mark["martian_process"] and mark["parent_process"] == "cmd.exe":
                         fp_count += 1
                 if fp_count == len(marks):
                     fp = True

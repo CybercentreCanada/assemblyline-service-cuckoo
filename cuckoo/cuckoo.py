@@ -75,7 +75,7 @@ SUPPORTED_EXTENSIONS = [
     "elf",
     "bin",
     "hta",
-    "zip",
+    # "zip", # Currently Cuckoo cannot handle the submission of .zip files
     "lnk",
     "hwp",
     "pub",
@@ -325,11 +325,11 @@ class Cuckoo(ServiceBase):
                     else:
                         self.report_machine_info(machine_name)
                     self.log.debug("Generating AL Result from Cuckoo results..")
-                    success, process_map = generate_al_result(self.cuckoo_task.report,
+                    failed, process_map = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
                                                  file_ext,
                                                  self.config.get("random_ip_range"))
-                    if success is False:
+                    if failed is True:
                         err_str = self.get_errors()
                         if self.cuckoo_task and self.cuckoo_task.id is not None:
                             self.cuckoo_delete_task(self.cuckoo_task.id)

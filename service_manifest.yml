@@ -3,7 +3,7 @@ version: $SERVICE_TAG
 description: Provides dynamic malware analysis through sandboxing.
 
 accepts: (archive|executable/windows|java|audiovisual|meta)/.*|unknown|document/installer/windows|document/office/excel|document/office/ole|document/office/powerpoint|document/office/rtf|document/office/unknown|document/office/word|document/pdf|document/email|executable/linux/elf*|code/javascript|code/jscript|code/python|code/vbs|code/wsf|code/html
-rejects: empty|metadata/.*
+rejects: empty|metadata/.*|archive/zip
 
 stage: CORE
 category: Dynamic Analysis
