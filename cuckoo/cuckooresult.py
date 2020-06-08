@@ -312,6 +312,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 elif mark_type == "generic" and sig_name == "network_cnc_http":
                     http_string = mark["suspicious_request"].split()
                     if not contains_whitelisted_value(http_string[1]):
+                        sig_res.add_line('\tFun fact: %s' % safe_str(mark["suspicious_features"]))
                         sig_res.add_tag("network.dynamic.uri", http_string[1])
                         sig_res.add_line('\tIOC: %s' % safe_str(mark["suspicious_request"]))
                     else:
@@ -340,7 +341,11 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                     # If process ID in ioc, replace with process name
                                     for key in process_map:
                                         if str(key) in ioc:
-                                            ioc = ioc.replace(str(key), process_map[key]["name"])
+                                            # Despite incorrect spelling of the signature name,
+                                            # the ioc that is raised does not need changing for applcation_raises_exception.
+                                            # All other signatures do.
+                                            if sig_name != "applcation_raises_exception":
+                                               ioc = ioc.replace(str(key), process_map[key]["name"])
                                 sig_res.add_line('\tIOC: %s' % safe_str(ioc))
                             else:
                                 fp_count += 1
@@ -506,6 +511,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
     protocol_res_sec = None
     if len(network_flows_table) > 0:
         protocol_res_sec = ResultSection(title_text="Protocol: TCP/UDP")
+        protocol_res_sec.set_heuristic(1004)
 
     # We have to copy the network table so that we can iterate through the copy
     # and remove items from the real one at the same time
@@ -567,7 +573,12 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
     if protocol_res_sec and len(protocol_res_sec.tags) > 0:
         network_res.add_subsection(protocol_res_sec)
     if len(network_flows_table) > 0:
-        netflows_sec.body = json.dumps(network_flows_table)
+        # Need to convert each dictionary to a string in order to get the set of network_flows_table, since dictionaries are not hashable
+        netflow_string_list = []
+        for item in network_flows_table:
+            netflow_string_list.append(json.dumps(item, sort_keys=True))
+        unique_netflows = list(set(netflow_string_list))  # Remove duplicates
+        netflows_sec.body = json.dumps(unique_netflows)
         netflows_sec.body_format = BODY_FORMAT.TABLE
         network_res.add_subsection(netflows_sec)
 
