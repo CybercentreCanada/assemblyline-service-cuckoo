@@ -333,10 +333,15 @@ class Cuckoo(ServiceBase):
                         err_str = self.get_errors()
                         if self.cuckoo_task and self.cuckoo_task.id is not None:
                             self.cuckoo_delete_task(self.cuckoo_task.id)
-                        raise CuckooProcessingException("Cuckoo was unable to process this file. %s",
-                                                        err_str)
+                        raise CuckooProcessingException("Cuckoo was unable to process this file due to:\n %s.\n This could be related to a corrupted sample, or an issue related to the VM image." % err_str)
                 except RecoverableError as e:
                     self.log.info("Recoverable error. Error message: %s" % e.message)
+                    if self.cuckoo_task and self.cuckoo_task.id is not None:
+                        self.cuckoo_delete_task(self.cuckoo_task.id)
+                    raise
+                except CuckooProcessingException:
+                    # Catching the CuckooProcessingException, attempting to delete the file, and then carrying on
+                    self.log.exception("Error generating AL report: ")
                     if self.cuckoo_task and self.cuckoo_task.id is not None:
                         self.cuckoo_delete_task(self.cuckoo_task.id)
                     raise
@@ -345,8 +350,7 @@ class Cuckoo(ServiceBase):
                     if self.cuckoo_task and self.cuckoo_task.id is not None:
                         self.cuckoo_delete_task(self.cuckoo_task.id)
                     raise CuckooProcessingException(
-                        "Unable to generate cuckoo al report for task %s: %s" %
-                        (safe_str(self.cuckoo_task.id), safe_str(e))
+                        "Unable to generate cuckoo al report for task due to: %s" % safe_str(e)
                     )
 
                 # Get the max size for extract files, used a few times after this
