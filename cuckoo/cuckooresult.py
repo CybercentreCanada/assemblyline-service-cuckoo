@@ -337,6 +337,8 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                 http_string = ioc.split()
                                 sig_res.add_tag("network.dynamic.uri", safe_str(http_string[1]))
                                 sig_res.add_line('\tIOC: %s' % ioc)
+                            elif sig_name == "persistence_autorun":
+                                sig_res.add_tag("dynamic.autorun_location", ioc)
                             elif not is_ip(ioc) or \
                                     (is_ip(ioc) and ip_address(ioc) not in inetsim_network):
                                 if sig_name in ["p2p_cnc"]:

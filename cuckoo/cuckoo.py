@@ -146,6 +146,7 @@ class Cuckoo(ServiceBase):
     def __init__(self, config=None):
         super(Cuckoo, self).__init__(config)
         self.file_name = None
+        self.base_url = None
         self.submit_url = None
         self.query_task_url = None
         self.delete_task_url = None
@@ -161,21 +162,23 @@ class Cuckoo(ServiceBase):
         self.ssdeep_match_pct = None
         self.machines = None
         self.auth_header = None
+        self.timeout = None
 
     def set_urls(self):
-        base_url = "http://%s:%s" % (self.config['remote_host_ip'], self.config['remote_host_port'])
-        self.submit_url = "%s/%s" % (base_url, CUCKOO_API_SUBMIT)
-        self.query_task_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_TASK)
-        self.delete_task_url = "%s/%s" % (base_url, CUCKOO_API_DELETE_TASK)
-        self.query_report_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_REPORT)
-        self.query_pcap_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_PCAP)
-        self.query_machines_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINES)
-        self.query_machine_info_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_MACHINE_INFO)
-        self.query_host_url = "%s/%s" % (base_url, CUCKOO_API_QUERY_HOST_STATUS)
+        self.base_url = "http://%s:%s" % (self.config['remote_host_ip'], self.config['remote_host_port'])
+        self.submit_url = "%s/%s" % (self.base_url, CUCKOO_API_SUBMIT)
+        self.query_task_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_TASK)
+        self.delete_task_url = "%s/%s" % (self.base_url, CUCKOO_API_DELETE_TASK)
+        self.query_report_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_REPORT)
+        self.query_pcap_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_PCAP)
+        self.query_machines_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINES)
+        self.query_machine_info_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_MACHINE_INFO)
+        self.query_host_url = "%s/%s" % (self.base_url, CUCKOO_API_QUERY_HOST_STATUS)
 
     def start(self):
         self.auth_header = {'Authorization': self.config['auth_header_value']}
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
+        self.timeout = 30  # arbitrary number, not too big, not too small
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
@@ -505,8 +508,6 @@ class Cuckoo(ServiceBase):
         if self.cuckoo_task and self.cuckoo_task.id is not None:
             self.cuckoo_delete_task(self.cuckoo_task.id)
 
-    @retry(wait_fixed=1000, retry_on_exception=_exclude_chain_ex,
-           stop_max_attempt_number=3)
     def cuckoo_submit(self, file_content):
         try:
             """ Submits a new file to Cuckoo for analysis """
@@ -524,7 +525,7 @@ class Cuckoo(ServiceBase):
             self.cuckoo_task.errors.append('%s: %s' % (err_msg, safe_str(e)))
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            raise RecoverableError("Unable to submit to Cuckoo")
+            raise Exception(f"Unable to submit to Cuckoo due to: {safe_str(e)}")
 
         self.log.debug("Submission succeeded. File: %s -- Task ID: %s" % (self.cuckoo_task.file, self.cuckoo_task.id))
 
@@ -560,7 +561,7 @@ class Cuckoo(ServiceBase):
             raise Exception("Retrying after missing_report status")
 
         if err_msg:
-            self.log.error("error is: %s" % err_msg)
+            self.log.error("Error is: %s" % err_msg)
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
             raise RecoverableError(err_msg)
@@ -632,20 +633,19 @@ class Cuckoo(ServiceBase):
 
         return None
 
-    @retry(wait_fixed=2000, stop_max_attempt_number=3)
     def cuckoo_submit_file(self, file_content):
         self.log.debug("Submitting file: %s to server %s" % (self.cuckoo_task.file, self.submit_url))
         files = {"file": (self.cuckoo_task.file, file_content)}
         try:
-            resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task, headers=self.auth_header)
+            resp = self.session.post(self.submit_url, files=files, data=self.cuckoo_task, headers=self.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            raise Exception("Cuckoo timed out after while trying to submit a file %s" % self.cuckoo_task.file)
+            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to submit a file %s" % self.cuckoo_task.file)
         except requests.ConnectionError:
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            raise RecoverableError("Unable to reach the Cuckoo nest while trying to submit a file %s"
+            raise Exception("Unable to reach the Cuckoo nest while trying to submit a file %s"
                                    % self.cuckoo_task.file)
         if resp.status_code != 200:
             self.log.debug("Failed to submit file %s. Status code: %s" % (self.cuckoo_task.file, resp.status_code))
@@ -657,7 +657,7 @@ class Cuckoo(ServiceBase):
                 self.log.warning("Got 500 error from Cuckoo API. This is often caused by non-ascii filenames. "
                                  "Renaming file to %s and retrying" % self.cuckoo_task.file)
                 # Raise an exception to force a retry
-                raise Exception("Retrying after 500 error")
+                raise RecoverableError("Retrying after 500 error")
             return None
         else:
             resp_dict = dict(resp.json())
@@ -671,19 +671,17 @@ class Cuckoo(ServiceBase):
                     return None
             return task_id
 
-    @retry(wait_fixed=1000, stop_max_attempt_number=5,
-           retry_on_exception=lambda x: not isinstance(x, MissingCuckooReportException))
     def cuckoo_query_report(self, task_id, fmt="json", params=None):
         self.log.debug("Querying report, task_id: %s - format: %s", task_id, fmt)
         try:
             resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {},
-                                    headers=self.auth_header)
+                                    headers=self.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            raise Exception("Cuckoo timed out after while trying to query the report for task %s" % task_id)
+            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to query the report for task %s" % task_id)
         except requests.ConnectionError:
-            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query the report for task %s"
+            raise Exception("Unable to reach the Cuckoo nest while trying to query the report for task %s"
                                    % task_id)
         if resp.status_code != 200:
             if resp.status_code == 404:
@@ -720,13 +718,13 @@ class Cuckoo(ServiceBase):
     @retry(wait_fixed=2000)
     def cuckoo_query_pcap(self, task_id):
         try:
-            resp = self.session.get(self.query_pcap_url % task_id, headers=self.auth_header)
+            resp = self.session.get(self.query_pcap_url % task_id, headers=self.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            raise Exception("Cuckoo timed out after while trying to query the pcap for task %s" % task_id)
+            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to query the pcap for task %s" % task_id)
         except requests.ConnectionError:
-            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query the pcap for task %s"
+            raise Exception("Unable to reach the Cuckoo nest while trying to query the pcap for task %s"
                                    % task_id)
         pcap_data = None
         if resp.status_code != 200:
@@ -738,16 +736,15 @@ class Cuckoo(ServiceBase):
             pcap_data = resp.content
         return pcap_data
 
-    @retry(wait_fixed=500, stop_max_attempt_number=3, retry_on_result=_retry_on_none)
     def cuckoo_query_task(self, task_id):
         try:
-            resp = self.session.get(self.query_task_url % task_id, headers=self.auth_header)
+            resp = self.session.get(self.query_task_url % task_id, headers=self.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            raise Exception("Cuckoo timed out after while trying to query the task %s" % task_id)
+            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to query the task %s" % task_id)
         except requests.ConnectionError:
-            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query the task %s" % task_id)
+            raise Exception("Unable to reach the Cuckoo nest while trying to query the task %s" % task_id)
         task_dict = None
         if resp.status_code != 200:
             if resp.status_code == 404:
@@ -764,13 +761,13 @@ class Cuckoo(ServiceBase):
     @retry(wait_fixed=2000)
     def cuckoo_query_machine_info(self, machine_name):
         try:
-            resp = self.session.get(self.query_machine_info_url % machine_name, headers=self.auth_header)
+            resp = self.session.get(self.query_machine_info_url % machine_name, headers=self.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            raise Exception("Cuckoo timed out after while trying to query machine info for %s" % machine_name)
+            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to query machine info for %s" % machine_name)
         except requests.ConnectionError:
-            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query machine info for %s"
+            raise Exception("Unable to reach the Cuckoo nest while trying to query machine info for %s"
                                    % machine_name)
         machine_dict = None
         if resp.status_code != 200:
@@ -783,13 +780,13 @@ class Cuckoo(ServiceBase):
     @retry(wait_fixed=1000, stop_max_attempt_number=2)
     def cuckoo_delete_task(self, task_id):
         try:
-            resp = self.session.get(self.delete_task_url % task_id, headers=self.auth_header)
+            resp = self.session.get(self.delete_task_url % task_id, headers=self.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
-            raise Exception("Cuckoo timed out after while trying to delete task %s" % task_id)
+            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to delete task %s" % task_id)
         except requests.ConnectionError:
-            raise RecoverableError("Unable to reach the Cuckoo nest while trying to delete task %s" % task_id)
+            raise Exception("Unable to reach the Cuckoo nest while trying to delete task %s" % task_id)
         if resp.status_code == 500 and json.loads(resp.text).get("message") == "The task is currently being processed, cannot delete":
-            raise RecoverableError("The task %s is currently being processed, cannot delete" % task_id)
+            raise Exception("The task %s is currently being processed, cannot delete" % task_id)
         elif resp.status_code != 200:
             self.log.debug("Failed to delete task %s. Status code: %d" % (task_id, resp.status_code))
         else:
@@ -797,16 +794,14 @@ class Cuckoo(ServiceBase):
             if self.cuckoo_task:
                 self.cuckoo_task.id = None
 
-    # Fixed retry amount to avoid starting an analysis too late.
-    @retry(wait_fixed=5000, stop_max_attempt_number=6)
     def cuckoo_query_machines(self):
         self.log.debug("Querying for available analysis machines using url %s.." % self.query_machines_url)
         try:
-            resp = self.session.get(self.query_machines_url, headers=self.auth_header)
+            resp = self.session.get(self.query_machines_url, headers=self.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
-            raise Exception("Cuckoo timed out after while trying to query machines")
+            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to query machines")
         except requests.ConnectionError:
-            raise RecoverableError("Unable to reach the Cuckoo nest while trying to query machines. Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside of Assemblyline first before running the service.")
+            raise Exception(f"Unable to reach the Cuckoo nest ({self.base_url}) while trying to query machines. Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside of Assemblyline first before running the service.")
         if resp.status_code != 200:
             self.log.debug("Failed to query machines: %s" % resp.status_code)
             raise CuckooVMBusyException()
@@ -895,35 +890,32 @@ class Cuckoo(ServiceBase):
                                "which has been exceeded in this submission")
 
     def report_machine_info(self, machine_name):
-        try:
-            self.log.debug("Querying machine info for %s" % machine_name)
-            machine_name_exists = False
-            machine = None
-            for machine in self.machines['machines']:
-                if machine['name'] == machine_name:
-                    machine_name_exists = True
-                    break
+        self.log.debug("Querying machine info for %s" % machine_name)
+        machine_name_exists = False
+        machine = None
+        for machine in self.machines['machines']:
+            if machine['name'] == machine_name:
+                machine_name_exists = True
+                break
 
-            if not machine_name_exists:
-                raise Exception
+        if not machine_name_exists:
+            raise Exception
 
-            manager = self.cuckoo_task.report["info"]["machine"]["manager"]
-            body = {
-                'Name': str(machine['name']),
-                'Manager': manager,
-                'Platform': str(machine['platform']),
-                'IP': str(machine['ip']),
-                'Tags': []}
-            for tag in machine.get('tags', []):
-                body['Tags'].append(safe_str(tag).replace('_', ' '))
+        manager = self.cuckoo_task.report["info"]["machine"]["manager"]
+        body = {
+            'Name': str(machine['name']),
+            'Manager': manager,
+            'Platform': str(machine['platform']),
+            'IP': str(machine['ip']),
+            'Tags': []}
+        for tag in machine.get('tags', []):
+            body['Tags'].append(safe_str(tag).replace('_', ' '))
 
-            machine_section = ResultSection(title_text='Machine Information',
-                                            body_format=BODY_FORMAT.KEY_VALUE,
-                                            body=json.dumps(body))
+        machine_section = ResultSection(title_text='Machine Information',
+                                        body_format=BODY_FORMAT.KEY_VALUE,
+                                        body=json.dumps(body))
 
-            self.file_res.add_section(machine_section)
-        except Exception as exc:
-            self.log.error('Unable to retrieve machine information for %s: %s' % (machine_name, safe_str(exc)))
+        self.file_res.add_section(machine_section)
 
 
 def generate_random_words(num_words):
