@@ -178,7 +178,7 @@ class Cuckoo(ServiceBase):
     def start(self):
         self.auth_header = {'Authorization': self.config['auth_header_value']}
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
-        self.timeout = 30  # arbitrary number, not too big, not too small
+        self.timeout = 120  # arbitrary number, not too big, not too small
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
