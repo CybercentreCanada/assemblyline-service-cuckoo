@@ -155,8 +155,8 @@ class Cuckoo(ServiceBase):
         self.query_machines_url = None
         self.query_machine_info_url = None
         self.query_host_url = None
-        self.task = None
         self.file_res = None
+        self.request = None
         self.cuckoo_task = None
         self.session = None
         self.ssdeep_match_pct = None
@@ -183,9 +183,9 @@ class Cuckoo(ServiceBase):
 
     # noinspection PyTypeChecker
     def execute(self, request: ServiceRequest):
+        self.request = request
         self.session = requests.Session()
         self.set_urls()
-        self.task = request.task
         request.result = Result()
 
         # Setting working directory for request
@@ -215,7 +215,7 @@ class Cuckoo(ServiceBase):
 
         # Check the file extension
         original_ext = self.file_name.rsplit('.', 1)
-        tag_extension = tag_to_extension.get(self.task.file_type)
+        tag_extension = tag_to_extension.get(self.request.file_type)
 
         # Poorly name var to track keyword arguments to pass into cuckoo's 'submit' function
         kwargs = dict()
@@ -227,7 +227,7 @@ class Cuckoo(ServiceBase):
         # the only way to have certain modules run is to use the appropriate suffix (.jar, .vbs, etc.)
 
         # Check for a valid tag
-        if tag_extension is not None and 'unknown' not in self.task.file_type:
+        if tag_extension is not None and 'unknown' not in self.request.file_type:
             file_ext = tag_extension
         # Check if the file was submitted with an extension
         elif len(original_ext) == 2:
@@ -246,12 +246,12 @@ class Cuckoo(ServiceBase):
             # This is unknown without an extension that we accept/recognize.. no scan!
             self.log.info(
                 "Cuckoo is exiting because the file type could not be identified. %s %s" %
-                (tag_extension, self.task.file_type)
+                (tag_extension, self.request.file_type)
             )
             return
 
         # Rename based on the found extension.
-        if file_ext and self.task.sha256:
+        if file_ext and self.request.sha256:
             self.file_name = original_ext[0] + file_ext
 
         # Parse user args
@@ -382,7 +382,7 @@ class Cuckoo(ServiceBase):
                             report_file = open(tar_report_path, 'wb')
                             report_file.write(tar_report)
                             report_file.close()
-                            self.task.add_supplementary(tar_report_path, tar_file_name,
+                            self.request.add_supplementary(tar_report_path, tar_file_name,
                                                         "Cuckoo Sandbox analysis report archive (tar.gz)")
                         except Exception:
                             self.log.exception(
@@ -395,7 +395,7 @@ class Cuckoo(ServiceBase):
                             if "reports/report.json" in tar_obj.getnames():
                                 report_json_path = os.path.join(self.working_directory, "reports", "report.json")
                                 tar_obj.extract("reports/report.json", path=self.working_directory)
-                                self.task.add_supplementary(
+                                self.request.add_supplementary(
                                     report_json_path,
                                     "report.json",
                                     "Cuckoo Sandbox report (json)"
@@ -418,7 +418,7 @@ class Cuckoo(ServiceBase):
                             for f in supplementary_files:
                                 sup_file_path = os.path.join(self.working_directory, f)
                                 tar_obj.extract(f, path=self.working_directory)
-                                self.task.add_supplementary(sup_file_path, "Supplementary File",
+                                self.request.add_supplementary(sup_file_path, "Supplementary File",
                                                             display_name=f)
 
                             # process memory dump related
@@ -439,11 +439,11 @@ class Cuckoo(ServiceBase):
                                     if str(pid) in f:
                                         f = f.replace(str(pid), process_map[pid]["name"])
                                 if filename_suffix == "py":
-                                    self.task.add_supplementary(mem_file_path, memdesc, display_name=f)
+                                    self.request.add_supplementary(mem_file_path, memdesc, display_name=f)
                                 else:
                                     mem_filesize = os.stat(mem_file_path).st_size
                                     try:
-                                        self.task.add_extracted(mem_file_path, f, memdesc)
+                                        self.request.add_extracted(mem_file_path, f, memdesc)
                                     except MaxFileSizeExceeded:
                                         self.file_res.add_section(ResultSection(
                                             title_text="Extracted file too large to add",
@@ -463,7 +463,7 @@ class Cuckoo(ServiceBase):
                                         self.working_directory, internal_path)
                                     tar_obj.extract(internal_path,
                                                     path=self.working_directory)
-                                    self.task.add_supplementary(
+                                    self.request.add_supplementary(
                                         report_json_path,
                                         report,
                                         "HollowsHunter report (json)"
@@ -477,18 +477,18 @@ class Cuckoo(ServiceBase):
                             for f in extracted_buffers:
                                 buffer_file_path = os.path.join(self.working_directory, f)
                                 tar_obj.extract(f, path=self.working_directory)
-                                self.task.add_extracted(buffer_file_path, f, "Extracted buffer")
+                                self.request.add_extracted(buffer_file_path, f, "Extracted buffer")
                             for f in [x.name for x in tar_obj.getmembers() if
                                       x.name.startswith("extracted") and x.isfile()]:
                                 extracted_file_path = os.path.join(self.working_directory, f)
                                 tar_obj.extract(f, path=self.working_directory)
-                                self.task.add_extracted(extracted_file_path, f, "Cuckoo extracted file")
+                                self.request.add_extracted(extracted_file_path, f, "Cuckoo extracted file")
                             # There is an api option for this: https://cuckoo.readthedocs.io/en/latest/usage/api/#tasks-shots
                             for f in [x.name for x in tar_obj.getmembers() if
                                       x.name.startswith("shots") and x.isfile()]:
                                 screenshot_file_path = os.path.join(self.working_directory, f)
                                 tar_obj.extract(f, path=self.working_directory)
-                                self.task.add_extracted(screenshot_file_path, f, "Screenshots from Cuckoo analysis")
+                                self.request.add_extracted(screenshot_file_path, f, "Screenshots from Cuckoo analysis")
                             tar_obj.close()
                         except Exception:
                             self.log.exception(
@@ -886,7 +886,7 @@ class Cuckoo(ServiceBase):
                                 else:
                                     added_hashes.add(ssdeep_hash)
                             dropped_hash = hashlib.md5(data).hexdigest()
-                            if dropped_hash == self.task.md5:
+                            if dropped_hash == self.request.md5:
                                 continue
                         if not (wlist_check_hash(dropped_hash) or wlist_check_dropped(
                                 dropped_name) or dropped_name.endswith('_info.txt')):
@@ -894,7 +894,7 @@ class Cuckoo(ServiceBase):
                             if hollowshunter:
                                 message = "HollowsHunter dropped file"
                             # Resubmit
-                            self.task.add_extracted(dropped_file_path,
+                            self.request.add_extracted(dropped_file_path,
                                                     dropped_name,
                                                     message)
                             self.log.debug("Submitted dropped file for analysis: %s" % dropped_file_path)
@@ -933,7 +933,7 @@ class Cuckoo(ServiceBase):
 
             # Resubmit analysis pcap file
             try:
-                self.task.add_extracted(pcap_path, pcap_file_name, "PCAP from Cuckoo analysis")
+                self.request.add_extracted(pcap_path, pcap_file_name, "PCAP from Cuckoo analysis")
             except MaxExtractedExceeded:
                 self.log.debug("The maximum amount of files to be extracted is 501, "
                                "which has been exceeded in this submission")
