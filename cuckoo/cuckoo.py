@@ -267,6 +267,8 @@ class Cuckoo(ServiceBase):
         kwargs["clock"] = request.get_param("clock")
         force_sleepskip = request.get_param("force_sleepskip")
         take_screenshots = request.get_param("take_screenshots")
+        hollowshunter = request.get_param("hollowshunter")
+        simulate_human = request.get_param("simulate_human")
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
@@ -302,6 +304,12 @@ class Cuckoo(ServiceBase):
             task_options.append("screenshots=0")
         else:
             task_options.append("screenshots=1")
+
+        if not hollowshunter:
+            task_options.append("hollowshunter=0")
+
+        if not simulate_human:
+            task_options.append("human=0")
 
         kwargs['options'] = ','.join(task_options)
         if custom_options is not None:
@@ -443,6 +451,24 @@ class Cuckoo(ServiceBase):
                                                  (f, mem_filesize, max_extracted_size)
                                         ))
 
+                            # Add HollowsHunter report files as supplementary
+                            if hollowshunter:
+                                for report in ["hh_scan_report.json", "hh_dump_report.json"]:
+                                    internal_path = os.path.join("files", report)
+                                    if internal_path not in tar_obj.getnames():
+                                        continue
+                                    report_json_path = os.path.join(
+                                        self.working_directory, internal_path)
+                                    tar_obj.extract(internal_path,
+                                                    path=self.working_directory)
+                                    self.task.add_supplementary(
+                                        report_json_path,
+                                        report,
+                                        "HollowsHunter report (json)"
+                                    )
+                                    self.log.debug(
+                                        "Adding HollowsHunter report %s as supplementary file" % report)
+
                             # Extract buffers, screenshots and anything extracted
                             extracted_buffers = [x.name for x in tar_obj.getmembers()
                                                  if x.name.startswith("buffer") and x.isfile()]
@@ -484,7 +510,7 @@ class Cuckoo(ServiceBase):
 
                 self.log.debug("Checking for dropped files and pcap.")
                 # Submit dropped files and pcap if available:
-                self.check_dropped(request, self.cuckoo_task.id)
+                self.check_dropped(request, self.cuckoo_task.id, hollowshunter)
                 self.check_pcap(self.cuckoo_task.id)
 
             else:
@@ -808,7 +834,7 @@ class Cuckoo(ServiceBase):
         resp_dict = dict(resp.json())
         return resp_dict
 
-    def check_dropped(self, request, task_id):
+    def check_dropped(self, request, task_id, hollowshunter: bool = False):
         self.log.debug("Checking dropped files.")
         dropped_tar_bytes = self.cuckoo_query_report(task_id, 'dropped')
         added_hashes = set()
@@ -819,6 +845,9 @@ class Cuckoo(ServiceBase):
                     if tarobj.isfile() and not tarobj.isdir():  # a file, not a dir
                         # A dropped file found
                         dropped_name = os.path.split(tarobj.name)[1]
+                        if hollowshunter and dropped_name in ["hh_dump_report.json", "hh_scan_report.json"]:
+                            # The HollowsHunter reports are not to be resubmitted for analyiss
+                            continue
                         # Fixup the name.. the tar originally has files/your/file/path
                         tarobj.name = tarobj.name.replace("/", "_").split('_', 1)[1]
                         dropped_tar.extract(tarobj, self.working_directory)
@@ -846,10 +875,13 @@ class Cuckoo(ServiceBase):
                                 continue
                         if not (wlist_check_hash(dropped_hash) or wlist_check_dropped(
                                 dropped_name) or dropped_name.endswith('_info.txt')):
+                            message = "Dropped file during Cuckoo analysis."
+                            if hollowshunter:
+                                message = "HollowsHunter dropped file"
                             # Resubmit
                             self.task.add_extracted(dropped_file_path,
                                                     dropped_name,
-                                                    "Dropped file during Cuckoo analysis.")
+                                                    message)
                             self.log.debug("Submitted dropped file for analysis: %s" % dropped_file_path)
             except Exception as e_x:
                 self.log.error("Error extracting dropped files: %s" % e_x)

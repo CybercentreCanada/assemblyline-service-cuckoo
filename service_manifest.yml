@@ -2,7 +2,7 @@ name: Cuckoo
 version: $SERVICE_TAG
 description: Provides dynamic malware analysis through sandboxing.
 
-accepts: (archive|executable/windows|java|audiovisual|meta)/.*|unknown|document/installer/windows|document/office/excel|document/office/ole|document/office/powerpoint|document/office/rtf|document/office/unknown|document/office/word|document/pdf|document/email|executable/linux/elf*|code/javascript|code/jscript|code/python|code/vbs|code/wsf|code/html
+accepts: (archive|executable/windows|java|audiovisual|meta)/.*|unknown|document/installer/windows|document/office/excel|document/office/ole|document/office/powerpoint|document/office/rtf|document/office/unknown|document/office/word|document/pdf|document/email|executable/linux/elf*|code/javascript|code/jscript|code/python|code/vbs|code/wsf|code/html|code/ps1
 rejects: empty|metadata/.*|archive/zip
 
 stage: CORE
@@ -95,6 +95,16 @@ submission_params:
     name: take_screenshots
     type: bool
     value: false
+
+  - default: true
+    name: hollowshunter
+    type: bool
+    value: false
+
+  - default: false
+    name: simulate_human
+    type: bool
+    value: true
 
 # TODO: implement routing options
 #  - default: inetsim
