@@ -859,11 +859,14 @@ class Cuckoo(ServiceBase):
                             # We only care about dumps that are exe files
                             if filename_suffix == "exe":
                                 hollowshunter_sec.add_tag("dynamic.process.file_name", dropped_name)
+                            else:
+                                # It's true, we only care about exe files
+                                continue
                         # Fixup the name.. the tar originally has files/your/file/path
                         tarobj.name = tarobj.name.replace("/", "_").split('_', 1)[1]
                         dropped_tar.extract(tarobj, self.working_directory)
                         dropped_file_path = os.path.join(self.working_directory, tarobj.name)
-
+                        dropped_sec = None
                         # Check the file hash for whitelisting:
                         with open(dropped_file_path, 'rb') as file_hash:
                             data = file_hash.read()
@@ -874,10 +877,11 @@ class Cuckoo(ServiceBase):
                                     if ssdeep.compare(ssdeep_hash, seen_hash) >= self.ssdeep_match_pct:
                                         skip_file = True
                                         break
-                                if skip_file is True:
+                                if skip_file is True and dropped_sec is None:
                                     dropped_sec = ResultSection(title_text='Dropped Files Information')
                                     dropped_sec.add_tag("file.behavior",
                                                         "Truncated extraction set")
+                                    self.file_res.add_section(dropped_sec)
                                     continue
                                 else:
                                     added_hashes.add(ssdeep_hash)
