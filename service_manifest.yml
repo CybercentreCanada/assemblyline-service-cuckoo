@@ -96,10 +96,10 @@ submission_params:
     type: bool
     value: false
 
-  - default: false
+  - default: true
     name: hollowshunter
     type: bool
-    value: false
+    value: true
 
   - default: true
     name: simulate_user
@@ -238,7 +238,7 @@ heuristics:
     signature_score_map:
       allocates_rwx: 10
     filetype: '*'
-    description: Input is not properly validated and gets processed by an interpreter as part of a command or query.
+    description: Hide executable code in another process or within the malicious process after unpacking iteself.
 
   - heur_id: 18
     name: Dropper

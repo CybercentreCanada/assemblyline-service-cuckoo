@@ -840,6 +840,10 @@ class Cuckoo(ServiceBase):
         self.log.debug("Checking dropped files.")
         dropped_tar_bytes = self.cuckoo_query_report(task_id, 'dropped')
         added_hashes = set()
+        hollowshunter_sec = None
+        if hollowshunter:
+            hollowshunter_sec = ResultSection(title_text='HollowsHunter Dumps')
+            hollowshunter_sec.set_heuristic(17)
         if dropped_tar_bytes is not None:
             try:
                 dropped_tar = tarfile.open(fileobj=io.BytesIO(dropped_tar_bytes))
@@ -850,6 +854,11 @@ class Cuckoo(ServiceBase):
                         if hollowshunter and dropped_name in ["hh_dump_report.json", "hh_scan_report.json"]:
                             # The HollowsHunter reports are not to be resubmitted for analyiss
                             continue
+                        elif hollowshunter and "hh_" in dropped_name:
+                            filename_suffix = dropped_name.split(".")[-1]
+                            # We only care about dumps that are exe files
+                            if filename_suffix == "exe":
+                                hollowshunter_sec.add_tag("dynamic.process.file_name", dropped_name)
                         # Fixup the name.. the tar originally has files/your/file/path
                         tarobj.name = tarobj.name.replace("/", "_").split('_', 1)[1]
                         dropped_tar.extract(tarobj, self.working_directory)
@@ -885,6 +894,8 @@ class Cuckoo(ServiceBase):
                                                     dropped_name,
                                                     message)
                             self.log.debug("Submitted dropped file for analysis: %s" % dropped_file_path)
+                if hollowshunter_sec and hollowshunter_sec.tags:
+                    self.file_res.add_section(hollowshunter_sec)
             except Exception as e_x:
                 self.log.error("Error extracting dropped files: %s" % e_x)
                 return
