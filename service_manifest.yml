@@ -96,13 +96,13 @@ submission_params:
     type: bool
     value: false
 
-  - default: true
+  - default: false
     name: hollowshunter
     type: bool
     value: false
 
-  - default: false
-    name: simulate_human
+  - default: true
+    name: simulate_user
     type: bool
     value: true
 

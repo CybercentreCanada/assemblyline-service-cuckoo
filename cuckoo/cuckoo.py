@@ -268,7 +268,7 @@ class Cuckoo(ServiceBase):
         force_sleepskip = request.get_param("force_sleepskip")
         take_screenshots = request.get_param("take_screenshots")
         hollowshunter = request.get_param("hollowshunter")
-        simulate_human = request.get_param("simulate_human")
+        simulate_user = request.get_param("simulate_user")
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
@@ -307,8 +307,10 @@ class Cuckoo(ServiceBase):
 
         if not hollowshunter:
             task_options.append("hollowshunter=0")
+        else:
+            task_options.append("hollowshunter=1")
 
-        if not simulate_human:
+        if not simulate_user:
             task_options.append("human=0")
 
         kwargs['options'] = ','.join(task_options)
