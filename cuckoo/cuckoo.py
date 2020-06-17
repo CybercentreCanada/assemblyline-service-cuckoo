@@ -454,7 +454,8 @@ class Cuckoo(ServiceBase):
                                         ))
 
                             # Add HollowsHunter report files as supplementary
-                            if hollowshunter:
+                            # Only if there is a 1 or more exe dumps
+                            if hollowshunter and any(re.match("files\/hh_[a-zA-Z0-9]*\.[a-zA-Z0-9]+\.exe$", f) for f in tar_obj.getnames()):
                                 for report in ["hh_scan_report.json", "hh_dump_report.json"]:
                                     internal_path = os.path.join("files", report)
                                     if internal_path not in tar_obj.getnames():
@@ -841,6 +842,7 @@ class Cuckoo(ServiceBase):
         dropped_tar_bytes = self.cuckoo_query_report(task_id, 'dropped')
         added_hashes = set()
         hollowshunter_sec = None
+        dropped_sec = None
         if hollowshunter:
             hollowshunter_sec = ResultSection(title_text='HollowsHunter Dumps')
             hollowshunter_sec.set_heuristic(17)
@@ -866,7 +868,6 @@ class Cuckoo(ServiceBase):
                         tarobj.name = tarobj.name.replace("/", "_").split('_', 1)[1]
                         dropped_tar.extract(tarobj, self.working_directory)
                         dropped_file_path = os.path.join(self.working_directory, tarobj.name)
-                        dropped_sec = None
                         # Check the file hash for whitelisting:
                         with open(dropped_file_path, 'rb') as file_hash:
                             data = file_hash.read()
@@ -891,7 +892,7 @@ class Cuckoo(ServiceBase):
                         if not (wlist_check_hash(dropped_hash) or wlist_check_dropped(
                                 dropped_name) or dropped_name.endswith('_info.txt')):
                             message = "Dropped file during Cuckoo analysis."
-                            if hollowshunter:
+                            if hollowshunter and "hh_" in dropped_name:
                                 message = "HollowsHunter dropped file"
                             # Resubmit
                             self.request.add_extracted(dropped_file_path,
