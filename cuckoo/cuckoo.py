@@ -3,7 +3,7 @@ import json
 import os
 import tarfile
 import random
-from simplejson.errors import JSONDecodeError
+from json import JSONDecodeError
 import ssdeep
 import hashlib
 import traceback
