@@ -3,6 +3,7 @@ import json
 import os
 import tarfile
 import random
+from simplejson.errors import JSONDecodeError
 import ssdeep
 import hashlib
 import traceback
@@ -578,6 +579,13 @@ class Cuckoo(ServiceBase):
             err_msg = "Task went missing while waiting for cuckoo to analyze file."
         elif status == "stopped":
             err_msg = "Service has been stopped while waiting for cuckoo to analyze file."
+        elif status == "report_too_big":
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
+            raise JSONDecodeError(
+                "Exception converting Cuckoo report HTTP response into JSON. This may"
+                "be caused by a report who's size is greater than the limit of what the API can return."
+                "Therefore only part of the report is returned, and thus the report is parsed as incomplete JSON.")
         elif status == "missing_report":
             # this most often happens due to some sort of messed up filename that
             # the cuckoo agent inside the VM died on.
@@ -655,6 +663,8 @@ class Cuckoo(ServiceBase):
                 self.cuckoo_task.report = self.cuckoo_query_report(self.cuckoo_task.id)
             except MissingCuckooReportException:
                 return "missing_report"
+            except JSONDecodeError:
+                return "report_too_big"
             if self.cuckoo_task.report and isinstance(self.cuckoo_task.report, dict):
                 return status
         else:
@@ -729,11 +739,12 @@ class Cuckoo(ServiceBase):
                 sys.setrecursionlimit(int(self.config['recursion_limit']))
                 resp_dict = dict(resp.json())
                 report_data = resp_dict
+            except JSONDecodeError:
+                raise JSONDecodeError
             except Exception:
                 url = self.query_report_url % task_id + '/' + fmt
-                self.log.exception("Exception converting cuckoo report http response into json: "
-                                   "report url: %s, file_name: %s", url, self.file_name)
-                report_data = None
+                raise Exception("Exception converting cuckoo report http response into json: "
+                                "report url: %s, file_name: %s", url, self.file_name)
         else:
             report_data = resp.content
 
