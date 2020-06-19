@@ -11,6 +11,7 @@ import re
 import email.header
 import sys
 import requests
+import tempfile
 
 from retrying import retry, RetryError
 
@@ -204,13 +205,13 @@ class Cuckoo(ServiceBase):
             try:
                 decoded_filename = email.header.decode_header(self.file_name)
                 new_filename = decoded_filename[0][0].decode(decoded_filename[0][1])
-                self.log.info("Using decoded filename %s" % new_filename)
+                self.log.debug("Using decoded filename %s" % new_filename)
                 self.file_name = new_filename
-            except Exception:
+            except Exception as e:
                 new_filename = generate_random_words(1)
-                self.log.error(
+                self.log.warning(
                     "Problem decoding filename. Using randomly generated filename %s. Error: %s " %
-                    (new_filename, traceback.format_exc())
+                    (new_filename, e)
                 )
                 self.file_name = new_filename
 
@@ -236,7 +237,7 @@ class Cuckoo(ServiceBase):
             if submitted_ext not in SUPPORTED_EXTENSIONS:
                 # This is the case where the submitted file was NOT identified, and  the provided extension
                 # isn't in the list of extensions that we explicitly support.
-                self.log.debug("Cuckoo is exiting because it doesn't support the provided file type.")
+                self.log.info("Cuckoo is exiting because it doesn't support the provided file type.")
                 return
             else:
                 if submitted_ext == "bin":
@@ -335,7 +336,7 @@ class Cuckoo(ServiceBase):
                         machine_name = machine.get('name')
 
                     if machine_name is None:
-                        self.log.debug('Unable to retrieve machine name from result.')
+                        self.log.warning('Unable to retrieve machine name from result.')
                     else:
                         self.report_machine_info(machine_name)
                     self.log.debug("Generating AL Result from Cuckoo results..")
@@ -349,18 +350,18 @@ class Cuckoo(ServiceBase):
                             self.cuckoo_delete_task(self.cuckoo_task.id)
                         raise CuckooProcessingException("Cuckoo was unable to process this file due to:\n %s.\n This could be related to a corrupted sample, or an issue related to the VM image." % err_str)
                 except RecoverableError as e:
-                    self.log.info("Recoverable error. Error message: %s" % e.message)
+                    self.log.error("Recoverable error. Error message: %s" % e.message)
                     if self.cuckoo_task and self.cuckoo_task.id is not None:
                         self.cuckoo_delete_task(self.cuckoo_task.id)
                     raise
                 except CuckooProcessingException:
                     # Catching the CuckooProcessingException, attempting to delete the file, and then carrying on
-                    self.log.exception("Error generating AL report: ")
+                    self.log.error("Processing error occurred generating AL report")
                     if self.cuckoo_task and self.cuckoo_task.id is not None:
                         self.cuckoo_delete_task(self.cuckoo_task.id)
                     raise
                 except Exception as e:
-                    self.log.exception("Error generating AL report: ")
+                    self.log.error("Error generating AL report: %s" % e)
                     if self.cuckoo_task and self.cuckoo_task.id is not None:
                         self.cuckoo_delete_task(self.cuckoo_task.id)
                     raise CuckooProcessingException(
@@ -385,9 +386,9 @@ class Cuckoo(ServiceBase):
                             report_file.close()
                             self.request.add_supplementary(tar_report_path, tar_file_name,
                                                         "Cuckoo Sandbox analysis report archive (tar.gz)")
-                        except Exception:
+                        except Exception as e:
                             self.log.exception(
-                                "Unable to add tar of complete report for task %s" % self.cuckoo_task.id)
+                                "Unable to add tar of complete report for task %s due to %s" % (self.cuckoo_task.id, e))
 
                         # Attach report.json as a supplementary file. This is duplicating functionality
                         # a little bit, since this information is included in the JSON result section
@@ -402,10 +403,10 @@ class Cuckoo(ServiceBase):
                                     "Cuckoo Sandbox report (json)"
                                 )
                             tar_obj.close()
-                        except Exception:
+                        except Exception as e:
                             self.log.exception(
                                 "Unable to add report.json for task %s. Exception: %s" %
-                                (self.cuckoo_task.id, traceback.format_exc())
+                                (self.cuckoo_task.id, e)
                             )
 
                         # Check for any extra files in full report to add as extracted files
@@ -492,10 +493,10 @@ class Cuckoo(ServiceBase):
                                 tar_obj.extract(f, path=self.working_directory)
                                 self.request.add_extracted(screenshot_file_path, f, "Screenshots from Cuckoo analysis")
                             tar_obj.close()
-                        except Exception:
+                        except Exception as e:
                             self.log.exception(
                                 "Unable to add extra file(s) for task %s. Exception: %s" %
-                                (self.cuckoo_task.id, traceback.format_exc())
+                                (self.cuckoo_task.id, e)
                             )
 
                 if len(exports_available) > 0 and kwargs.get("package", "") == "dll_multi":
@@ -527,7 +528,7 @@ class Cuckoo(ServiceBase):
 
         except Exception as e:
             # Delete the task now..
-            self.log.info('General exception caught during processing: %s' % e)
+            self.log.error('General exception caught during processing: %s' % e)
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
 
@@ -562,14 +563,14 @@ class Cuckoo(ServiceBase):
         try:
             status = self.cuckoo_poll_started()
         except RetryError:
-            self.log.info("VM startup timed out")
+            self.log.error("VM startup timed out")
             status = None
 
         if status == "started":
             try:
                 status = self.cuckoo_poll_report()
             except RetryError:
-                self.log.info("Max retries exceeded for report status.")
+                self.log.error("Max retries exceeded for report status.")
                 status = None
 
         err_msg = None
@@ -586,6 +587,11 @@ class Cuckoo(ServiceBase):
                 "Exception converting Cuckoo report HTTP response into JSON. This may"
                 "be caused by a report who's size is greater than the limit of what the API can return."
                 "Therefore only part of the report is returned, and thus the report is parsed as incomplete JSON.")
+        elif status == "service_container_disconnected":
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.cuckoo_delete_task(self.cuckoo_task.id)
+            raise Exception("The service container has closed the pipe after making an "
+                            "API request, most likely due to lack of disk space.")
         elif status == "missing_report":
             # this most often happens due to some sort of messed up filename that
             # the cuckoo agent inside the VM died on.
@@ -595,7 +601,7 @@ class Cuckoo(ServiceBase):
             self.log.warning("Got missing_report status. This is often caused by invalid filenames. "
                              "Renaming file to %s and retrying" % self.cuckoo_task.file)
             # Raise an exception to force a retry
-            raise Exception("Retrying after missing_report status")
+            raise RecoverableError("Retrying after missing_report status")
 
         if err_msg:
             self.log.error("Error is: %s" % err_msg)
@@ -661,10 +667,15 @@ class Cuckoo(ServiceBase):
 
             try:
                 self.cuckoo_task.report = self.cuckoo_query_report(self.cuckoo_task.id)
-            except MissingCuckooReportException:
+            except MissingCuckooReportException as e:
+                self.log.error(e)
                 return "missing_report"
-            except JSONDecodeError:
+            except JSONDecodeError as e:
+                self.log.error(e)
                 return "report_too_big"
+            except Exception as e:
+                self.log.error(e)
+                return "service_container_disconnected"
             if self.cuckoo_task.report and isinstance(self.cuckoo_task.report, dict):
                 return status
         else:
@@ -687,13 +698,13 @@ class Cuckoo(ServiceBase):
             raise Exception("Unable to reach the Cuckoo nest while trying to submit a file %s"
                                    % self.cuckoo_task.file)
         if resp.status_code != 200:
-            self.log.debug("Failed to submit file %s. Status code: %s" % (self.cuckoo_task.file, resp.status_code))
+            self.log.error("Failed to submit file %s. Status code: %s" % (self.cuckoo_task.file, resp.status_code))
 
             if resp.status_code == 500:
                 new_filename = generate_random_words(1)
                 file_ext = self.cuckoo_task.file.rsplit(".", 1)[-1]
                 self.cuckoo_task.file = new_filename + "." + file_ext
-                self.log.warning("Got 500 error from Cuckoo API. This is often caused by non-ascii filenames. "
+                self.log.error("Got 500 error from Cuckoo API. This is often caused by non-ascii filenames. "
                                  "Renaming file to %s and retrying" % self.cuckoo_task.file)
                 # Raise an exception to force a retry
                 raise RecoverableError("Retrying after 500 error")
@@ -713,8 +724,12 @@ class Cuckoo(ServiceBase):
     def cuckoo_query_report(self, task_id, fmt="json", params=None):
         self.log.debug("Querying report, task_id: %s - format: %s", task_id, fmt)
         try:
-            resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {},
-                                    headers=self.auth_header, timeout=self.timeout)
+            # There are edge cases that require us to stream the report to disk
+            temp_report = tempfile.SpooledTemporaryFile()
+            with self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {},
+                                  headers=self.auth_header, timeout=self.timeout, stream=True) as resp:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    temp_report.write(chunk)
         except requests.exceptions.Timeout:
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
@@ -733,20 +748,27 @@ class Cuckoo(ServiceBase):
             else:
                 self.log.error("Failed to query report %s. Status code: %d. There is a strong chance that this is due to the large size of file attempted to retrieve via API request." % (task_id, resp.status_code))
                 return None
-        if fmt == "json":
-            try:
-                # Setting environment recursion limit for large JSONs
-                sys.setrecursionlimit(int(self.config['recursion_limit']))
-                resp_dict = dict(resp.json())
-                report_data = resp_dict
-            except JSONDecodeError:
-                raise JSONDecodeError
-            except Exception:
-                url = self.query_report_url % task_id + '/' + fmt
-                raise Exception("Exception converting cuckoo report http response into json: "
-                                "report url: %s, file_name: %s", url, self.file_name)
-        else:
-            report_data = resp.content
+        try:
+            # Setting the pointer in the temp file
+            temp_report.seek(0)
+            if fmt == "json":
+                try:
+                    # Setting environment recursion limit for large JSONs
+                    sys.setrecursionlimit(int(self.config['recursion_limit']))
+                    # Reading, decoding and converting to JSON
+                    report_data = json.loads(temp_report.read().decode('utf-8'))
+                except JSONDecodeError:
+                    raise JSONDecodeError
+                except Exception:
+                    url = self.query_report_url % task_id + '/' + fmt
+                    raise Exception("Exception converting cuckoo report http response into json: "
+                                    "report url: %s, file_name: %s", url, self.file_name)
+            else:
+                # Reading as bytes
+                report_data = temp_report.read()
+        finally:
+            # Removing the temp file
+            temp_report.close()
 
         if not report_data or report_data == '':
             if self.cuckoo_task and self.cuckoo_task.id is not None:
@@ -769,9 +791,9 @@ class Cuckoo(ServiceBase):
         pcap_data = None
         if resp.status_code != 200:
             if resp.status_code == 404:
-                self.log.debug("Task or pcap not found for task: %s" % task_id)
+                self.log.error("Task or pcap not found for task: %s" % task_id)
             else:
-                self.log.debug("Failed to query pcap for task %s. Status code: %d" % (task_id, resp.status_code))
+                self.log.error("Failed to query pcap for task %s. Status code: %d" % (task_id, resp.status_code))
         else:
             pcap_data = resp.content
         return pcap_data
@@ -788,14 +810,14 @@ class Cuckoo(ServiceBase):
         task_dict = None
         if resp.status_code != 200:
             if resp.status_code == 404:
-                self.log.debug("Task not found for task: %s" % task_id)
+                self.log.error("Task not found for task: %s" % task_id)
             else:
-                self.log.debug("Failed to query task %s. Status code: %d" % (task_id, resp.status_code))
+                self.log.error("Failed to query task %s. Status code: %d" % (task_id, resp.status_code))
         else:
             resp_dict = dict(resp.json())
             task_dict = resp_dict['task']
             if task_dict is None or task_dict == '':
-                self.log.warning('Failed to query task. Returned task dictionary is None or empty')
+                self.log.error('Failed to query task. Returned task dictionary is None or empty')
         return task_dict
 
     @retry(wait_fixed=2000)
@@ -811,7 +833,7 @@ class Cuckoo(ServiceBase):
                                    % machine_name)
         machine_dict = None
         if resp.status_code != 200:
-            self.log.debug("Failed to query machine %s. Status code: %d" % (machine_name, resp.status_code))
+            self.log.error("Failed to query machine %s. Status code: %d" % (machine_name, resp.status_code))
         else:
             resp_dict = dict(resp.json())
             machine_dict = resp_dict['machine']
@@ -828,7 +850,7 @@ class Cuckoo(ServiceBase):
         if resp.status_code == 500 and json.loads(resp.text).get("message") == "The task is currently being processed, cannot delete":
             raise Exception("The task %s is currently being processed, cannot delete" % task_id)
         elif resp.status_code != 200:
-            self.log.debug("Failed to delete task %s. Status code: %d" % (task_id, resp.status_code))
+            self.log.error("Failed to delete task %s. Status code: %d" % (task_id, resp.status_code))
         else:
             self.log.debug("Deleted task: %s." % task_id)
             if self.cuckoo_task:
@@ -843,7 +865,7 @@ class Cuckoo(ServiceBase):
         except requests.ConnectionError:
             raise Exception(f"Unable to reach the Cuckoo nest ({self.base_url}) while trying to query machines. Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside of Assemblyline first before running the service.")
         if resp.status_code != 200:
-            self.log.debug("Failed to query machines: %s" % resp.status_code)
+            self.log.error("Failed to query machines: %s" % resp.status_code)
             raise CuckooVMBusyException()
         resp_dict = dict(resp.json())
         return resp_dict
@@ -947,7 +969,7 @@ class Cuckoo(ServiceBase):
             try:
                 self.request.add_extracted(pcap_path, pcap_file_name, "PCAP from Cuckoo analysis")
             except MaxExtractedExceeded:
-                self.log.debug("The maximum amount of files to be extracted is 501, "
+                self.log.error("The maximum amount of files to be extracted is 501, "
                                "which has been exceeded in this submission")
 
     def report_machine_info(self, machine_name):
