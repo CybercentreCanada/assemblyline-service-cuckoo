@@ -11,6 +11,7 @@ import re
 import email.header
 import sys
 import requests
+import tempfile
 
 from retrying import retry, RetryError
 
@@ -723,8 +724,12 @@ class Cuckoo(ServiceBase):
     def cuckoo_query_report(self, task_id, fmt="json", params=None):
         self.log.debug("Querying report, task_id: %s - format: %s", task_id, fmt)
         try:
-            resp = self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {},
-                                    headers=self.auth_header, timeout=self.timeout)
+            # There are edge cases that require us to stream the report to disk
+            temp_report = tempfile.SpooledTemporaryFile()
+            with self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {},
+                                  headers=self.auth_header, timeout=self.timeout, stream=True) as resp:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    temp_report.write(chunk)
         except requests.exceptions.Timeout:
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
@@ -743,20 +748,27 @@ class Cuckoo(ServiceBase):
             else:
                 self.log.error("Failed to query report %s. Status code: %d. There is a strong chance that this is due to the large size of file attempted to retrieve via API request." % (task_id, resp.status_code))
                 return None
-        if fmt == "json":
-            try:
-                # Setting environment recursion limit for large JSONs
-                sys.setrecursionlimit(int(self.config['recursion_limit']))
-                resp_dict = dict(resp.json())
-                report_data = resp_dict
-            except JSONDecodeError:
-                raise JSONDecodeError
-            except Exception:
-                url = self.query_report_url % task_id + '/' + fmt
-                raise Exception("Exception converting cuckoo report http response into json: "
-                                "report url: %s, file_name: %s", url, self.file_name)
-        else:
-            report_data = resp.content
+        try:
+            # Setting the pointer in the temp file
+            temp_report.seek(0)
+            if fmt == "json":
+                try:
+                    # Setting environment recursion limit for large JSONs
+                    sys.setrecursionlimit(int(self.config['recursion_limit']))
+                    # Reading, decoding and converting to JSON
+                    report_data = json.loads(temp_report.read().decode('utf-8'))
+                except JSONDecodeError:
+                    raise JSONDecodeError
+                except Exception:
+                    url = self.query_report_url % task_id + '/' + fmt
+                    raise Exception("Exception converting cuckoo report http response into json: "
+                                    "report url: %s, file_name: %s", url, self.file_name)
+            else:
+                # Reading as bytes
+                report_data = temp_report.read()
+        finally:
+            # Removing the temp file
+            temp_report.close()
 
         if not report_data or report_data == '':
             if self.cuckoo_task and self.cuckoo_task.id is not None:

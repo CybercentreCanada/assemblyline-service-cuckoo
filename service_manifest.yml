@@ -2,7 +2,7 @@ name: Cuckoo
 version: $SERVICE_TAG
 description: Provides dynamic malware analysis through sandboxing.
 
-accepts: (archive|executable/windows|java|audiovisual|meta)/.*|unknown|document/installer/windows|document/office/excel|document/office/ole|document/office/powerpoint|document/office/rtf|document/office/unknown|document/office/word|document/pdf|document/email|executable/linux/elf*|code/javascript|code/jscript|code/python|code/vbs|code/wsf|code/html|code/ps1
+accepts: (archive|executable/windows|java|audiovisual|meta)/.*|unknown|document/installer/windows|document/office/excel|document/office/ole|document/office/powerpoint|document/office/rtf|document/office/unknown|document/office/word|document/pdf|document/email|code/javascript|code/jscript|code/python|code/vbs|code/wsf|code/html|code/ps1
 rejects: empty|metadata/.*|archive/zip
 
 stage: CORE
@@ -477,4 +477,4 @@ docker_config:
   allow_internet_access: true
   image: ${REGISTRY}cccs/assemblyline-service-cuckoo:$SERVICE_TAG
   cpu_cores: 0.5
-  ram_mb: 256
+  ram_mb: 2000
