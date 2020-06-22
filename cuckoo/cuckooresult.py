@@ -294,7 +294,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 # Mapping the process name to the process id
                 pid = mark.get("pid")
                 process_name = process_map.get(pid, {}).get("name")
-                if mark_type == "generic" and sig_name not in ["process_martian", "network_cnc_http", "nolookup_communication"]:
+                if mark_type == "generic" and sig_name not in ["process_martian", "network_cnc_http", "nolookup_communication", "suspicious_powershell"]:
                     for item in mark:
                         # Check if key is not flagged to skip, and that we
                         # haven't already raised this ioc
@@ -327,6 +327,8 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                         sig_res.add_line('\tIOC: %s' % safe_str(mark["host"]))
                     else:
                         fp_count += 1
+                elif mark_type == "generic" and sig_name == "suspicious_powershell":
+                    sig_res.add_line('\tIOC: %s via %s' % (safe_str(mark["value"]), safe_str(mark["option"])))
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")

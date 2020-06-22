@@ -130,6 +130,8 @@ heuristics:
     attack_id: T1086
     name: PowerShell
     score: 500
+    signature_score_map:
+      suspicious_powershell: 500  # This signature is a 3 -> 250
     filetype: '*'
     description: Leverages Powershell to attack Windows operating systems.
 
@@ -306,6 +308,8 @@ heuristics:
     attack_id: T1045
     name: Packer
     score: 100
+    signature_score_map:
+      suspicious_process: 500  # This signature is a 2 -> 100
     filetype: '*'
     description: Compresses, encrypts, and/or modifies a malicious file's format.
 
