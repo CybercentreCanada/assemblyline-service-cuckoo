@@ -457,22 +457,19 @@ class Cuckoo(ServiceBase):
 
                             # Add HollowsHunter report files as supplementary
                             # Only if there is a 1 or more exe dumps
-                            if hollowshunter and any(re.match("files\/hh_[a-zA-Z0-9]*\.[a-zA-Z0-9]+\.exe$", f) for f in tar_obj.getnames()):
-                                for report in ["hh_scan_report.json", "hh_dump_report.json"]:
-                                    internal_path = os.path.join("files", report)
-                                    if internal_path not in tar_obj.getnames():
-                                        continue
-                                    report_json_path = os.path.join(
-                                        self.working_directory, internal_path)
-                                    tar_obj.extract(internal_path,
-                                                    path=self.working_directory)
+                            if hollowshunter and any(re.match("files\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.[a-zA-Z0-9]+\.exe$", f) for f in tar_obj.getnames()):
+                                pattern = re.compile("files\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$")
+                                report_list = list(filter(pattern.match, tar_obj.getnames()))
+                                for report_path in report_list:
+                                    report_json_path = os.path.join(self.working_directory, report_path)
+                                    tar_obj.extract(report_path, path=self.working_directory)
                                     self.request.add_supplementary(
                                         report_json_path,
-                                        report,
+                                        report_path,
                                         "HollowsHunter report (json)"
                                     )
                                     self.log.debug(
-                                        "Adding HollowsHunter report %s as supplementary file" % report)
+                                        "Adding HollowsHunter report %s as supplementary file" % report_path)
 
                             # Extract buffers, screenshots and anything extracted
                             extracted_buffers = [x.name for x in tar_obj.getmembers()
