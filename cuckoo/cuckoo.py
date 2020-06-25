@@ -27,6 +27,7 @@ from assemblyline.common.exceptions import RecoverableError, ChainException
 from cuckoo.cuckooresult import generate_al_result
 from cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
 
+HOLLOWSHUNTER_REPORT_REGEX = "files\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
 CUCKOO_API_DELETE_TASK = "tasks/delete/%s"
@@ -458,7 +459,7 @@ class Cuckoo(ServiceBase):
                             # Add HollowsHunter report files as supplementary
                             # Only if there is a 1 or more exe dumps
                             if hollowshunter and any(re.match("files\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.[a-zA-Z0-9]+\.exe$", f) for f in tar_obj.getnames()):
-                                pattern = re.compile("files\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$")
+                                pattern = re.compile(HOLLOWSHUNTER_REPORT_REGEX)
                                 report_list = list(filter(pattern.match, tar_obj.getnames()))
                                 for report_path in report_list:
                                     report_json_path = os.path.join(self.working_directory, report_path)
@@ -883,7 +884,7 @@ class Cuckoo(ServiceBase):
                     if tarobj.isfile() and not tarobj.isdir():  # a file, not a dir
                         # A dropped file found
                         dropped_name = os.path.split(tarobj.name)[1]
-                        if hollowshunter and dropped_name in ["hh_dump_report.json", "hh_scan_report.json"]:
+                        if hollowshunter and re.match(HOLLOWSHUNTER_REPORT_REGEX, dropped_name):
                             # The HollowsHunter reports are not to be resubmitted for analyiss
                             continue
                         elif hollowshunter and "hh_" in dropped_name:
