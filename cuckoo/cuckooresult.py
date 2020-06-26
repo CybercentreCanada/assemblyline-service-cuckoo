@@ -135,7 +135,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
             process_tree.remove(process)
     # Cleaning keys, value pairs
     for process in process_tree:
-        process = remove_process_keys(process)
+        process = remove_process_keys(process, process_map)
     if len(process_tree) > 0:
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = json.dumps(process_tree)
@@ -162,7 +162,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
     return events
 
 
-def remove_process_keys(process: dict) -> dict:
+def remove_process_keys(process: dict, process_map: dict) -> dict:
     """
     There are several keys that we do not want in the final form of a process
     dict. This method removes those keys
@@ -174,10 +174,11 @@ def remove_process_keys(process: dict) -> dict:
         process.pop(key)
     # Rename pid to process_id
     process["process_pid"] = process.pop("pid", None)
+    process["signatures"] = list(process_map.get(process["process_pid"], {}).get("signatures", []))
     children = process["children"]
     if len(children) > 0:
         for child in children:
-            child = remove_process_keys(child)
+            child = remove_process_keys(child, process_map)
     return process
 
 
@@ -282,6 +283,15 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
             for family in sig_families:
                 sig_res.add_tag("dynamic.signature.family", family)
 
+        #  We want to write a temporary file for the console output
+        if sig_name == "console_output":
+            with open("/tmp/console_output.txt", "ab") as f:
+                for mark in sig["marks"]:
+                    buffer = mark["call"].get("arguments", {}).get("buffer") + "\n\n"
+                    if buffer:
+                        f.write(buffer.encode())
+            f.close()
+
         # Find any indicators of compromise from the signature marks
         markcount = sig.get("markcount", 0)
         fp_count = 0
@@ -291,8 +301,12 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
             injected_processes = []
             for mark in sig_marks:
                 mark_type = mark["type"]
-                # Mapping the process name to the process id
                 pid = mark.get("pid")
+                # Adding to the list of signatures for a specific process
+                if process_map.get(pid):
+                    process_map[pid]["signatures"].add(sig_name)
+                # Mapping the process name to the process id
+                process_map.get(pid, {})
                 process_name = process_map.get(pid, {}).get("name")
                 if mark_type == "generic" and sig_name not in ["process_martian", "network_cnc_http", "nolookup_communication", "suspicious_powershell"]:
                     for item in mark:
@@ -352,7 +366,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                             # Despite incorrect spelling of the signature name,
                                             # the ioc that is raised does not need changing for applcation_raises_exception.
                                             # All other signatures do.
-                                            if sig_name != "applcation_raises_exception":
+                                            if sig_name != "application_raises_exception":
                                                ioc = ioc.replace(str(key), process_map[key]["name"])
                                 sig_res.add_line('\tIOC: %s' % safe_str(ioc))
                             else:
@@ -765,7 +779,8 @@ def get_process_map(processes: dict = None) -> dict:
         pid = process["pid"]
         process_map[pid] = {
             "name": process["process_name"],
-            "network_calls": network_calls
+            "network_calls": network_calls,
+            "signatures": set()
         }
     return process_map
 

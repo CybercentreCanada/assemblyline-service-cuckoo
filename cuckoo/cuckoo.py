@@ -421,8 +421,12 @@ class Cuckoo(ServiceBase):
                             for f in supplementary_files:
                                 sup_file_path = os.path.join(self.working_directory, f)
                                 tar_obj.extract(f, path=self.working_directory)
-                                self.request.add_supplementary(sup_file_path, "Supplementary File",
-                                                            display_name=f)
+                                self.request.add_supplementary(sup_file_path, f, "Supplementary File")
+
+                            # Check if there are any files consisting of console output from detonation                                display_name=f)
+                            console_output_file_path = os.path.join("/tmp", "console_output.txt")
+                            self.request.add_supplementary(console_output_file_path, "console_output.txt", "Console Output Observed")
+                            os.remove(console_output_file_path)
 
                             # process memory dump related
                             memdesc_lookup = {
@@ -442,7 +446,7 @@ class Cuckoo(ServiceBase):
                                     if str(pid) in f:
                                         f = f.replace(str(pid), process_map[pid]["name"])
                                 if filename_suffix == "py":
-                                    self.request.add_supplementary(mem_file_path, memdesc, display_name=f)
+                                    self.request.add_supplementary(mem_file_path, f, memdesc)
                                 else:
                                     mem_filesize = os.stat(mem_file_path).st_size
                                     try:
