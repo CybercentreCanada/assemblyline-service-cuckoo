@@ -341,15 +341,10 @@ class Cuckoo(ServiceBase):
                     else:
                         self.report_machine_info(machine_name)
                     self.log.debug("Generating AL Result from Cuckoo results..")
-                    failed, process_map = generate_al_result(self.cuckoo_task.report,
+                    process_map = generate_al_result(self.cuckoo_task.report,
                                                  self.file_res,
                                                  file_ext,
                                                  self.config.get("random_ip_range"))
-                    if failed is True:
-                        err_str = self.get_errors()
-                        if self.cuckoo_task and self.cuckoo_task.id is not None:
-                            self.cuckoo_delete_task(self.cuckoo_task.id)
-                        raise CuckooProcessingException("Cuckoo was unable to process this file due to:\n %s.\n This could be related to a corrupted sample, or an issue related to the VM image." % err_str)
                 except RecoverableError as e:
                     self.log.error("Recoverable error. Error message: %s" % e.message)
                     if self.cuckoo_task and self.cuckoo_task.id is not None:
@@ -425,8 +420,9 @@ class Cuckoo(ServiceBase):
 
                             # Check if there are any files consisting of console output from detonation                                display_name=f)
                             console_output_file_path = os.path.join("/tmp", "console_output.txt")
-                            self.request.add_supplementary(console_output_file_path, "console_output.txt", "Console Output Observed")
-                            os.remove(console_output_file_path)
+                            if os.path.exists(console_output_file_path):
+                                self.request.add_supplementary(console_output_file_path, "console_output.txt", "Console Output Observed")
+                                os.remove(console_output_file_path)
 
                             # process memory dump related
                             memdesc_lookup = {
@@ -939,14 +935,6 @@ class Cuckoo(ServiceBase):
             except Exception as e_x:
                 self.log.error("Error extracting dropped files: %s" % e_x)
                 return
-
-    def get_errors(self):
-        # Return errors from our sections
-        # TODO: This is a bit (REALLY) hacky, we should probably flag this during result generation.
-        for section in self.file_res.sections:
-            if section.title_text == "Analysis Errors":
-                return section.body
-        return ""
 
     def check_pcap(self, task_id):
         # Make sure there's actual network information to report before including the pcap.

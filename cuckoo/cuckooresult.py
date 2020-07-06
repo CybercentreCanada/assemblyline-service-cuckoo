@@ -56,7 +56,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     behaviour = api_report.get('behavior', {})  # Note conversion from American to Canadian spelling
 
     if debug:
-        failed = process_debug(debug, al_result)
+        process_debug(debug, al_result)
 
     process_map = get_process_map(behaviour.get("processes", {}))
     network_events = []
@@ -89,11 +89,10 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         process_all_events(al_result, network_events, process_events)
 
     log.debug("AL result generation completed!")
-    return failed, process_map
+    return process_map
 
 
 def process_debug(debug, al_result):
-    failed = False
     error_res = ResultSection(title_text='Analysis Errors')
     for error in debug['errors']:
         err_str = str(error)
@@ -115,9 +114,7 @@ def process_debug(debug, al_result):
         previous_log = log
 
     if error_res.body and len(error_res.body) > 0:
-        failed = True
         al_result.add_section(error_res)
-    return failed
 
 
 def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> list:
