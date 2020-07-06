@@ -281,13 +281,13 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 sig_res.add_tag("dynamic.signature.family", family)
 
         #  We want to write a temporary file for the console output
-        if sig_name == "console_output":
-            with open("/tmp/console_output.txt", "ab") as f:
-                for mark in sig["marks"]:
-                    buffer = mark["call"].get("arguments", {}).get("buffer") + "\n\n"
-                    if buffer:
-                        f.write(buffer.encode())
-            f.close()
+        # if sig_name == "console_output":
+        #     with open("/tmp/console_output.txt", "ab") as f:
+        #         for mark in sig["marks"]:
+        #             buffer = mark["call"].get("arguments", {}).get("buffer") + "\n\n"
+        #             if buffer:
+        #                 f.write(buffer.encode())
+        #     f.close()
 
         # Find any indicators of compromise from the signature marks
         markcount = sig.get("markcount", 0)
