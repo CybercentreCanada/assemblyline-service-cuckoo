@@ -26,7 +26,6 @@ log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     log.debug("Generating AL Result.")
     info = api_report.get('info')
-    failed = False
     if info is not None:
         start_time = info['started']
         end_time = info['ended']
@@ -339,7 +338,10 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     else:
                         fp_count += 1
                 elif mark_type == "generic" and sig_name == "suspicious_powershell":
-                    sig_res.add_line('\tIOC: %s via %s' % (safe_str(mark["value"]), safe_str(mark["option"])))
+                    if mark.get("options"):
+                        sig_res.add_line('\tIOC: %s via %s' % (safe_str(mark["value"]), safe_str(mark["option"])))
+                    else:
+                        sig_res.add_line('\tIOC: %s' % safe_str(mark["value"]))
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")
