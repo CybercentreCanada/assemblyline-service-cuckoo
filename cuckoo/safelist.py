@@ -1,8 +1,8 @@
-# Whitelist of data that may come up in analysis that we should ignore.
+# Safelist of data that may come up in analysis that we should ignore.
 
 import re
 
-WHITELIST_APPLICATIONS = {
+SAFELIST_APPLICATIONS = {
     'Acrobat Reader': r'c:\program files\adobe\reader 10.0\reader\acrord32.exe',
     'DrWatson': r'c:\progra~1\common~1\micros~1\dw\dw20.exe',
     'Excel': r'c:\program files\microsoft office\office12\excel.exe',
@@ -13,7 +13,7 @@ WHITELIST_APPLICATIONS = {
 }
 
 # These domains may be present due to benign activity on the host
-WHITELIST_DOMAINS = {
+SAFELIST_DOMAINS = {
     # Adobe
     'Adobe': r'.*\.adobe\.com$',
 
@@ -137,7 +137,7 @@ WHITELIST_DOMAINS = {
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
-WHITELIST_IPS = {
+SAFELIST_IPS = {
     'Public DNS': r'(^1\.1\.1\.1$)|(^8\.8\.8\.8$)',
     'Local': r'(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*',
     'Honeynet': r'169.169.169.169',
@@ -147,7 +147,7 @@ WHITELIST_IPS = {
     'Windows IGMP': r'224\..*',
 }
 
-WHITELIST_DROPPED = [
+SAFELIST_DROPPED = [
      "SharedDataEvents",
      "SharedDataEvents-journal",
      "AcroFnt09.lst",
@@ -232,7 +232,7 @@ WHITELIST_DROPPED = [
      "index.dat",
 ]
 
-WHITELIST_HASHES = [
+SAFELIST_HASHES = [
 
     # ########## FILE MD5s ############
 
@@ -279,7 +279,7 @@ WHITELIST_HASHES = [
 
 GUID_PATTERN = r'{[A-F0-9]{8}\-([A-F0-9]{4}\-){3}[A-F0-9]{12}\}'
 
-WHITELIST_COMMON_PATTERNS = {
+SAFELIST_COMMON_PATTERNS = {
     'Office Temp Files': r'\\~[A-Z]{3}%s\.tmp$' % GUID_PATTERN,
     'Meta Font': r'[A-F0-9]{7,8}\.(w|e)mf$',
     'IE Recovery Store': r'RecoveryStore\.%s\.dat$' % GUID_PATTERN,
@@ -298,7 +298,7 @@ WHITELIST_COMMON_PATTERNS = {
     'Office Form': r'AppData\\Local\\Temp\\Word...\\MSForms.exd$'
 }
 
-WHITELIST_URIS = {
+SAFELIST_URIS = {
     # Local
     'Localhost': r'(?:ftp|http)s?://localhost(?:$|/.*)',
     'Local': r'(?:ftp|http)s?://(?:(?:(?:10|127)(?:\.(?:[2](?:[0-5][0-5]|[01234][6-9])|[1][0-9][0-9]|[1-9][0-9]|[0-9])){3})|(?:172\.(?:1[6-9]|2[0-9]|3[0-1])(?:\.(?:2[0-4][0-9]|25[0-5]|[1][0-9][0-9]|[1-9][0-9]|[0-9])){2}|(?:192\.168(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])){2})))(?:$|/.*)',
@@ -351,31 +351,31 @@ def match(data, sigs):
     return None
 
 
-def wlist_check_app(application):
-    return match(application, WHITELIST_APPLICATIONS)
+def slist_check_app(application):
+    return match(application, SAFELIST_APPLICATIONS)
 
 
-def wlist_check_domain(domain):
-    return match(domain, WHITELIST_DOMAINS)
+def slist_check_domain(domain):
+    return match(domain, SAFELIST_DOMAINS)
 
 
-def wlist_check_ip(ip):
-    return match(ip, WHITELIST_IPS)
+def slist_check_ip(ip):
+    return match(ip, SAFELIST_IPS)
 
 
-def wlist_check_uri(uri):
-    return match(uri, WHITELIST_URIS)
+def slist_check_uri(uri):
+    return match(uri, SAFELIST_URIS)
 
 
-def wlist_check_dropped(name):
-    if name in WHITELIST_DROPPED:
+def slist_check_dropped(name):
+    if name in SAFELIST_DROPPED:
         return True
-    elif match(name, WHITELIST_COMMON_PATTERNS):
+    elif match(name, SAFELIST_COMMON_PATTERNS):
         return True
     return False
 
 
-def wlist_check_hash(filehash):
-    if filehash in WHITELIST_HASHES:
+def slist_check_hash(filehash):
+    if filehash in SAFELIST_HASHES:
         return True
     return False

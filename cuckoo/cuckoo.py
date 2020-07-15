@@ -25,7 +25,7 @@ from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 
 from cuckoo.cuckooresult import generate_al_result
-from cuckoo.whitelist import wlist_check_hash, wlist_check_dropped
+from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "files\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 CUCKOO_API_SUBMIT = "tasks/create/file"
@@ -516,14 +516,6 @@ class Cuckoo(ServiceBase):
                 self.check_dropped(request, self.cuckoo_task.id, hollowshunter)
                 self.check_pcap(self.cuckoo_task.id)
 
-            else:
-                # We didn't get a report back.. cuckoo has failed us
-                self.log.info("Raising recoverable error for running job.")
-                if self.cuckoo_task and self.cuckoo_task.id is not None:
-                    self.cuckoo_delete_task(self.cuckoo_task.id)
-                raise RecoverableError("Unable to retrieve cuckoo report. The following errors were detected: %s" %
-                                       safe_str(self.cuckoo_task.errors))
-
         except Exception as e:
             # Delete the task now..
             self.log.error('General exception caught during processing: %s' % e)
@@ -581,8 +573,8 @@ class Cuckoo(ServiceBase):
         elif status == "report_too_big":
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
-            raise JSONDecodeError(
-                "Exception converting Cuckoo report HTTP response into JSON. This may"
+            raise Exception(
+                "Exception converting Cuckoo report HTTP response into JSON. This may "
                 "be caused by a report who's size is greater than the limit of what the API can return."
                 "Therefore only part of the report is returned, and thus the report is parsed as incomplete JSON.")
         elif status == "service_container_disconnected":
@@ -755,8 +747,9 @@ class Cuckoo(ServiceBase):
                     sys.setrecursionlimit(int(self.config['recursion_limit']))
                     # Reading, decoding and converting to JSON
                     report_data = json.loads(temp_report.read().decode('utf-8'))
-                except JSONDecodeError:
-                    raise JSONDecodeError
+                except JSONDecodeError as e:
+                    self.log.error(f"Failed to decode the json: {str(e)}")
+                    raise
                 except Exception:
                     url = self.query_report_url % task_id + '/' + fmt
                     raise Exception("Exception converting cuckoo report http response into json: "
@@ -899,7 +892,7 @@ class Cuckoo(ServiceBase):
                         tarobj.name = tarobj.name.replace("/", "_").split('_', 1)[1]
                         dropped_tar.extract(tarobj, self.working_directory)
                         dropped_file_path = os.path.join(self.working_directory, tarobj.name)
-                        # Check the file hash for whitelisting:
+                        # Check the file hash for safelisting:
                         with open(dropped_file_path, 'rb') as file_hash:
                             data = file_hash.read()
                             if not request.task.deep_scan:
@@ -920,7 +913,7 @@ class Cuckoo(ServiceBase):
                             dropped_hash = hashlib.md5(data).hexdigest()
                             if dropped_hash == self.request.md5:
                                 continue
-                        if not (wlist_check_hash(dropped_hash) or wlist_check_dropped(
+                        if not (slist_check_hash(dropped_hash) or slist_check_dropped(
                                 dropped_name) or dropped_name.endswith('_info.txt')):
                             message = "Dropped file during Cuckoo analysis."
                             if hollowshunter and "hh_" in dropped_name:

@@ -256,7 +256,7 @@ CUCKOO_SIGNATURES = {
   "dyreza": "Banker",
   "infostealer_browser": "Infostealer",
   "ddos_eclipse_mutexes": "BOT",
-  "applcation_raises_exception": "Exploit",
+  "application_raises_exception": "Exploit",
   "powershell_download": "PowerShell",
   "application_queried_installed_apps": "Suspicious Android API",
   "antiav_detectreg": "Anti-antivirus",

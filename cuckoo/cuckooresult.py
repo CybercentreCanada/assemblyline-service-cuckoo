@@ -12,7 +12,7 @@ from pprint import pprint
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, Heuristic
-from cuckoo.whitelist import wlist_check_ip, wlist_check_domain, wlist_check_uri, wlist_check_hash, wlist_check_dropped
+from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 
 UUID_RE = re.compile(r"{([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\}")
@@ -193,6 +193,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
     skipped_families = ["generic"]
     false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut", "process_martian"]  # Signatures that need to be double checked in case they return false positives
     inetsim_network = ip_network(random_ip_range)
+    skipped_paths = ["/"]
     # Sometimes the filename gets shortened
     target_filename_remainder = target_filename
     if len(target_filename) > 19:
@@ -224,7 +225,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                         # thinks that the submitted file is a "hidden" file because
                         # it's in the tmp directory
                         fp_count += 1
-                    elif wlist_check_dropped(filepath):
+                    elif slist_check_dropped(filepath):
                         fp_count += 1
                 elif sig_name in ["creates_exe", "creates_shortcut"]:
                     if target_filename.split(".")[0] in mark.get("ioc") and ".lnk" in mark.get("ioc").lower():
@@ -309,8 +310,8 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                         # Check if key is not flagged to skip, and that we
                         # haven't already raised this ioc
                         if item not in skipped_mark_items:
-                            # Now check if any item in signature is whitelisted explicitly or in inetsim network
-                            if not contains_whitelisted_value(mark[item]):
+                            # Now check if any item in signature is safelisted explicitly or in inetsim network
+                            if not contains_safelisted_value(mark[item]):
                                 if not is_ip(mark[item]) or \
                                         (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
                                     if item == "description":
@@ -325,14 +326,14 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     sig_res.add_line('\tParent process %s did the following: %s' % (safe_str(mark["parent_process"]), safe_str(mark["martian_process"])))
                 elif mark_type == "generic" and sig_name == "network_cnc_http":
                     http_string = mark["suspicious_request"].split()
-                    if not contains_whitelisted_value(http_string[1]):
+                    if not contains_safelisted_value(http_string[1]):
                         sig_res.add_line('\tFun fact: %s' % safe_str(mark["suspicious_features"]))
                         sig_res.add_tag("network.dynamic.uri", http_string[1])
                         sig_res.add_line('\tIOC: %s' % safe_str(mark["suspicious_request"]))
                     else:
                         fp_count += 1
                 elif mark_type == "generic" and sig_name == "nolookup_communication":
-                    if not contains_whitelisted_value(mark["host"]) and ip_address(mark["host"]) not in inetsim_network:
+                    if not contains_safelisted_value(mark["host"]) and ip_address(mark["host"]) not in inetsim_network:
                         sig_res.add_tag("network.dynamic.ip", mark["host"])
                         sig_res.add_line('\tIOC: %s' % safe_str(mark["host"]))
                     else:
@@ -346,11 +347,13 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     ioc = mark["ioc"]
                     category = mark.get("category")
                     if category and category not in skipped_category_iocs:
-                        # Now check if any item in signature is whitelisted explicitly or in inetsim network
-                        if not contains_whitelisted_value(ioc):
+                        # Now check if any item in signature is safelisted explicitly or in inetsim network
+                        if not contains_safelisted_value(ioc):
                             if sig_name in ["network_http", "network_http_post"]:
                                 http_string = ioc.split()
-                                sig_res.add_tag("network.dynamic.uri", safe_str(http_string[1]))
+                                url_pieces = urlparse(http_string[1])
+                                if url_pieces.path not in skipped_paths:
+                                    sig_res.add_tag("network.dynamic.uri", safe_str(http_string[1]))
                                 sig_res.add_line('\tIOC: %s' % ioc)
                             elif sig_name == "persistence_autorun":
                                 sig_res.add_tag("dynamic.autorun_location", ioc)
@@ -419,7 +422,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
         al_result.add_section(sigs_res)
 
 
-def contains_whitelisted_value(val: str) -> bool:
+def contains_safelisted_value(val: str) -> bool:
     if not val or not isinstance(val, str):
         return False
     ip = re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', val)
@@ -429,20 +432,20 @@ def contains_whitelisted_value(val: str) -> bool:
     md5_hash = re.search(r"([a-fA-F\d]{32})", val)
     if ip is not None:
         ip = ip.group()
-        if wlist_check_ip(ip):
+        if slist_check_ip(ip):
             return True
     elif url is not None:
         url_pieces = urlparse(url.group())
         domain = url_pieces.netloc
-        if wlist_check_domain(domain):
+        if slist_check_domain(domain):
             return True
     elif domain is not None:
         domain = domain.group()
-        if wlist_check_domain(domain):
+        if slist_check_domain(domain):
             return True
     elif md5_hash is not None:
         md5_hash = md5_hash.group()
-        if wlist_check_hash(md5_hash):
+        if slist_check_hash(md5_hash):
             return True
     else:
         return False
@@ -502,7 +505,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             dest_country = None
 
             # Only find the location of the IP if it is not fake or local
-            if dst not in dns_servers and wlist_check_ip(dst) is None and ip_address(dst) not in inetsim_network:
+            if dst not in dns_servers and slist_check_ip(dst) is None and ip_address(dst) not in inetsim_network:
                 # noinspection PyBroadException
                 try:
                     dest_country = DbIpCity.get(dst, api_key='free').country
@@ -540,11 +543,11 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
     for network_flow in copy_of_network_table:
         dom = network_flow["dom"]
         dest_ip = network_flow["dest_ip"]
-        # if domain is whitelisted
-        if dom and wlist_check_domain(dom):
+        # if domain is safelisted
+        if dom and slist_check_domain(dom):
             network_flows_table.remove(network_flow)
-        # if destination ip is whitelisted or is the dns server
-        elif wlist_check_ip(dest_ip) or dest_ip in dns_servers:
+        # if destination ip is safelisted or is the dns server
+        elif slist_check_ip(dest_ip) or dest_ip in dns_servers:
             network_flows_table.remove(network_flow)
         # if dest ip is noise
         elif dest_ip not in resolved_ips and ip_address(dest_ip) in inetsim_network:
@@ -573,7 +576,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             protocol_res_sec.add_tag("network.protocol", network_flow["proto"])
 
             domain = network_flow["dom"]
-            if domain is not None:  # and not is_ip(domain):
+            if domain is not None and not contains_safelisted_value(domain):  # and not is_ip(domain):
                 dns_res_sec.add_tag("network.dynamic.domain", domain)
 
             ip = network_flow["dest_ip"]
@@ -613,7 +616,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
         for http_call in http_calls:
             host = http_call["host"]
             uri = http_call["uri"]
-            if wlist_check_ip(host) is not None or wlist_check_domain(host) is not None or wlist_check_uri(uri) is not None:
+            if slist_check_ip(host) is not None or slist_check_domain(host) is not None or slist_check_uri(uri) is not None:
                 continue
             path = http_call["path"]
             request = http_call["data"]
@@ -643,15 +646,16 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
         for http_call in req_table:
             http_sec.add_tag("network.protocol", http_call["proto"])
             host = http_call["host"]
+            path = http_call["path"]
             if ":" in host:  # split on port if port exists
                 host = host.split(":")[0]
             if is_ip(host):
                 http_sec.add_tag("network.dynamic.ip", host)
             else:
-                http_sec.add_tag("network.dynamic.domain", host)
+                if path not in skipped_paths:
+                    http_sec.add_tag("network.dynamic.domain", host)
+                    http_sec.add_tag("network.dynamic.uri", http_call["uri"])
             http_sec.add_tag("network.port", http_call["port"])
-            http_sec.add_tag("network.dynamic.uri", http_call["uri"])
-            path = http_call["path"]
             if path not in skipped_paths:
                 http_sec.add_tag("network.dynamic.uri_path", path)
                 # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
