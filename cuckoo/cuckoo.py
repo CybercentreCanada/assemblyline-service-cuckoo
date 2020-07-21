@@ -109,6 +109,10 @@ class MaxFileSizeExceeded(Exception):
     """Exception class for files that are too large"""
     pass
 
+class ReportSizeExceeded(Exception):
+    """Exception class for reports that are too large"""
+    pass
+
 
 def _exclude_chain_ex(ex):
     """Use this with some of the @retry decorators to only retry if the exception
@@ -166,6 +170,7 @@ class Cuckoo(ServiceBase):
         self.machines = None
         self.auth_header = None
         self.timeout = None
+        self.max_report_size = None
 
     def set_urls(self):
         self.base_url = "http://%s:%s" % (self.config['remote_host_ip'], self.config['remote_host_port'])
@@ -182,6 +187,7 @@ class Cuckoo(ServiceBase):
         self.auth_header = {'Authorization': self.config['auth_header_value']}
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
         self.timeout = 120  # arbitrary number, not too big, not too small
+        self.max_report_size = self.config.get('max_report_size', 300000000)
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
@@ -574,6 +580,9 @@ class Cuckoo(ServiceBase):
         elif status == "invalid_json_report":
             # This has already been handled in poll_report
             pass
+        elif status == "report_too_big":
+            # This has already been handled in poll_report
+            pass
         elif status == "service_container_disconnected":
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
@@ -667,9 +676,17 @@ class Cuckoo(ServiceBase):
                 "service code. The unparsed files have been attached. The error "
                 "is found below:")
                 invalid_json_sec.add_line(str(e))
-                invalid_json_sec.set_heuristic(25)  # Potentiall anti-Cuckoo techniques are being used
+                invalid_json_sec.set_heuristic(25)  # Potentially anti-Cuckoo techniques are being used
                 self.file_res.add_section(invalid_json_sec)
                 return "invalid_json_report"
+            except ReportSizeExceeded as e:
+                self.log.error(e)
+                report_too_big_sec = ResultSection(title_text="Report Size is Too Large")
+                report_too_big_sec.add_line("Successful query of report. However, the size of the report that was generated was too large, and "
+                                            "the Cuckoo service container may have crashed.")
+                report_too_big_sec.add_line(str(e))
+                self.file_res.add_section(report_too_big_sec)
+                return "report_too_big"
             except Exception as e:
                 self.log.error(e)
                 return "service_container_disconnected"
@@ -725,8 +742,12 @@ class Cuckoo(ServiceBase):
             temp_report = tempfile.SpooledTemporaryFile()
             with self.session.get(self.query_report_url % task_id + '/' + fmt, params=params or {},
                                   headers=self.auth_header, timeout=self.timeout, stream=True) as resp:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    temp_report.write(chunk)
+                if int(resp.headers["Content-Length"]) > self.max_report_size:
+                    # BAIL, TOO BIG and there is a strong chance it will crash the Docker container
+                    resp.status_code = 413  # Request Entity Too Large
+                else:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        temp_report.write(chunk)
         except requests.exceptions.Timeout:
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.cuckoo_delete_task(self.cuckoo_task.id)
@@ -742,9 +763,12 @@ class Cuckoo(ServiceBase):
                 if self.cuckoo_task and self.cuckoo_task.id is not None:
                     self.cuckoo_delete_task(self.cuckoo_task.id)
                 raise MissingCuckooReportException("Task or report not found")
+            elif resp.status_code == 413:
+                self.log.error(f"Cuckoo report.json size is {int(resp.headers['Content-Length'])} which is bigger than the allowed size of {self.max_report_size}")
+                raise ReportSizeExceeded(f"Cuckoo report.json size is {int(resp.headers['Content-Length'])} which is bigger than the allowed size of {self.max_report_size}")
             else:
                 self.log.error("Failed to query report %s. Status code: %d. There is a strong chance that this is due to the large size of file attempted to retrieve via API request." % (task_id, resp.status_code))
-                return None
+                raise Exception(f"Cuckoo service ({self.base_url}) failed to query report {self.timeout}s while trying to query the report for task %s" % task_id)
         try:
             # Setting the pointer in the temp file
             temp_report.seek(0)

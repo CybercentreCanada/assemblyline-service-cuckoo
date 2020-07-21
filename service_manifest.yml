@@ -33,6 +33,9 @@ config:
   dedup_similar_percent: 40
   max_dll_exports_exec: 5
 
+  # Docker Container Limit
+  max_report_size: 300000000
+
 submission_params:
   # Cuckoo analysis specifications
   - default: 60
