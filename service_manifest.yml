@@ -73,10 +73,11 @@ submission_params:
     type: str
     value: ""
 
-  - default: false
-    name: dump_memory
-    type: bool
-    value: false
+# TODO: cloud Cuckoo implementation does not have dump_memory functionality
+#  - default: false
+#    name: dump_memory
+#    type: bool
+#    value: false
 
   - default: false
     name: no_monitor

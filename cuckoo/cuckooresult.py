@@ -110,6 +110,9 @@ def process_debug(debug, al_result):
     for log in debug['cuckoo']:
         if log == "\n":  # There is always a newline character following a stacktrace
             error_res.add_line(previous_log.rstrip("\n"))
+        elif "ERROR:" in log:  # Hoping that Cuckoo logs as ERROR
+            split_log = log.split("ERROR:")
+            error_res.add_line(split_log[1].lstrip().rstrip("\n"))
         previous_log = log
 
     if error_res.body and len(error_res.body) > 0:

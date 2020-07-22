@@ -269,7 +269,7 @@ class Cuckoo(ServiceBase):
         dump_processes = request.get_param("dump_processes")
         dll_function = request.get_param("dll_function")
         arguments = request.get_param("arguments")
-        dump_memory = request.get_param("dump_memory")
+        # dump_memory = request.get_param("dump_memory")  # TODO: cloud Cuckoo implementation does not have dump_memory functionality
         no_monitor = request.get_param("no_monitor")
         kwargs['enforce_timeout'] = request.get_param("enforce_timeout")
         custom_options = request.get_param("custom_options")
@@ -299,9 +299,9 @@ class Cuckoo(ServiceBase):
         if arguments:
             task_options.append('arguments={}'.format(arguments))
 
-        if dump_memory:
-            # Full system dump and volatility scan
-            kwargs['memory'] = True
+        # if dump_memory: # TODO: cloud Cuckoo implementation does not have dump_memory functionality
+        #     # Full system dump and volatility scan
+        #     kwargs['memory'] = True
 
         if no_monitor:
             task_options.append("free=yes")
@@ -387,6 +387,7 @@ class Cuckoo(ServiceBase):
                         report_file = open(tar_report_path, 'wb')
                         report_file.write(tar_report)
                         report_file.close()
+                        self.log.debug(f"Adding supplementary file {tar_file_name}")
                         self.request.add_supplementary(tar_report_path, tar_file_name,
                                                     "Cuckoo Sandbox analysis report archive (tar.gz)")
                     except Exception as e:
@@ -400,6 +401,7 @@ class Cuckoo(ServiceBase):
                         if "reports/report.json" in tar_obj.getnames():
                             report_json_path = os.path.join(self.working_directory, "reports", "report.json")
                             tar_obj.extract("reports/report.json", path=self.working_directory)
+                            self.log.debug(f"Adding supplementary file report.json")
                             self.request.add_supplementary(
                                 report_json_path,
                                 "report.json",
@@ -423,6 +425,7 @@ class Cuckoo(ServiceBase):
                         for f in supplementary_files:
                             sup_file_path = os.path.join(self.working_directory, f)
                             tar_obj.extract(f, path=self.working_directory)
+                            self.log.debug(f"Adding supplementary file {f}")
                             self.request.add_supplementary(sup_file_path, f, "Supplementary File")
 
                         # Check if there are any files consisting of console output from detonation
@@ -449,10 +452,12 @@ class Cuckoo(ServiceBase):
                                 if str(pid) in f:
                                     f = f.replace(str(pid), process_map[pid]["name"])
                             if filename_suffix == "py":
+                                self.log.debug(f"Adding supplementary file {f}")
                                 self.request.add_supplementary(mem_file_path, f, memdesc)
                             else:
                                 mem_filesize = os.stat(mem_file_path).st_size
                                 try:
+                                    self.log.debug(f"Adding extracted file {f}")
                                     self.request.add_extracted(mem_file_path, f, memdesc)
                                 except MaxFileSizeExceeded:
                                     self.file_res.add_section(ResultSection(
@@ -465,19 +470,19 @@ class Cuckoo(ServiceBase):
 
                         # Add HollowsHunter report files as supplementary
                         # Only if there is a 1 or more exe dumps
-                        if hollowshunter and any(re.match("files\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.[a-zA-Z0-9]+\.exe$", f) for f in tar_obj.getnames()):
+                        if hollowshunter and any(re.match("files\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$", f) for f in tar_obj.getnames()):
                             pattern = re.compile(HOLLOWSHUNTER_REPORT_REGEX)
                             report_list = list(filter(pattern.match, tar_obj.getnames()))
                             for report_path in report_list:
                                 report_json_path = os.path.join(self.working_directory, report_path)
                                 tar_obj.extract(report_path, path=self.working_directory)
+                                self.log.debug(
+                                    "Adding HollowsHunter report %s as supplementary file" % report_path)
                                 self.request.add_supplementary(
                                     report_json_path,
                                     report_path,
                                     "HollowsHunter report (json)"
                                 )
-                                self.log.debug(
-                                    "Adding HollowsHunter report %s as supplementary file" % report_path)
 
                         # Extract buffers, screenshots and anything extracted
                         extracted_buffers = [x.name for x in tar_obj.getmembers()
@@ -485,17 +490,20 @@ class Cuckoo(ServiceBase):
                         for f in extracted_buffers:
                             buffer_file_path = os.path.join(self.working_directory, f)
                             tar_obj.extract(f, path=self.working_directory)
+                            self.log.debug(f"Adding extracted file {f}")
                             self.request.add_extracted(buffer_file_path, f, "Extracted buffer")
                         for f in [x.name for x in tar_obj.getmembers() if
                                   x.name.startswith("extracted") and x.isfile()]:
                             extracted_file_path = os.path.join(self.working_directory, f)
                             tar_obj.extract(f, path=self.working_directory)
+                            self.log.debug(f"Adding extracted file {f}")
                             self.request.add_extracted(extracted_file_path, f, "Cuckoo extracted file")
                         # There is an api option for this: https://cuckoo.readthedocs.io/en/latest/usage/api/#tasks-shots
                         for f in [x.name for x in tar_obj.getmembers() if
                                   x.name.startswith("shots") and x.isfile()]:
                             screenshot_file_path = os.path.join(self.working_directory, f)
                             tar_obj.extract(f, path=self.working_directory)
+                            self.log.debug(f"Adding extracted file {f}")
                             self.request.add_extracted(screenshot_file_path, f, "Screenshots from Cuckoo analysis")
                         tar_obj.close()
                     except Exception as e:
@@ -981,6 +989,7 @@ class Cuckoo(ServiceBase):
 
             # Resubmit analysis pcap file
             try:
+                self.log.debug(f"Adding extracted file {pcap_file_name}")
                 self.request.add_extracted(pcap_path, pcap_file_name, "PCAP from Cuckoo analysis")
             except MaxExtractedExceeded:
                 self.log.error("The maximum amount of files to be extracted is 501, "
