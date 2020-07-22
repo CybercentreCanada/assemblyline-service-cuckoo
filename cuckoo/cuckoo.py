@@ -299,7 +299,7 @@ class Cuckoo(ServiceBase):
         if arguments:
             task_options.append('arguments={}'.format(arguments))
 
-        if dump_memory and request.task.depth == 0:
+        if dump_memory:
             # Full system dump and volatility scan
             kwargs['memory'] = True
 
