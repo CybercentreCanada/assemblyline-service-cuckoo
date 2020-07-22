@@ -466,7 +466,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
 
     # DNS Section
 
-    dns_calls = network["dns"]
+    dns_calls = network.get("dns", [])
     dns_res_sec = None
     if len(dns_calls) > 0:
         title_text = "Protocol: DNS"
@@ -497,7 +497,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
     # This result section will contain all of the "flows" from src ip to dest ip
     netflows_sec = ResultSection(title_text="Network Flows")
 
-    dns_servers = network["dns_servers"]
+    dns_servers = network.get("dns_servers", [])
     netflow_protocols = ["udp", "tcp"]
     for protocol in netflow_protocols:
         network_calls = [x for x in network.get(protocol, [])]
