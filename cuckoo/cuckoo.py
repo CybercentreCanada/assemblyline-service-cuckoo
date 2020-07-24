@@ -278,6 +278,7 @@ class Cuckoo(ServiceBase):
         take_screenshots = request.get_param("take_screenshots")
         hollowshunter = request.get_param("hollowshunter")
         simulate_user = request.get_param("simulate_user")
+        guest_image = request.get_param("guest_image")
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
@@ -293,6 +294,10 @@ class Cuckoo(ServiceBase):
             # Check to see if there's commas in the dll_function
             if "|" in dll_function:
                 kwargs["package"] = "dll_multi"
+
+        # Currently these are the only supported images
+        if guest_image in ["win7", "win10"]:
+            kwargs["tags"] = guest_image
 
         exports_available = []
 

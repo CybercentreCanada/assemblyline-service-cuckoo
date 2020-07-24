@@ -110,6 +110,12 @@ submission_params:
     type: bool
     value: true
 
+  # can be either win7 or win10. If neither, it's whichever victim VM is the oldest!
+  - default: "win7"
+    name: guest_image
+    type: str
+    value: "win7"
+
 # TODO: implement routing options
 #  - default: inetsim
 #    name: routing
