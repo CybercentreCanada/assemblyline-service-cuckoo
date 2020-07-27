@@ -71,6 +71,7 @@ SAFELIST_DOMAINS = {
     'NCSI': r'www\.msftncsi\.com$',
     'Internet Explorer': r'iecvlist\.microsoft\.com$',
     'Internet Explorer Too': r'r20swj13mr\.microsoft\.com$',
+    'Microsoft Edge': r'fp\.msedge\.net$',
 
     # Windows
     'Windows Settings': r'settings-win\.data\.microsoft\.com$',

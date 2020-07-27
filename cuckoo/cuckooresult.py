@@ -53,6 +53,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     sigs = api_report.get('signatures', [])
     network = api_report.get('network', {})
     behaviour = api_report.get('behavior', {})  # Note conversion from American to Canadian spelling
+    curtain = api_report.get("curtain", {})
 
     if debug:
         process_debug(debug, al_result)
@@ -86,6 +87,9 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
 
     if len(network_events) > 0 or len(process_events) > 0:
         process_all_events(al_result, network_events, process_events)
+
+    if curtain:
+        process_curtain(curtain, al_result, process_map)
 
     log.debug("AL result generation completed!")
     return process_map
@@ -722,6 +726,35 @@ def process_all_events(al_result: Result, network_events: list = [], process_eve
     events_section.body = json.dumps(sorted_events)
     events_section.body_format = BODY_FORMAT.TABLE
     al_result.add_section(events_section)
+
+
+def process_curtain(curtain: dict, al_result: Result, process_map: dict):
+    log.debug("Processing curtain results.")
+    curtain_body = []
+    curtain_res = ResultSection(title_text="PowerShell Activity", body_format=BODY_FORMAT.TABLE)
+    for pid in curtain.keys():
+        process_name = process_map[int(pid)]["name"]
+        for event in curtain[pid]["events"]:
+            for command in event.keys():
+                curtain_item = {
+                    "process_name": process_name,
+                    "original": event[command]["original"],
+                    "altered": None
+                }
+                altered = event[command]["altered"]
+                if altered != "No alteration of event.":
+                    curtain_item["altered"] = altered
+                curtain_body.append(curtain_item)
+        for behaviour in curtain[pid]["behaviors"]:
+            curtain_res.add_tag("file.powershell.cmdlet", behaviour)
+    if len(curtain_body) > 0:
+        curtain_sig = "suspicious_process"
+        sig_id = get_category_id(curtain_sig)
+        curtain_heur = Heuristic(sig_id)
+        curtain_heur.add_signature_id(curtain_sig)
+        curtain_res.heuristic = curtain_heur
+        curtain_res.body = curtain_body
+        al_result.add_section(curtain_res)
 
 
 def is_ip(val: str) -> bool:
