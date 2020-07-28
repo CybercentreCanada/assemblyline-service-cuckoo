@@ -74,7 +74,6 @@ CUCKOO_SIGNATURES = {
   "banker_zeus_mutex": "Banker",
   "pos_poscardstealer_url": "Point-of-sale",
   "applocker_bypass": "Bypass",
-  "": "Bind",
   "im_qq": "IM",
   "bootkit": "Rootkit",
   "installs_bho": "Adware",
@@ -523,7 +522,8 @@ CUCKOO_SIGNATURES = {
   "vnc_mutexes": "RAT",
   "wakbot": "RAT",
   "generates_crypto_key": "Stealth",
-  "network_http": "C2"
+  "network_http": "C2",
+  "process_needed": "Suspicious Execution Chain"
 }
 
 CUCKOO_SIGNATURE_CATEGORIES = {

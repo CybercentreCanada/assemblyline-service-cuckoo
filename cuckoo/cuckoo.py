@@ -27,7 +27,8 @@ from assemblyline.common.exceptions import RecoverableError, ChainException
 from cuckoo.cuckooresult import generate_al_result
 from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
-HOLLOWSHUNTER_REPORT_REGEX = "files\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
+HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
+HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$"
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
 CUCKOO_API_DELETE_TASK = "tasks/delete/%s"
@@ -472,11 +473,15 @@ class Cuckoo(ServiceBase):
                                              (f, mem_filesize, max_extracted_size)
                                     ))
 
-                        # Add HollowsHunter report files as supplementary
+                        # Hollowshunter section
                         # Only if there is a 1 or more exe dumps
-                        if hollowshunter and any(re.match("files\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$", f) for f in tar_obj.getnames()):
-                            pattern = re.compile(HOLLOWSHUNTER_REPORT_REGEX)
-                            report_list = list(filter(pattern.match, tar_obj.getnames()))
+                        if hollowshunter and any(re.match(HOLLOWSHUNTER_DUMP_REGEX, f) for f in tar_obj.getnames()):
+                            hollowshunter_sec = ResultSection(title_text='HollowsHunter Dumps')
+                            hollowshunter_sec.set_heuristic(17)
+
+                            # Add HollowsHunter report files as supplementary
+                            report_pattern = re.compile(HOLLOWSHUNTER_REPORT_REGEX)
+                            report_list = list(filter(report_pattern.match, tar_obj.getnames()))
                             for report_path in report_list:
                                 report_json_path = os.path.join(self.working_directory, report_path)
                                 tar_obj.extract(report_path, path=self.working_directory)
@@ -487,6 +492,24 @@ class Cuckoo(ServiceBase):
                                     report_path,
                                     "HollowsHunter report (json)"
                                 )
+
+                            # Add HollowsHunter dump files as extracted
+                            dump_pattern = re.compile(HOLLOWSHUNTER_DUMP_REGEX)
+                            dump_list = list(filter(dump_pattern.match, tar_obj.getnames()))
+                            for dump_path in dump_list:
+                                filename_suffix = dump_path.split(".")[-1]
+                                # We only care about dumps that are exe files
+                                if filename_suffix != "exe":
+                                    continue
+
+                                hollowshunter_sec.add_tag("dynamic.process.file_name", dump_path)
+                                dump_file_path = os.path.join(self.working_directory, dump_path)
+                                tar_obj.extract(dump_path, path=self.working_directory)
+                                # Resubmit
+                                self.request.add_extracted(dump_file_path, dump_path, "HollowsHunter dropped file")
+                                self.log.debug("Submitted HollowsHunter dump for analysis: %s" % dump_file_path)
+                            if len(hollowshunter_sec.tags) > 0:
+                                self.file_res.add_section(hollowshunter_sec)
 
                         # Extract buffers, screenshots and anything extracted
                         extracted_buffers = [x.name for x in tar_obj.getmembers()
@@ -532,7 +555,7 @@ class Cuckoo(ServiceBase):
 
                 self.log.debug("Checking for dropped files and pcap.")
                 # Submit dropped files and pcap if available:
-                self.check_dropped(request, self.cuckoo_task.id, hollowshunter)
+                self.check_dropped(request, self.cuckoo_task.id)
                 self.check_pcap(self.cuckoo_task.id)
 
         except Exception as e:
@@ -904,15 +927,11 @@ class Cuckoo(ServiceBase):
         resp_dict = dict(resp.json())
         return resp_dict
 
-    def check_dropped(self, request, task_id, hollowshunter: bool = False):
+    def check_dropped(self, request, task_id):
         self.log.debug("Checking dropped files.")
         dropped_tar_bytes = self.cuckoo_query_report(task_id, 'dropped')
         added_hashes = set()
-        hollowshunter_sec = None
         dropped_sec = None
-        if hollowshunter:
-            hollowshunter_sec = ResultSection(title_text='HollowsHunter Dumps')
-            hollowshunter_sec.set_heuristic(17)
         if dropped_tar_bytes is not None:
             try:
                 dropped_tar = tarfile.open(fileobj=io.BytesIO(dropped_tar_bytes))
@@ -920,17 +939,6 @@ class Cuckoo(ServiceBase):
                     if tarobj.isfile() and not tarobj.isdir():  # a file, not a dir
                         # A dropped file found
                         dropped_name = os.path.split(tarobj.name)[1]
-                        if hollowshunter and re.match(HOLLOWSHUNTER_REPORT_REGEX, dropped_name):
-                            # The HollowsHunter reports are not to be resubmitted for analyiss
-                            continue
-                        elif hollowshunter and "hh_" in dropped_name:
-                            filename_suffix = dropped_name.split(".")[-1]
-                            # We only care about dumps that are exe files
-                            if filename_suffix == "exe":
-                                hollowshunter_sec.add_tag("dynamic.process.file_name", dropped_name)
-                            else:
-                                # It's true, we only care about exe files
-                                continue
                         # Fixup the name.. the tar originally has files/your/file/path
                         tarobj.name = tarobj.name.replace("/", "_").split('_', 1)[1]
                         dropped_tar.extract(tarobj, self.working_directory)
@@ -959,15 +967,11 @@ class Cuckoo(ServiceBase):
                         if not (slist_check_hash(dropped_hash) or slist_check_dropped(
                                 dropped_name) or dropped_name.endswith('_info.txt')):
                             message = "Dropped file during Cuckoo analysis."
-                            if hollowshunter and "hh_" in dropped_name:
-                                message = "HollowsHunter dropped file"
                             # Resubmit
                             self.request.add_extracted(dropped_file_path,
                                                     dropped_name,
                                                     message)
                             self.log.debug("Submitted dropped file for analysis: %s" % dropped_file_path)
-                if hollowshunter_sec and hollowshunter_sec.tags:
-                    self.file_res.add_section(hollowshunter_sec)
             except Exception as e_x:
                 self.log.error("Error extracting dropped files: %s" % e_x)
                 return
