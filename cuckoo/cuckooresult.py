@@ -2,6 +2,7 @@ import datetime
 import logging
 import uuid
 import re
+import os
 import traceback
 import json
 from ipaddress import ip_address, ip_network
@@ -287,14 +288,15 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
             for family in sig_families:
                 sig_res.add_tag("dynamic.signature.family", family)
 
-        #  We want to write a temporary file for the console output
-        # if sig_name == "console_output":
-        #     with open("/tmp/console_output.txt", "ab") as f:
-        #         for mark in sig["marks"]:
-        #             buffer = mark["call"].get("arguments", {}).get("buffer") + "\n\n"
-        #             if buffer:
-        #                 f.write(buffer.encode())
-        #     f.close()
+         # We want to write a temporary file for the console output
+        if sig_name == "console_output":
+            console_output_file_path = os.path.join("/tmp", "console_output.txt")
+            with open(console_output_file_path, "ab") as f:
+                for mark in sig["marks"]:
+                    buffer = mark["call"].get("arguments", {}).get("buffer") + "\n\n"
+                    if buffer:
+                        f.write(buffer.encode())
+            f.close()
 
         # Find any indicators of compromise from the signature marks
         markcount = sig.get("markcount", 0)
@@ -605,10 +607,10 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
         network_res.add_subsection(protocol_res_sec)
     if len(network_flows_table) > 0:
         # Need to convert each dictionary to a string in order to get the set of network_flows_table, since dictionaries are not hashable
-        netflow_string_list = []
+        unique_netflows = []
         for item in network_flows_table:
-            netflow_string_list.append(json.dumps(item, sort_keys=True))
-        unique_netflows = list(set(netflow_string_list))  # Remove duplicates
+            if item not in unique_netflows:  # Remove duplicates
+                unique_netflows.append(item)
         netflows_sec.body = json.dumps(unique_netflows)
         netflows_sec.body_format = BODY_FORMAT.TABLE
         network_res.add_subsection(netflows_sec)
@@ -748,12 +750,12 @@ def process_curtain(curtain: dict, al_result: Result, process_map: dict):
         for behaviour in curtain[pid]["behaviors"]:
             curtain_res.add_tag("file.powershell.cmdlet", behaviour)
     if len(curtain_body) > 0:
-        curtain_sig = "suspicious_process"
+        curtain_sig = "suspicious_powershell"
         sig_id = get_category_id(curtain_sig)
         curtain_heur = Heuristic(sig_id)
         curtain_heur.add_signature_id(curtain_sig)
         curtain_res.heuristic = curtain_heur
-        curtain_res.body = curtain_body
+        curtain_res.body = json.dumps(curtain_body)
         al_result.add_section(curtain_res)
 
 

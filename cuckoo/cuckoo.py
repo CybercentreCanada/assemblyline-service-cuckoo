@@ -434,10 +434,9 @@ class Cuckoo(ServiceBase):
                             self.request.add_supplementary(sup_file_path, f, "Supplementary File")
 
                         # Check if there are any files consisting of console output from detonation
-                        # console_output_file_path = os.path.join("/tmp", "console_output.txt")
-                        # if os.path.exists(console_output_file_path):
-                        #     self.request.add_supplementary(console_output_file_path, "console_output.txt", "Console Output Observed")
-                        #     os.remove(console_output_file_path)
+                        console_output_file_path = os.path.join("/tmp", "console_output.txt")
+                        if os.path.exists(console_output_file_path):
+                            self.request.add_supplementary(console_output_file_path, "console_output.txt", "Console Output Observed")
 
                         # process memory dump related
                         memdesc_lookup = {
