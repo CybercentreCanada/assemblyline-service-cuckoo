@@ -277,7 +277,6 @@ class Cuckoo(ServiceBase):
         kwargs["clock"] = request.get_param("clock")
         force_sleepskip = request.get_param("force_sleepskip")
         take_screenshots = request.get_param("take_screenshots")
-        hollowshunter = request.get_param("hollowshunter")
         simulate_user = request.get_param("simulate_user")
         guest_image = request.get_param("guest_image")
 
@@ -319,11 +318,6 @@ class Cuckoo(ServiceBase):
             task_options.append("screenshots=0")
         else:
             task_options.append("screenshots=1")
-
-        if not hollowshunter:
-            task_options.append("hollowshunter=0")
-        else:
-            task_options.append("hollowshunter=1")
 
         if not simulate_user:
             task_options.append("human=0")
@@ -475,7 +469,7 @@ class Cuckoo(ServiceBase):
 
                         # Hollowshunter section
                         # Only if there is a 1 or more exe dumps
-                        if hollowshunter and any(re.match(HOLLOWSHUNTER_DUMP_REGEX, f) for f in tar_obj.getnames()):
+                        if any(re.match(HOLLOWSHUNTER_DUMP_REGEX, f) for f in tar_obj.getnames()):
                             hollowshunter_sec = ResultSection(title_text='HollowsHunter Dumps')
                             hollowshunter_sec.set_heuristic(17)
 

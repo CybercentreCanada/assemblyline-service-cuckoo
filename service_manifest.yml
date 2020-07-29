@@ -101,11 +101,6 @@ submission_params:
     value: false
 
   - default: true
-    name: hollowshunter
-    type: bool
-    value: true
-
-  - default: true
     name: simulate_user
     type: bool
     value: true

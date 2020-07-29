@@ -55,6 +55,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     network = api_report.get('network', {})
     behaviour = api_report.get('behavior', {})  # Note conversion from American to Canadian spelling
     curtain = api_report.get("curtain", {})
+    sysmon = api_report.get("sysmon", {})
 
     if debug:
         process_debug(debug, al_result)
@@ -91,6 +92,9 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
 
     if curtain:
         process_curtain(curtain, al_result, process_map)
+
+    if sysmon:
+        process_sysmon(sysmon, al_result, process_map)
 
     log.debug("AL result generation completed!")
     return process_map
@@ -757,6 +761,16 @@ def process_curtain(curtain: dict, al_result: Result, process_map: dict):
         curtain_res.heuristic = curtain_heur
         curtain_res.body = json.dumps(curtain_body)
         al_result.add_section(curtain_res)
+
+
+def process_sysmon(sysmon: dict, al_result: Result, process_map: dict):
+    # TODO: obvsiouly a huge work in progress
+    log.debug("Processing sysmon results.")
+    sysmon_body = []
+    sysmon_res = ResultSection(title_text="Sysmon Signatures", body_format=BODY_FORMAT.TABLE)
+    if len(sysmon_body) > 0:
+        sysmon_res.body = json.dumps(sysmon_body)
+        al_result.add_section(sysmon_res)
 
 
 def is_ip(val: str) -> bool:
