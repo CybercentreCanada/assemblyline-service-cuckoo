@@ -56,6 +56,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     behaviour = api_report.get('behavior', {})  # Note conversion from American to Canadian spelling
     curtain = api_report.get("curtain", {})
     sysmon = api_report.get("sysmon", {})
+    hollowshunter = api_report.get("hollowshunter", {})
 
     if debug:
         process_debug(debug, al_result)
@@ -95,6 +96,9 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
 
     if sysmon:
         process_sysmon(sysmon, al_result, process_map)
+
+    if hollowshunter:
+        process_hollowshunter(hollowshunter, al_result, process_map)
 
     log.debug("AL result generation completed!")
     return process_map
@@ -771,6 +775,16 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict):
     if len(sysmon_body) > 0:
         sysmon_res.body = json.dumps(sysmon_body)
         al_result.add_section(sysmon_res)
+
+
+def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: dict):
+    # TODO: obvsiouly a huge work in progress
+    log.debug("Processing hollowshunter results.")
+    hollowshunter_body = []
+    hollowshunter_res = ResultSection(title_text="HollowsHunter Analysis", body_format=BODY_FORMAT.TABLE)
+    if len(hollowshunter_body) > 0:
+        hollowshunter_res.body = json.dumps(hollowshunter_body)
+        al_result.add_section(hollowshunter_res)
 
 
 def is_ip(val: str) -> bool:
