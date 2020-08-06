@@ -500,7 +500,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             for process in process_map:
                 process_details = process_map[process]
                 for network_call in process_details["network_calls"]:
-                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or network_call.get("InternetConnectA", {})
+                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or network_call.get("InternetConnectA", {}) or network_call.get("GetAddrInfoW", {})
                     if dns != {} and dns["hostname"] == domain:
                         resolved_ips[ip]["process_name"] = process_details["name"]
                         resolved_ips[ip]["process_id"] = process
@@ -819,6 +819,7 @@ def get_process_map(processes: dict = None) -> dict:
     process_map = {}
     api_calls_of_interest = {
         "getaddrinfo": ["hostname"],  # DNS
+        "GetAddrInfoW": ["hostname"],  # DNS
         "connect": ["ip_address", "port"],  # Connecting to IP
         "InternetConnectW": ["username", "service", "password", "hostname", "port"],
         "InternetConnectA": ["username", "service", "password", "hostname", "port"],
