@@ -625,22 +625,31 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
 
     # HTTP/HTTPS section
     req_table = []
-    http_protocols = ["http", "https"]
+    http_protocols = ["http", "https", "http_ex", "https_ex"]
     for protocol in http_protocols:
         http_calls = [x for x in network.get(protocol, [])]
         if len(http_calls) <= 0:
             continue
         for http_call in http_calls:
             host = http_call["host"]
-            uri = http_call["uri"]
+            if "ex" in protocol:
+                path = http_call["uri"]
+                request = http_call["request"]
+                port = http_call["dport"]
+                uri = http_call["protocol"] + "://" + host + path
+                proto = http_call["protocol"]
+            else:
+                path = http_call["path"]
+                request = http_call["data"]
+                port = http_call["port"]
+                uri = http_call["uri"]
+                proto = protocol
             if slist_check_ip(host) is not None or slist_check_domain(host) is not None or slist_check_uri(uri) is not None:
                 continue
-            path = http_call["path"]
-            request = http_call["data"]
             req = {
-                "proto": protocol,
+                "proto": proto,
                 "host": host,  # Note: will be removed in like twenty lines, we just need it for tagging
-                "port": http_call["port"],  # Note: will be removed in like twenty lines, we just need it for tagging
+                "port": port,  # Note: will be removed in like twenty lines, we just need it for tagging
                 "path": path,  # Note: will be removed in like twenty lines, we just need it for tagging
                 "user-agent": http_call.get("user-agent"),  # Note: will be removed in like twenty lines, we just need it for tagging
                 "request": request,
@@ -654,7 +663,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                     send = network_call.get("send", {}) or network_call.get("InternetConnectW", {}) or network_call.get("InternetConnectA", {})
                     if send != {} and (send.get("service", 0) == 3 or send.get("buffer", "") == request):
                         req["process_name"] = process_details["name"] + " (" + str(process) + ")"
-            req_table.append(req)
+            if req not in req_table:
+                req_table.append(req)
 
     if len(req_table) > 0:
         http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS")

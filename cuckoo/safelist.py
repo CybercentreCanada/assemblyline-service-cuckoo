@@ -102,6 +102,7 @@ SAFELIST_DOMAINS = {
     'Azure OpInsights': r'.*\.opinsights\.azure\.com',
     'Reddog': r'.*reddog\.microsoft\.com$',
     'Agent Service Api': r'agentserviceapi\.azure-automation\.net$',
+    'Guest Configuration Api': r'agentserviceapi\.guestconfiguration\.azure\.com$',
 
     # Office
     'Office Network Requests': r'config\.edge\.skype\.com',
