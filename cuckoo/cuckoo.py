@@ -283,7 +283,7 @@ class Cuckoo(ServiceBase):
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
 
-        if dump_processes is True:
+        if dump_processes in [True, 'True']:  # Not sure why sometimes this specific param is a string
             self.log.debug("Setting procmemdump flag in task options")
             task_options.append('procmemdump=yes')
 
