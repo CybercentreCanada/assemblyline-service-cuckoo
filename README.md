@@ -39,6 +39,9 @@ Details regarding Cuckoo API can be found [here](https://cuckoo.readthedocs.io/e
 * **remote_host_ip** - [default: 127.0.0.1] The IP address of the machine where the Cuckoo API is being served 
 * **remote_host_port** - [default: 8090] The port where the Cuckoo API is being served
 * **auth_header_value** - [default: Bearer sample_api_token] The authentication token to be passed with each API call
+* **dedup_similar_percent** - SSDeep attempts to match hashes, and this is the threshold percentage for matching.
+* **max_dll_exports_exec** - Limiting the amount of DLLs executed that we report about.
+**NB** : this functionality relies on placing the package found in this repo at `analyzer/windows/modules/packages/dll_multi.py` in the Cuckoo nest at `$CWD/analyzer/windows/modules/packages/dll_multi.py`
 
 #### Cuckoo Submission Options
 
@@ -55,16 +58,9 @@ option isn't set. It's not clear if this is intended or not.
 * **custom_options** - Custom options to pass to the cuckoo submission. Same as the `--options` command line option [here](https://cuckoo.sh/docs/usage/submit.html)
 * **dump_memory** - Dump full VM memory and run volatility plugins on it. *NB*: This is very slow!
 * **no_monitor** - Run analysis without injecting the Cuckoo monitoring agent. Equivalent to passing `--options free=yes` (see [here](https://cuckoo.sh/docs/usage/packages.html) for more information)
-* **routing** - Routing choices, whether to allow the sample to communicate with the internet (`gateway`) or simulated services (`inetsim`) using [INetSim](https://www.inetsim.org/). **This functionality needs to be implemented still!**
-* **dedup_similar_percent** - SSDeep attempts to match hashes, and this is the threshold percentage for matching.
-* **max_dll_exports_exec** - Limiting the amount of DLLs executed that we report about.
-* **platform** - Name of the platform to select the analysis machine from (e.g. “windows”).
 * **clock** - Set virtual machine clock (format %m-%d-%Y %H:%M:%S).
 * **force_sleepskip** - Forces a sample that attempts to sleep to wake up and skip the attempted sleep.
 * **take_screenshots** - Enables screenshots to be taken every second.
-
-
-
 
 ### Deployment of Cuckoo Nest
 
@@ -104,3 +100,11 @@ For these categories, we have attempted to give default Mitre ATT&CK IDs to them
 
 ### Azure Deployment
 A document has been prepared on our side to assist with the deployment of Cuckoo using Azure resources. The release date of this document is TBD.
+
+### Additional Features
+dll_multi.py - Execute multiple exports
+
+This is located at `analyzer/windows/modules/packages`. It's a slightly modified 
+version of the upstream `dll.py` package that is able to launch multiple DLL 
+exports in a single run by passing the export names to execute using the 
+function option, separated by pipe character. ie. `function=export1|export2`

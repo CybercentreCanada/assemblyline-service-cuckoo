@@ -6,7 +6,7 @@ import random
 from json import JSONDecodeError
 import ssdeep
 import hashlib
-import traceback
+import pefile
 import re
 import email.header
 import sys
@@ -289,11 +289,36 @@ class Cuckoo(ServiceBase):
 
         # Do DLL specific stuff
         if dll_function:
-            task_options.append('function={}'.format(dll_function))
+            task_options.append(f'function={dll_function}')
 
-            # Check to see if there's commas in the dll_function
+            # Check to see if there are pipes in the dll_function
+            # This is reliant on analyzer/windows/modules/packages/dll_multi.py
             if "|" in dll_function:
                 kwargs["package"] = "dll_multi"
+
+        exports_available = []
+        if not dll_function and file_ext == ".dll":
+            # only proceed if it looks like we have dll_multi
+            # We have a DLL file, but no user specified function(s) to run. let's try to pick a few...
+            # This is reliant on analyzer/windows/modules/packages/dll_multi.py
+            dll_parsed = pefile.PE(data=file_content)
+
+            # Do we have any exports?
+            if hasattr(dll_parsed, "DIRECTORY_ENTRY_EXPORT"):
+                for export_symbol in dll_parsed.DIRECTORY_ENTRY_EXPORT.symbols:
+                    if export_symbol.name is not None:
+                        if type(export_symbol.name) == str:
+                            exports_available.append(export_symbol.name)
+                        elif type(export_symbol.name) == bytes:
+                            exports_available.append(export_symbol.name.decode())
+                    else:
+                        exports_available.append(f"#{export_symbol.ordinal}")
+
+                if len(exports_available) > 0:
+                    max_dll_exports = self.config.get("max_dll_exports_exec", 5)
+                    task_options.append(f"function={'|'.join(exports_available[:max_dll_exports])}")
+                    kwargs["package"] = "dll_multi"
+                    self.log.debug(f"Trying to run DLL with following function(s): {'|'.join(exports_available[:max_dll_exports])}")
 
         # Currently these are the only supported images
         if guest_image in ["win7", "win10"]:
