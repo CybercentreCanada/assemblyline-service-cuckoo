@@ -587,6 +587,7 @@ class Cuckoo(ServiceBase):
                 self.log.debug("Checking for dropped files and pcap.")
                 # Submit dropped files and pcap if available:
                 self.check_dropped(request, self.cuckoo_task.id)
+                self.check_powershell()
                 self.check_pcap(self.cuckoo_task.id)
 
         except Exception as e:
@@ -1006,6 +1007,19 @@ class Cuckoo(ServiceBase):
             except Exception as e_x:
                 self.log.error("Error extracting dropped files: %s" % e_x)
                 return
+
+    def check_powershell(self):
+        # If there is a Powershell Activity section, create an extracted file from it
+        for section in self.file_res.sections:
+            if section.title_text == "PowerShell Activity":
+                ps1_file_name = "sample.ps1"
+                ps1_path = os.path.join(self.working_directory, ps1_file_name)
+                with open(ps1_path, "a") as fh:
+                    for item in json.loads(section.body):
+                        fh.write(item["original"] + "\n")
+                fh.close()
+                self.log.debug(f"Adding extracted file {ps1_file_name}")
+                self.request.add_extracted(ps1_path, ps1_file_name, "Deobfuscated PowerShell script from Cuckoo analysis")
 
     def check_pcap(self, task_id):
         # Make sure there's actual network information to report before including the pcap.

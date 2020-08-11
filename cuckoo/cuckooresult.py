@@ -753,7 +753,7 @@ def process_curtain(curtain: dict, al_result: Result, process_map: dict):
     curtain_body = []
     curtain_res = ResultSection(title_text="PowerShell Activity", body_format=BODY_FORMAT.TABLE)
     for pid in curtain.keys():
-        process_name = process_map[int(pid)]["name"]
+        process_name = process_map[int(pid)]["name"] if process_map.get(int(pid)) else "powershell.exe"
         for event in curtain[pid]["events"]:
             for command in event.keys():
                 curtain_item = {
