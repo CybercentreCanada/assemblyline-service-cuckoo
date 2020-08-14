@@ -34,7 +34,7 @@ config:
   max_dll_exports_exec: 5
 
   # Docker Container Limit
-  max_report_size: 300000000
+  max_report_size: 275000000
 
 submission_params:
   # Cuckoo analysis specifications

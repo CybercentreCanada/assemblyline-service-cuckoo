@@ -188,7 +188,7 @@ class Cuckoo(ServiceBase):
         self.auth_header = {'Authorization': self.config['auth_header_value']}
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
         self.timeout = 120  # arbitrary number, not too big, not too small
-        self.max_report_size = self.config.get('max_report_size', 300000000)
+        self.max_report_size = self.config.get('max_report_size', 275000000)
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
@@ -1012,7 +1012,7 @@ class Cuckoo(ServiceBase):
         # If there is a Powershell Activity section, create an extracted file from it
         for section in self.file_res.sections:
             if section.title_text == "PowerShell Activity":
-                ps1_file_name = "sample.ps1"
+                ps1_file_name = "powershell_logging.ps1"
                 ps1_path = os.path.join(self.working_directory, ps1_file_name)
                 with open(ps1_path, "a") as fh:
                     for item in json.loads(section.body):

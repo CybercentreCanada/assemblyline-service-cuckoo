@@ -1,10 +1,10 @@
 import datetime
 import logging
-import uuid
 import re
 import os
 import traceback
 import json
+import copy
 from ipaddress import ip_address, ip_network
 from urllib.parse import urlparse
 from ip2geotools.databases.noncommercial import DbIpCity
@@ -16,10 +16,6 @@ from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSec
 from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 
-UUID_RE = re.compile(r"{([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\}")
-USER_SID_RE = re.compile(r"S-1-5-21-\d+-\d+-\d+-\d+")
-WIN_FILE_RE = re.compile(r"Added new file to list with path: (\w:(?:\\[a-zA-Z0-9_\-. $]+)+)")
-DROIDMON_CONN_RE = re.compile(r"([A-Z]{3,5}) (https?://([a-zA-Z0-9.\-]+):?([0-9]{2,5})?([^ ]+)) HTTP/([0-9.]+)")
 log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 
 
@@ -70,6 +66,12 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         target_file = target.get("file", {})
         target_filename = target_file.get("name")
         process_signatures(sigs, al_result, random_ip_range, target_filename, process_map)
+
+    sysmon_tree = []
+    sysmon_procs = []
+    if sysmon:
+        sysmon_tree, sysmon_procs = process_sysmon(sysmon, al_result, process_map)
+
     if behaviour:
         sample_executed = [len(behaviour.get("processtree", [])),
                            len(behaviour.get("processes", [])),
@@ -84,7 +86,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
             al_result.add_section(noexec_res)
         else:
             # Otherwise, moving on!
-            process_events = process_behaviour(behaviour, al_result, process_map)
+            process_events = process_behaviour(behaviour, al_result, process_map, sysmon_tree, sysmon_procs)
     if network:
         network_events = process_network(network, al_result, random_ip_range, process_map)
 
@@ -93,9 +95,6 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
 
     if curtain:
         process_curtain(curtain, al_result, process_map)
-
-    if sysmon:
-        process_sysmon(sysmon, al_result, process_map)
 
     if hollowshunter:
         process_hollowshunter(hollowshunter, al_result, process_map)
@@ -132,7 +131,7 @@ def process_debug(debug, al_result):
         al_result.add_section(error_res)
 
 
-def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> list:
+def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sysmon_tree: list, sysmon_procs: list) -> list:
     log.debug("Processing behavior results.")
     events = []  # This will contain all network events
     # Skip these processes if they have no children (which would indicate that they were injected into) or calls
@@ -148,6 +147,9 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
     # Cleaning keys, value pairs
     for process in process_tree:
         process = remove_process_keys(process, process_map)
+
+    if sysmon_tree:
+        process_tree = _merge_process_trees(process_tree, sysmon_tree, False)
     if len(process_tree) > 0:
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = json.dumps(process_tree)
@@ -156,13 +158,26 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict) -> 
 
     # Get information about processes to return as events
     processes = behaviour["processes"]
+    if sysmon_procs:
+        cuckoo_pids = []
+        for item in processes:
+            cuckoo_pids.append(item["pid"])
+        sysmon_pids = []
+        for item in sysmon_procs:
+            sysmon_pids.append(item["process_pid"])
+            item["process_path"] = item.pop("process_name")
+            item["process_name"] = item["process_path"]
+            item["pid"] = item.pop("process_pid")
+            item["calls"] = []
+            item["first_seen"] = datetime.datetime.strptime(item.pop("timestamp"), "%Y-%m-%d %H:%M:%S.%f").timestamp()
+        pids_from_sysmon_we_need = list(set(sysmon_pids) - set(cuckoo_pids))
+        processes = processes + [i for i in sysmon_procs if i["pid"] in pids_from_sysmon_we_need]
     for process in processes:
         if process["process_name"] in skipped_processes and process["calls"] == []:
             continue  # on to the next one
         process_struct = {
             "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
             "process_name": process["process_name"] + " (" + str(process["pid"]) + ")",
-            # "guid": str(uuid.uuid4()) + "-" + str(process["pid"]),  # identify which process the uuid relates to
             "image": process["process_path"],
             "command_line": process["command_line"]
         }
@@ -192,6 +207,110 @@ def remove_process_keys(process: dict, process_map: dict) -> dict:
         for child in children:
             child = remove_process_keys(child, process_map)
     return process
+
+
+def _get_trimming_index(sysmon: list) -> int:
+    """
+    Find index after which isn't mainly noise
+    :param sysmon: list
+    :return: int
+    """
+    index = 0
+    for event in sysmon:
+        event_data = event["EventData"]
+        for data in event_data["Data"]:
+            val = data["@Name"]
+            if val == "CurrentDirectory" and data["#text"] == 'C:\\Users\\buddy\\AppData\\Local\\Temp\\':
+                # Okay now we have our baseline, everything before this was noise
+                # get index of eventdata
+                index = sysmon.index(event)
+                return index
+    return index
+
+
+def _insert_child(parent: dict, potential_child: dict) -> bool:
+    """
+    Insert a child, if the parent exists
+    :param parent: dict
+    :param potential_child: str
+    :return: bool
+    """
+    children = parent["children"]
+    if parent["process_pid"] == potential_child["process_pid"]:
+        parent["children"].extend(potential_child["children"])
+        return True
+    if len(children) > 0:
+        for potential_twin in children:
+            if potential_twin["process_pid"] == potential_child["process_pid"]:
+                potential_twin["children"].extend(potential_child["children"])
+                return True
+            else:
+                if _insert_child(potential_twin, potential_child):
+                    return True
+    return False
+
+
+def _flatten_process_tree(process: dict, processes: list) -> list:
+    """
+    Flatten a multi dimensional array
+    :param process: dict
+    :param processes: list
+    :return: list
+    """
+    children = process["children"]
+    if len(children) > 0:
+        for child in children:
+            l = _flatten_process_tree(child, processes)
+            if not l:
+                children.remove(child)
+    else:
+        children = process.pop("children")
+        processes.append(process)
+        return children
+
+    process.pop("children")
+    processes.append(process)
+    return processes
+
+
+def _merge_process_trees(cuckoo_tree: list, sysmon_tree: list, sysmon_process_in_cuckoo_tree: bool) -> list:
+    """
+    Merge two process trees
+    :param cuckoo_tree: list
+    :param sysmon_tree: list
+    :param sysmon_process_in_cuckoo_tree: bool
+    :return: list
+    """
+    for process in cuckoo_tree:
+        # Change each name so it is apparent where the process came from
+        if "(Sysmon)" not in process["process_name"] and not sysmon_process_in_cuckoo_tree:
+            process["process_name"] += " (Cuckoo)"
+            sysmon_process_in_cuckoo_tree = False
+        elif sysmon_process_in_cuckoo_tree:
+            process["process_name"] += " (Sysmon)"
+
+        for sysmon_proc in sysmon_tree:
+            sysmon_proc_pid = sysmon_proc["process_pid"]
+            # Check if sysmon process is in cuckoo tree
+            if sysmon_proc_pid not in [item["process_pid"] for item in cuckoo_tree]:
+                # Add to cuckoo tree
+                sysmon_proc["process_name"] += " (Sysmon)"
+                cuckoo_tree.append(sysmon_proc)
+
+        cuckoo_proc_pid = process["process_pid"]
+        cuckoo_children = process["children"]
+        sysmon_procs_with_same_pid = [item for item in sysmon_tree if item["process_pid"] == cuckoo_proc_pid]
+        if len(sysmon_procs_with_same_pid) > 0:
+            sysmon_proc_with_same_pid = sysmon_procs_with_same_pid[0]
+        else:
+            sysmon_proc_with_same_pid = {}
+        sysmon_children = sysmon_proc_with_same_pid.get("children", [])
+        if "(Sysmon)" in process["process_name"]:
+            sysmon_process_in_cuckoo_tree = True
+
+        _merge_process_trees(cuckoo_children, sysmon_children, sysmon_process_in_cuckoo_tree)
+
+    return cuckoo_tree
 
 
 def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, target_filename: str, process_map: dict):
@@ -777,7 +896,7 @@ def process_curtain(curtain: dict, al_result: Result, process_map: dict):
         al_result.add_section(curtain_res)
 
 
-def process_sysmon(sysmon: dict, al_result: Result, process_map: dict):
+def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list, list):
     # TODO: obvsiouly a huge work in progress
     log.debug("Processing sysmon results.")
     sysmon_body = []
@@ -785,6 +904,89 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict):
     if len(sysmon_body) > 0:
         sysmon_res.body = json.dumps(sysmon_body)
         al_result.add_section(sysmon_res)
+
+    # Cut it out!
+    index = _get_trimming_index(sysmon)
+    trimmed_sysmon = sysmon[index:]
+    safelisted_parent_images = [
+        re.compile('C:\\\\tmp.+\\\\bin\\\\.+'),
+        re.compile('C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe')
+    ]
+    safelisted_parent_commandlines = [
+        re.compile('C:\\\\Python27\\\\pythonw\.exe C:/tmp.+/analyzer\.py'),
+    ]
+    safelisted_child_commandlines = [
+        re.compile('"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe" -Embedding')
+    ]
+    process_tree = []
+    for event in trimmed_sysmon:
+        event_data = event["EventData"]
+        process = {}
+        child_process = process.copy()
+        safelisted = False
+        timestamp = None
+        for data in event_data["Data"]:
+            name = data["@Name"]
+            text = data["#text"]
+
+            # Current Process
+            if name == "OriginalFileName":
+                child_process["process_name"] = text
+            elif name == "CommandLine":
+                if any(safe_cmdline.match(text) for safe_cmdline in
+                       safelisted_child_commandlines):
+                    safelisted = True
+                child_process["command_line"] = text
+            elif name == "ProcessId":
+                child_process["process_pid"] = int(text)
+
+            # Parent Process
+            elif name == "ParentImage":
+                if any(safe_image.match(text) for safe_image in
+                       safelisted_parent_images):
+                    safelisted = True
+                process["process_name"] = text
+            elif name == "ParentProcessId":
+                process["process_pid"] = int(text)
+            elif name == "ParentCommandLine":
+                if any(safe_cmdline.match(text) for safe_cmdline in
+                       safelisted_parent_commandlines):
+                    safelisted = True
+                process["command_line"] = text
+
+            # Timestamp
+            elif name == "UtcTime":
+                timestamp = text
+
+        if process and child_process and not safelisted:
+            process["timestamp"] = child_process["timestamp"] = timestamp
+            child_process["children"] = []
+            process["children"] = [child_process]
+            process_tree.append(process)
+        # Check if rundll32.exe is being run
+        elif process and child_process and safelisted:
+            if process.get("command_line") and \
+                    "bin\\inject-x86.exe --app C:\\windows\System32\\rundll32.exe" in \
+                    process["command_line"]:
+                process["timestamp"] = child_process["timestamp"] = timestamp
+                child_process["children"] = []
+                process_tree.append(child_process)
+
+    copy_process_tree = process_tree.copy()
+    for process in process_tree:
+        for other_process in copy_process_tree:
+            if process == other_process:
+                continue
+            child_exists = _insert_child(process, other_process)
+            if child_exists:
+                process_tree.remove(other_process)
+
+    processes = []
+    process_tree_copy = copy.deepcopy(process_tree)
+    for process in process_tree_copy:
+        _flatten_process_tree(process, processes)
+
+    return process_tree, processes
 
 
 def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: dict):
