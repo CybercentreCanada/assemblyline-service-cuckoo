@@ -178,7 +178,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
         process_struct = {
             "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
             "process_name": process["process_name"] + " (" + str(process["pid"]) + ")",
-            "image": process["process_path"],
+            "image": process["process_path"] if process.get("process_path") else process["process_name"],
             "command_line": process["command_line"]
         }
 
@@ -910,13 +910,16 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
     trimmed_sysmon = sysmon[index:]
     safelisted_parent_images = [
         re.compile('C:\\\\tmp.+\\\\bin\\\\.+'),
-        re.compile('C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe')
+        re.compile('C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe'),
+        re.compile('C:\\\\WindowsAzure\\\\GuestAgent.*\\\\GuestAgent\\\\WindowsAzureGuestAgent\.exe')
     ]
     safelisted_parent_commandlines = [
         re.compile('C:\\\\Python27\\\\pythonw\.exe C:/tmp.+/analyzer\.py'),
     ]
     safelisted_child_commandlines = [
-        re.compile('"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe" -Embedding')
+        re.compile('"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe" -Embedding'),
+        re.compile('"C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\.exe')
+
     ]
     process_tree = []
     for event in trimmed_sysmon:
@@ -1049,7 +1052,7 @@ def get_process_map(processes: dict = None) -> dict:
         network_calls = []
         calls = process["calls"]
         for call in calls:
-            category = call["category"]
+            category = call.get("category", "does_not_exist")
             api = call["api"]
             if category == "network" and api in api_calls_of_interest.keys():
                 args = call["arguments"]
