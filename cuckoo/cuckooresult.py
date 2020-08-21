@@ -918,8 +918,8 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
     ]
     safelisted_child_commandlines = [
         re.compile('"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe" -Embedding'),
-        re.compile('"C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\.exe')
-
+        re.compile('"C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\.exe'),
+        re.compile('"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MOMPerfSnapshotHelper.exe\\" -Embedding')
     ]
     process_tree = []
     for event in trimmed_sysmon:

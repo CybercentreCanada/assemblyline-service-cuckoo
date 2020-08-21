@@ -321,7 +321,7 @@ class Cuckoo(ServiceBase):
                     self.log.debug(f"Trying to run DLL with following function(s): {'|'.join(exports_available[:max_dll_exports])}")
 
         # Currently these are the only supported images
-        if guest_image in ["win7", "win10"]:
+        if guest_image in ["win7", "win10", "ub1804"]:
             kwargs["tags"] = guest_image
 
         exports_available = []

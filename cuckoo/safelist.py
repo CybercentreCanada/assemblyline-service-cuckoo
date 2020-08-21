@@ -120,6 +120,9 @@ SAFELIST_DOMAINS = {
     'Ubuntu Update': r'changelogs\.ubuntu\.com$',
     'Ubuntu Netmon': r'daisy\.ubuntu\.com$',
     'Ubuntu NTP': r'ntp\.ubuntu\.com$',
+    'Ubuntu DDebs': r'ddebs\.ubuntu\.com$',
+    'Azure Ubuntu': r'azure\.archive\.ubuntu\.com$',
+    'Security Ubuntu': r'security\.ubuntu\.com$',
 
     # Local
     'TCP Local': r'.*\.local$',
