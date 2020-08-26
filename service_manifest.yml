@@ -38,10 +38,10 @@ config:
 
 submission_params:
   # Cuckoo analysis specifications
-  - default: 60
+  - default: 150
     name: analysis_timeout
     type: int
-    value: 60
+    value: 150
 
   - default: false
     name: enforce_timeout
@@ -99,6 +99,11 @@ submission_params:
     name: take_screenshots
     type: bool
     value: false
+
+  - default: true
+    name: sysmon_enabled
+    type: bool
+    value: true
 
   - default: true
     name: simulate_user

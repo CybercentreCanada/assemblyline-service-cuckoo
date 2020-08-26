@@ -277,6 +277,7 @@ class Cuckoo(ServiceBase):
         kwargs["clock"] = request.get_param("clock")
         force_sleepskip = request.get_param("force_sleepskip")
         take_screenshots = request.get_param("take_screenshots")
+        sysmon_enabled = request.get_param("sysmon_enabled")
         simulate_user = request.get_param("simulate_user")
         guest_image = request.get_param("guest_image")
 
@@ -324,7 +325,8 @@ class Cuckoo(ServiceBase):
         if guest_image in ["win7", "win10", "ub1804"]:
             kwargs["tags"] = guest_image
 
-        exports_available = []
+        if not sysmon_enabled:
+            task_options.append("sysmon=0")
 
         if arguments:
             task_options.append('arguments={}'.format(arguments))

@@ -17,6 +17,10 @@ from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri,
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 
 log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
+IP_REGEX = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
+DOMAIN_REGEX = r'(?![\d.]+)((xn--|_)?(xn--|_)?([a-z0-9A-Z]{2,24}\.))*[a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*'
+URL_REGEX = r"((\w+://)[-a-zA-Z0-9:@;?&=/%+.*!'(),$_{}^~\[\]`#|]+)"
+MD5_REGEX = r'([a-fA-F\d]{32})'
 
 
 # noinspection PyBroadException
@@ -98,6 +102,9 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
 
     if hollowshunter:
         process_hollowshunter(hollowshunter, al_result, process_map)
+
+    if process_map:
+        process_malware_config(process_map, al_result)
 
     log.debug("AL result generation completed!")
     return process_map
@@ -561,11 +568,10 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
 def contains_safelisted_value(val: str) -> bool:
     if not val or not isinstance(val, str):
         return False
-    ip = re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', val)
-    url = re.search(r"((\w+://)[-a-zA-Z0-9:@;?&=/%+.*!'(),$_{}^~\[\]`#|]+)", val)
-    domain = re.search(r'((xn--|_)?(xn--|_)?([a-z0-9A-Z]{2,24}\.))*[a-z0-9-]+'
-                       r'\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*', val)
-    md5_hash = re.search(r"([a-fA-F\d]{32})", val)
+    ip = re.search(IP_REGEX, val)
+    url = re.search(URL_REGEX, val)
+    domain = re.search(DOMAIN_REGEX, val)
+    md5_hash = re.search(MD5_REGEX, val)
     if ip is not None:
         ip = ip.group()
         if slist_check_ip(ip):
@@ -652,7 +658,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 dest_country = "INetSim"  # if INetSim-resolved IP, set country to INetSim
             network_flow = {
                 "timestamp": datetime.datetime.fromtimestamp(network_call["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-                "proto": protocol,
+                "protocol": protocol,
                 "dom": None,
                 "dest_ip": dst,
                 "dest_port": network_call["dport"],
@@ -709,7 +715,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 protocol_res_sec.set_heuristic(1001)
 
             # If the record has not been removed then it should be tagged for protocol, domain, ip, and port
-            protocol_res_sec.add_tag("network.protocol", network_flow["proto"])
+            protocol_res_sec.add_tag("network.protocol", network_flow["protocol"])
 
             domain = network_flow["dom"]
             if domain is not None and not contains_safelisted_value(domain):  # and not is_ip(domain):
@@ -766,7 +772,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             if slist_check_ip(host) is not None or slist_check_domain(host) is not None or slist_check_uri(uri) is not None:
                 continue
             req = {
-                "proto": proto,
+                "protocol": proto,
                 "host": host,  # Note: will be removed in like twenty lines, we just need it for tagging
                 "port": port,  # Note: will be removed in like twenty lines, we just need it for tagging
                 "path": path,  # Note: will be removed in like twenty lines, we just need it for tagging
@@ -790,7 +796,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
         remote_file_access_sec = ResultSection(title_text="Access Remote File")
         http_sec.set_heuristic(1002)
         for http_call in req_table:
-            http_sec.add_tag("network.protocol", http_call["proto"])
+            http_sec.add_tag("network.protocol", http_call["protocol"])
             host = http_call["host"]
             path = http_call["path"]
             if ":" in host:  # split on port if port exists
@@ -845,7 +851,7 @@ def process_all_events(al_result: Result, network_events: list = [], process_eve
         event["event_type"] = "network"
         event["process_name"] = event.pop("process_name", None)  # doing this so that process name comes after event type in the UI
         event["details"] = {
-            "proto": event.pop("proto", None),
+            "protocol": event.pop("protocol", None),
             "dom": event.pop("dom", None),
             "dest_ip": event.pop("dest_ip", None),
             "dest_port": event.pop("dest_port", None),
@@ -1002,6 +1008,35 @@ def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: d
         al_result.add_section(hollowshunter_res)
 
 
+def process_malware_config(process_map: dict, al_result: Result):
+    log.debug("Processing malware configurations.")
+    config_res = ResultSection(title_text="Extracted Malware Configurations")
+    unique_ips = set()
+    unique_domains = set()
+
+    for process in process_map:
+        config_calls = process_map[process]["config_extracted"]
+        if not config_calls:
+            continue
+        for call in config_calls:
+            if call.get("CryptDecrypt"):
+                buffer = call["CryptDecrypt"]["buffer"]
+                ips = re.findall(IP_REGEX, buffer)
+                unique_ips = unique_ips.union(set(ips))
+                domains = re.findall(DOMAIN_REGEX, buffer)
+                unique_domains = unique_domains.union(set(domains))
+    for ip in unique_ips:
+        safe_ip = safe_str(ip)
+        config_res.add_line(f"IOC found: {safe_ip}")
+        config_res.add_tag("network.static.ip", safe_ip)
+    for domain in unique_domains:
+        safe_domain = safe_str(domain)
+        config_res.add_line(f"IOC found: {safe_domain}")
+        config_res.add_tag("network.static.domain", safe_domain)
+    if config_res.body and len(config_res.body) > 0:
+        al_result.add_section(config_res)
+
+
 def is_ip(val: str) -> bool:
     try:
         ip_address(val)
@@ -1045,11 +1080,13 @@ def get_process_map(processes: dict = None) -> dict:
         # "InternetOpenW": ["user-agent"],  # HTTP Request TODO not sure what to do with this yet
         # "recv": ["buffer"],  # HTTP Response, TODO not sure what to do with this yet
         # "InternetReadFile": ["buffer"]  # HTTP Response, TODO not sure what to do with this yet
+        "CryptDecrypt": ["buffer"],  # Used for certain malware files that use configuration files
     }
     for process in processes:
         if process["process_name"] == "lsass.exe":
             continue
         network_calls = []
+        config_extracted = []
         calls = process["calls"]
         for call in calls:
             category = call.get("category", "does_not_exist")
@@ -1061,11 +1098,19 @@ def get_process_map(processes: dict = None) -> dict:
                     if arg in args:
                         args_of_interest[arg] = args[arg]
                 network_calls.append({api: args_of_interest})
+            if category == "crypto" and api in api_calls_of_interest.keys():
+                args = call["arguments"]
+                args_of_interest = {}
+                for arg in api_calls_of_interest.get(api, []):
+                    if arg in args:
+                        args_of_interest[arg] = args[arg]
+                config_extracted.append({api: args_of_interest})
         pid = process["pid"]
         process_map[pid] = {
             "name": process["process_name"],
             "network_calls": network_calls,
-            "signatures": set()
+            "signatures": set(),
+            "config_extracted": config_extracted
         }
     return process_map
 
