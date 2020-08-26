@@ -28,7 +28,7 @@ from cuckoo.cuckooresult import generate_al_result
 from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
-HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$"
+HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc)$"
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
 CUCKOO_API_DELETE_TASK = "tasks/delete/%s"
@@ -495,7 +495,7 @@ class Cuckoo(ServiceBase):
                                     ))
 
                         # Hollowshunter section
-                        # Only if there is a 1 or more exe dumps
+                        # Only if there is a 1 or more exe, shc dumps
                         if any(re.match(HOLLOWSHUNTER_DUMP_REGEX, f) for f in tar_obj.getnames()):
                             hollowshunter_sec = ResultSection(title_text='HollowsHunter Dumps')
                             hollowshunter_sec.set_heuristic(17)
@@ -520,7 +520,7 @@ class Cuckoo(ServiceBase):
                             for dump_path in dump_list:
                                 filename_suffix = dump_path.split(".")[-1]
                                 # We only care about dumps that are exe files
-                                if filename_suffix != "exe":
+                                if filename_suffix not in ["exe", "shc"]:
                                     continue
 
                                 hollowshunter_sec.add_tag("dynamic.process.file_name", dump_path)
