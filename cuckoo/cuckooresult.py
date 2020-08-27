@@ -104,7 +104,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         process_hollowshunter(hollowshunter, al_result, process_map)
 
     if process_map:
-        process_malware_config(process_map, al_result)
+        process_decrypted_buffers(process_map, al_result)
 
     log.debug("AL result generation completed!")
     return process_map
@@ -1008,17 +1008,17 @@ def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: d
         al_result.add_section(hollowshunter_res)
 
 
-def process_malware_config(process_map: dict, al_result: Result):
-    log.debug("Processing malware configurations.")
-    config_res = ResultSection(title_text="Extracted Malware Configurations")
+def process_decrypted_buffers(process_map: dict, al_result: Result):
+    log.debug("Processing decrypted buffers.")
+    buffer_res = ResultSection(title_text="Decrypted Buffer IOCs")
     unique_ips = set()
     unique_domains = set()
 
     for process in process_map:
-        config_calls = process_map[process]["config_extracted"]
-        if not config_calls:
+        buffer_calls = process_map[process]["decrypted_buffers"]
+        if not buffer_calls:
             continue
-        for call in config_calls:
+        for call in buffer_calls:
             if call.get("CryptDecrypt"):
                 buffer = call["CryptDecrypt"]["buffer"]
                 ips = re.findall(IP_REGEX, buffer)
@@ -1027,14 +1027,14 @@ def process_malware_config(process_map: dict, al_result: Result):
                 unique_domains = unique_domains.union(set(domains))
     for ip in unique_ips:
         safe_ip = safe_str(ip)
-        config_res.add_line(f"IOC found: {safe_ip}")
-        config_res.add_tag("network.static.ip", safe_ip)
+        buffer_res.add_line(f"IOC found: {safe_ip}")
+        buffer_res.add_tag("network.static.ip", safe_ip)
     for domain in unique_domains:
         safe_domain = safe_str(domain)
-        config_res.add_line(f"IOC found: {safe_domain}")
-        config_res.add_tag("network.static.domain", safe_domain)
-    if config_res.body and len(config_res.body) > 0:
-        al_result.add_section(config_res)
+        buffer_res.add_line(f"IOC found: {safe_domain}")
+        buffer_res.add_tag("network.static.domain", safe_domain)
+    if buffer_res.body and len(buffer_res.body) > 0:
+        al_result.add_section(buffer_res)
 
 
 def is_ip(val: str) -> bool:
@@ -1086,7 +1086,7 @@ def get_process_map(processes: dict = None) -> dict:
         if process["process_name"] == "lsass.exe":
             continue
         network_calls = []
-        config_extracted = []
+        decrypted_buffers = []
         calls = process["calls"]
         for call in calls:
             category = call.get("category", "does_not_exist")
@@ -1104,13 +1104,13 @@ def get_process_map(processes: dict = None) -> dict:
                 for arg in api_calls_of_interest.get(api, []):
                     if arg in args:
                         args_of_interest[arg] = args[arg]
-                config_extracted.append({api: args_of_interest})
+                decrypted_buffers.append({api: args_of_interest})
         pid = process["pid"]
         process_map[pid] = {
             "name": process["process_name"],
             "network_calls": network_calls,
             "signatures": set(),
-            "config_extracted": config_extracted
+            "decrypted_buffers": decrypted_buffers
         }
     return process_map
 
