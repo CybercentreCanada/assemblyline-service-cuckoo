@@ -17,7 +17,7 @@ from retrying import retry, RetryError
 
 from assemblyline_v4_service.common.request import ServiceRequest
 from assemblyline_v4_service.common.task import MaxExtractedExceeded
-from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT
+from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT, Heuristic
 from assemblyline_v4_service.common.base import ServiceBase
 
 from assemblyline.common.str_utils import safe_str
@@ -29,6 +29,8 @@ from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc)$"
+HOLLOWSHUNTER_EXE_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$"
+HOLLOWSHUNTER_SHC_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.shc$"
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
 CUCKOO_API_DELETE_TASK = "tasks/delete/%s"
@@ -494,12 +496,10 @@ class Cuckoo(ServiceBase):
                                              (f, mem_filesize, max_extracted_size)
                                     ))
 
-                        # Hollowshunter section
+                        # HollowsHunter section
+                        hollowshunter_sec =ResultSection(title_text='HollowsHunter')
                         # Only if there is a 1 or more exe, shc dumps
                         if any(re.match(HOLLOWSHUNTER_DUMP_REGEX, f) for f in tar_obj.getnames()):
-                            hollowshunter_sec = ResultSection(title_text='HollowsHunter Dumps')
-                            hollowshunter_sec.set_heuristic(17)
-
                             # Add HollowsHunter report files as supplementary
                             report_pattern = re.compile(HOLLOWSHUNTER_REPORT_REGEX)
                             report_list = list(filter(report_pattern.match, tar_obj.getnames()))
@@ -514,23 +514,37 @@ class Cuckoo(ServiceBase):
                                     "HollowsHunter report (json)"
                                 )
 
-                            # Add HollowsHunter dump files as extracted
-                            dump_pattern = re.compile(HOLLOWSHUNTER_DUMP_REGEX)
-                            dump_list = list(filter(dump_pattern.match, tar_obj.getnames()))
-                            for dump_path in dump_list:
-                                filename_suffix = dump_path.split(".")[-1]
-                                # We only care about dumps that are exe files
-                                if filename_suffix not in ["exe", "shc"]:
-                                    continue
+                            hh_exe_sec = None
+                            hh_shc_sec = None
+                            hh_tuples = [(
+                                hh_exe_sec, HOLLOWSHUNTER_EXE_REGEX,
+                                'HollowsHunter Injected Portable Executable', 17
+                            ), (
+                                hh_shc_sec, HOLLOWSHUNTER_SHC_REGEX,
+                                "HollowsHunter Shellcode", None
+                            )]
+                            for hh_tuple in hh_tuples:
+                                section, regex, section_title, section_heur = hh_tuple
+                                pattern = re.compile(regex)
+                                dump_list = list(filter(pattern.match, tar_obj.getnames()))
+                                if dump_list:
+                                    section = ResultSection(title_text=section_title)
+                                    if section_heur:
+                                        heur = Heuristic(section_heur)
+                                        heur.add_signature_id("hollowshunter_pe")
+                                        section.heuristic = heur
 
-                                hollowshunter_sec.add_tag("dynamic.process.file_name", dump_path)
-                                dump_file_path = os.path.join(self.working_directory, dump_path)
-                                tar_obj.extract(dump_path, path=self.working_directory)
-                                # Resubmit
-                                self.request.add_extracted(dump_file_path, dump_path, "HollowsHunter dropped file")
-                                self.log.debug("Submitted HollowsHunter dump for analysis: %s" % dump_file_path)
-                            if len(hollowshunter_sec.tags) > 0:
-                                self.file_res.add_section(hollowshunter_sec)
+                                for dump_path in dump_list:
+                                    section.add_tag("dynamic.process.file_name", dump_path)
+                                    dump_file_path = os.path.join(self.working_directory, dump_path)
+                                    tar_obj.extract(dump_path, path=self.working_directory)
+                                    # Resubmit
+                                    self.request.add_extracted(dump_file_path, dump_path, section_title)
+                                    self.log.debug("Submitted HollowsHunter dump for analysis: %s" % dump_file_path)
+                                if len(section.tags) > 0:
+                                    hollowshunter_sec.add_subsection(section)
+                        if len(hollowshunter_sec.subsections) > 0:
+                            self.file_res.add_section(hollowshunter_sec)
 
                         # Extract buffers, screenshots and anything extracted
                         extracted_buffers = [x.name for x in tar_obj.getmembers()

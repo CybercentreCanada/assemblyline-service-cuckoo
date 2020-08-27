@@ -249,6 +249,7 @@ heuristics:
     score: 250
     signature_score_map:
       allocates_rwx: 10
+      hollowshunter_pe: 500
     filetype: '*'
     description: Hide executable code in another process or within the malicious process after unpacking iteself.
 
