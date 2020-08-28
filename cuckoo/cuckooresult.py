@@ -1010,7 +1010,8 @@ def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: d
 
 def process_decrypted_buffers(process_map: dict, al_result: Result):
     log.debug("Processing decrypted buffers.")
-    buffer_res = ResultSection(title_text="Decrypted Buffer IOCs")
+    buffer_res = ResultSection(title_text="Decrypted Buffers", body_format=BODY_FORMAT.TABLE)
+    buffer_body = []
     unique_ips = set()
     unique_domains = set()
 
@@ -1025,15 +1026,15 @@ def process_decrypted_buffers(process_map: dict, al_result: Result):
                 unique_ips = unique_ips.union(set(ips))
                 domains = re.findall(DOMAIN_REGEX, buffer)
                 unique_domains = unique_domains.union(set(domains))
+                buffer_body.append({"Decrypted Buffer": buffer})
     for ip in unique_ips:
         safe_ip = safe_str(ip)
-        buffer_res.add_line(f"IOC found: {safe_ip}")
         buffer_res.add_tag("network.static.ip", safe_ip)
     for domain in unique_domains:
         safe_domain = safe_str(domain)
-        buffer_res.add_line(f"IOC found: {safe_domain}")
         buffer_res.add_tag("network.static.domain", safe_domain)
-    if buffer_res.body and len(buffer_res.body) > 0:
+    if len(buffer_body) > 0:
+        buffer_res.body = json.dumps(buffer_body)
         al_result.add_section(buffer_res)
 
 
