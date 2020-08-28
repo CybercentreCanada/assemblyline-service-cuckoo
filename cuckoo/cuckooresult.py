@@ -1026,7 +1026,8 @@ def process_decrypted_buffers(process_map: dict, al_result: Result):
                 unique_ips = unique_ips.union(set(ips))
                 domains = re.findall(DOMAIN_REGEX, buffer)
                 unique_domains = unique_domains.union(set(domains))
-                buffer_body.append({"Decrypted Buffer": buffer})
+                if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
+                    buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
     for ip in unique_ips:
         safe_ip = safe_str(ip)
         buffer_res.add_tag("network.static.ip", safe_ip)

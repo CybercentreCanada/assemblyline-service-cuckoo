@@ -514,13 +514,11 @@ class Cuckoo(ServiceBase):
                                     "HollowsHunter report (json)"
                                 )
 
-                            hh_exe_sec = None
-                            hh_shc_sec = None
                             hh_tuples = [(
-                                hh_exe_sec, HOLLOWSHUNTER_EXE_REGEX,
+                                None, HOLLOWSHUNTER_EXE_REGEX,
                                 'HollowsHunter Injected Portable Executable', 17
                             ), (
-                                hh_shc_sec, HOLLOWSHUNTER_SHC_REGEX,
+                                None, HOLLOWSHUNTER_SHC_REGEX,
                                 "HollowsHunter Shellcode", None
                             )]
                             for hh_tuple in hh_tuples:
@@ -541,7 +539,7 @@ class Cuckoo(ServiceBase):
                                     # Resubmit
                                     self.request.add_extracted(dump_file_path, dump_path, section_title)
                                     self.log.debug("Submitted HollowsHunter dump for analysis: %s" % dump_file_path)
-                                if len(section.tags) > 0:
+                                if section and len(section.tags) > 0:
                                     hollowshunter_sec.add_subsection(section)
                         if len(hollowshunter_sec.subsections) > 0:
                             self.file_res.add_section(hollowshunter_sec)
