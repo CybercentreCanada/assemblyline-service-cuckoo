@@ -336,6 +336,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
     false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut", "process_martian"]  # Signatures that need to be double checked in case they return false positives
     inetsim_network = ip_network(random_ip_range)
     skipped_paths = ["/"]
+    silent_iocs = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_process", "uses_windows_utilities", "creates_exe", "deletes_executed_files"]
     # Sometimes the filename gets shortened
     target_filename_remainder = target_filename
     if len(target_filename) > 19:
@@ -478,7 +479,6 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 elif mark_type == "generic" and sig_name == "nolookup_communication":
                     if not contains_safelisted_value(mark["host"]) and ip_address(mark["host"]) not in inetsim_network:
                         sig_res.add_tag("network.dynamic.ip", mark["host"])
-                        sig_res.add_line('\tIOC: %s' % safe_str(mark["host"]))
                     else:
                         fp_count += 1
                 elif mark_type == "generic" and sig_name == "suspicious_powershell":
@@ -500,6 +500,9 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                 sig_res.add_line('\tIOC: %s' % ioc)
                             elif sig_name == "persistence_autorun":
                                 sig_res.add_tag("dynamic.autorun_location", ioc)
+                            elif sig_name in silent_iocs:
+                                # Nothing to see here, just avoiding printing out the IOC line in the result body
+                                pass
                             elif not is_ip(ioc) or \
                                     (is_ip(ioc) and ip_address(ioc) not in inetsim_network):
                                 if sig_name in ["p2p_cnc"]:
@@ -518,7 +521,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                 fp_count += 1
                         else:
                             fp_count += 1
-                    if category and category == "file":
+                    if ioc and category and category == "file" and sig_name not in ["ransomware_mass_file_delete"]:
                         # Tag this ioc as file path
                         sig_res.add_tag("dynamic.process.file_name", ioc)
                     elif category and category == "cmdline":

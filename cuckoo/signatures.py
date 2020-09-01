@@ -523,7 +523,9 @@ CUCKOO_SIGNATURES = {
   "wakbot": "RAT",
   "generates_crypto_key": "Stealth",
   "network_http": "C2",
-  "process_needed": "Suspicious Execution Chain"
+  "process_needed": "Suspicious Execution Chain",
+  "winmgmts_process_create": "WMI",
+  "dll_load_uncommon_file_types": "Suspicious DLL"
 }
 
 CUCKOO_SIGNATURE_CATEGORIES = {
@@ -706,6 +708,10 @@ CUCKOO_SIGNATURE_CATEGORIES = {
   "Bind": {
     "id": 45,
     "description": "Allows a resource to be sent or received across a network."
+  },
+  "Suspicious DLL": {
+    "id": 46,
+    "description": "Attempts to load DLL that is inconsistent with expected/standard behaviour."
   }
 }
 

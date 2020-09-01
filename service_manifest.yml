@@ -438,6 +438,12 @@ heuristics:
     filetype: '*'
     description: Allows a resource to be sent or received across a network.
 
+  - heur_id: 46
+    name: Suspicious DLL
+    score: 250
+    filetype: '*'
+    description: Attempts to load DLL that is inconsistent with expected/standard behaviour.
+
 # Note: Heuristic is not currently used
   - heur_id: 998
     name: SMS Activity
