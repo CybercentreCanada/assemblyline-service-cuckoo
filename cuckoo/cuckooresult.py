@@ -208,7 +208,14 @@ def remove_process_keys(process: dict, process_map: dict) -> dict:
         process.pop(key)
     # Rename pid to process_id
     process["process_pid"] = process.pop("pid", None)
-    process["signatures"] = list(process_map.get(process["process_pid"], {}).get("signatures", []))
+    # Flatten signatures set into a dict
+    signatures = {}
+    sigs = process_map.get(process["process_pid"], {}).get("signatures", [])
+    for sig in sigs:
+        sig_json = json.loads(sig)
+        key = next(iter(sig_json))
+        signatures[key] = sig_json[key]
+    process["signatures"] = signatures
     children = process["children"]
     if len(children) > 0:
         for child in children:
@@ -445,7 +452,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 pid = mark.get("pid")
                 # Adding to the list of signatures for a specific process
                 if process_map.get(pid):
-                    process_map[pid]["signatures"].add(sig_name)
+                    process_map[pid]["signatures"].add(json.dumps({sig_name: translated_score}))
                 # Mapping the process name to the process id
                 process_map.get(pid, {})
                 process_name = process_map.get(pid, {}).get("name")
