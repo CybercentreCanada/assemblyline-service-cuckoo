@@ -577,6 +577,12 @@ class Cuckoo(ServiceBase):
                             tar_obj.extract(f, path=self.working_directory)
                             self.log.debug(f"Adding extracted file {f}")
                             self.request.add_extracted(sum_file_path, f, "All traffic from TCPDUMP and PolarProxy")
+                        for f in [x.name for x in tar_obj.getmembers() if
+                                  x.name.startswith("sysmon") and x.isfile()]:
+                            sysmon_file_path = os.path.join(self.working_directory, f)
+                            tar_obj.extract(f, path=self.working_directory)
+                            self.log.debug(f"Adding extracted file {f}")
+                            self.request.add_extracted(sysmon_file_path, f, "Sysmon Logging Captured")
                         tar_obj.close()
                     except Exception as e:
                         self.log.exception(
