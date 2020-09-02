@@ -652,6 +652,14 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
         network_calls = [x for x in network.get(protocol, [])]
         if len(network_calls) <= 0:
             continue
+        elif len(network_calls) > 50:
+            network_calls_made_to_unique_ips = []
+            # Collapsing network calls into calls made to unique IP+port combos
+            for network_call in network_calls:
+                dst_port_pair = json.dumps({network_call["dst"]: network_call["dport"]})
+                if dst_port_pair not in [json.dumps({x["dst"]: x["dport"]}) for x in network_calls_made_to_unique_ips]:
+                    network_calls_made_to_unique_ips.append(network_call)
+            network_calls = network_calls_made_to_unique_ips
         for network_call in network_calls:
             dst = network_call["dst"]
             dest_country = None
