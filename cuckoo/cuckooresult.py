@@ -234,6 +234,8 @@ def _get_trimming_index(sysmon: list) -> int:
         event_data = event["EventData"]
         for data in event_data["Data"]:
             val = data["@Name"]
+            if not data.get("#text"):
+                continue
             if val == "CurrentDirectory" and data["#text"] == 'C:\\Users\\buddy\\AppData\\Local\\Temp\\':
                 # Okay now we have our baseline, everything before this was noise
                 # get index of eventdata
@@ -954,7 +956,7 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
         timestamp = None
         for data in event_data["Data"]:
             name = data["@Name"]
-            text = data["#text"]
+            text = data.get("#text")
 
             # Current Process
             if name == "OriginalFileName":

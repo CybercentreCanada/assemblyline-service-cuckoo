@@ -112,6 +112,7 @@ class MaxFileSizeExceeded(Exception):
     """Exception class for files that are too large"""
     pass
 
+
 class ReportSizeExceeded(Exception):
     """Exception class for reports that are too large"""
     pass
@@ -174,6 +175,7 @@ class Cuckoo(ServiceBase):
         self.auth_header = None
         self.timeout = None
         self.max_report_size = None
+        self.report_count = 0
 
     def set_urls(self):
         self.base_url = "http://%s:%s" % (self.config['remote_host_ip'], self.config['remote_host_port'])
@@ -497,7 +499,7 @@ class Cuckoo(ServiceBase):
                                     ))
 
                         # HollowsHunter section
-                        hollowshunter_sec =ResultSection(title_text='HollowsHunter')
+                        hollowshunter_sec = ResultSection(title_text='HollowsHunter')
                         # Only if there is a 1 or more exe, shc dumps
                         if any(re.match(HOLLOWSHUNTER_DUMP_REGEX, f) for f in tar_obj.getnames()):
                             # Add HollowsHunter report files as supplementary
@@ -611,13 +613,12 @@ class Cuckoo(ServiceBase):
                 self.check_pcap(self.cuckoo_task.id)
 
         except Exception as e:
-            # Delete the task now..
-            self.log.error('General exception caught during processing: %s' % e)
-            if self.cuckoo_task and self.cuckoo_task.id is not None:
-                self.cuckoo_delete_task(self.cuckoo_task.id)
-
-            # Send the exception off to ServiceBase
-            raise
+            if self.report_count > 0:
+                # Hey at least we got something
+                self.file_res.add_section(ResultSection(title_text="Reporting Errors", body=e))
+            else:
+                # Send the exception off to ServiceBase
+                raise
 
         # Delete and exit
         if self.cuckoo_task and self.cuckoo_task.id is not None:
@@ -851,11 +852,21 @@ class Cuckoo(ServiceBase):
                     self.cuckoo_delete_task(self.cuckoo_task.id)
                 raise MissingCuckooReportException("Task or report not found")
             elif resp.status_code == 413:
-                self.log.error(f"Cuckoo report.json size is {int(resp.headers['Content-Length'])} which is bigger than the allowed size of {self.max_report_size}")
-                raise ReportSizeExceeded(f"Cuckoo report.json size is {int(resp.headers['Content-Length'])} which is bigger than the allowed size of {self.max_report_size}")
+                msg = f"Cuckoo report (type={fmt}) size is {int(resp.headers['Content-Length'])} which is bigger than the allowed size of {self.max_report_size}"
+                self.log.error(msg)
+                if self.report_count > 0:
+                    self.file_res.add_section(ResultSection(title_text="Reporting Errors", body=msg))
+                    return None
+                raise ReportSizeExceeded(msg)
             else:
-                self.log.error("Failed to query report %s. Status code: %d. There is a strong chance that this is due to the large size of file attempted to retrieve via API request." % (task_id, resp.status_code))
-                raise Exception(f"Cuckoo service ({self.base_url}) failed to query report {self.timeout}s while trying to query the report for task %s" % task_id)
+                msg = f"Failed to query report (type={fmt}). Status code: {resp.status_code}. There is a strong chance that this is due to the large size of file attempted to retrieve via API request."
+                self.log.error(msg)
+                if self.report_count > 0:
+                    self.file_res.add_section(ResultSection(title_text="Reporting Errors", body=msg))
+                    return None
+                raise Exception(msg)
+
+        self.report_count += 1
         try:
             # Setting the pointer in the temp file
             temp_report.seek(0)
