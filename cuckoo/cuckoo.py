@@ -405,6 +405,8 @@ class Cuckoo(ServiceBase):
             request.max_file_size = self.config['max_file_size']
             max_extracted_size = request.max_file_size
 
+            self.report_count += 1
+
             # Retrieve artifacts from analysis
             if generate_report is True:
                 self.log.debug("Generating cuckoo report tar.gz.")
@@ -591,6 +593,8 @@ class Cuckoo(ServiceBase):
                             "Unable to add extra file(s) for task %s. Exception: %s" %
                             (self.cuckoo_task.id, e)
                         )
+
+                self.report_count += 1
 
                 if len(exports_available) > 0 and kwargs.get("package", "") == "dll_multi":
                     max_dll_exports = self.config["max_dll_exports_exec"]
@@ -866,7 +870,6 @@ class Cuckoo(ServiceBase):
                     return None
                 raise Exception(msg)
 
-        self.report_count += 1
         try:
             # Setting the pointer in the temp file
             temp_report.seek(0)

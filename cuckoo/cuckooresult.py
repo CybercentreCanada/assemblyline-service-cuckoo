@@ -149,7 +149,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
     copy_of_process_tree = process_tree[:]
     # Removing skipped processes
     for process in copy_of_process_tree:
-        if process["process_name"] in skipped_processes and process["children"] == []:
+        if process["process_name"] in skipped_processes and process["children"] == [] and process in process_tree:
             process_tree.remove(process)
     # Cleaning keys, value pairs
     for process in process_tree:
@@ -216,7 +216,7 @@ def remove_process_keys(process: dict, process_map: dict) -> dict:
         key = next(iter(sig_json))
         signatures[key] = sig_json[key]
     process["signatures"] = signatures
-    children = process["children"]
+    children = process.get("children", [])
     if len(children) > 0:
         for child in children:
             child = remove_process_keys(child, process_map)
@@ -251,14 +251,14 @@ def _insert_child(parent: dict, potential_child: dict) -> bool:
     :param potential_child: str
     :return: bool
     """
-    children = parent["children"]
-    if parent["process_pid"] == potential_child["process_pid"]:
-        parent["children"].extend(potential_child["children"])
+    children = parent.get("children", [])
+    if parent.get("process_pid") and parent["process_pid"] == potential_child.get("process_pid"):
+        parent["children"].extend(potential_child.get("children", []))
         return True
     if len(children) > 0:
         for potential_twin in children:
-            if potential_twin["process_pid"] == potential_child["process_pid"]:
-                potential_twin["children"].extend(potential_child["children"])
+            if potential_twin.get("process_pid") and potential_twin["process_pid"] == potential_child.get("process_pid"):
+                potential_twin["children"].extend(potential_child.get("children", []))
                 return True
             else:
                 if _insert_child(potential_twin, potential_child):
@@ -273,18 +273,20 @@ def _flatten_process_tree(process: dict, processes: list) -> list:
     :param processes: list
     :return: list
     """
-    children = process["children"]
+    children = process.get("children", [])
     if len(children) > 0:
         for child in children:
             l = _flatten_process_tree(child, processes)
-            if not l:
+            if not l and child in children:
                 children.remove(child)
     else:
-        children = process.pop("children")
-        processes.append(process)
-        return children
+        if "children" in process:
+            children = process.pop("children")
+            processes.append(process)
+            return children
 
-    process.pop("children")
+    if "children" in process:
+        process.pop("children")
     processes.append(process)
     return processes
 
@@ -302,7 +304,7 @@ def _merge_process_trees(cuckoo_tree: list, sysmon_tree: list, sysmon_process_in
         if "(Sysmon)" not in process["process_name"] and not sysmon_process_in_cuckoo_tree:
             process["process_name"] += " (Cuckoo)"
             sysmon_process_in_cuckoo_tree = False
-        elif sysmon_process_in_cuckoo_tree:
+        elif "(Sysmon)" not in process["process_name"] and sysmon_process_in_cuckoo_tree:
             process["process_name"] += " (Sysmon)"
 
         for sysmon_proc in sysmon_tree:
@@ -314,7 +316,7 @@ def _merge_process_trees(cuckoo_tree: list, sysmon_tree: list, sysmon_process_in
                 cuckoo_tree.append(sysmon_proc)
 
         cuckoo_proc_pid = process["process_pid"]
-        cuckoo_children = process["children"]
+        cuckoo_children = process.get("children", [])
         sysmon_procs_with_same_pid = [item for item in sysmon_tree if item["process_pid"] == cuckoo_proc_pid]
         if len(sysmon_procs_with_same_pid) > 0:
             sysmon_proc_with_same_pid = sysmon_procs_with_same_pid[0]
@@ -950,7 +952,7 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
     process_tree = []
     for event in trimmed_sysmon:
         event_data = event["EventData"]
-        process = {}
+        process = {"signatures": {}}
         child_process = process.copy()
         safelisted = False
         timestamp = None
@@ -987,13 +989,13 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
             elif name == "UtcTime":
                 timestamp = text
 
-        if process and child_process and not safelisted:
+        if process.get("process_pid") and child_process.get("process_pid") and not safelisted:
             process["timestamp"] = child_process["timestamp"] = timestamp
             child_process["children"] = []
             process["children"] = [child_process]
             process_tree.append(process)
         # Check if rundll32.exe is being run
-        elif process and child_process and safelisted:
+        elif process.get("process_pid") and child_process.get("process_pid")and safelisted:
             if process.get("command_line") and \
                     "bin\\inject-x86.exe --app C:\\windows\System32\\rundll32.exe" in \
                     process["command_line"]:
@@ -1007,7 +1009,7 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
             if process == other_process:
                 continue
             child_exists = _insert_child(process, other_process)
-            if child_exists:
+            if child_exists and other_process in process_tree:
                 process_tree.remove(other_process)
 
     processes = []
