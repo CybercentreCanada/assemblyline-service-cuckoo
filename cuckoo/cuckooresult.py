@@ -13,7 +13,7 @@ from pprint import pprint
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, Heuristic
-from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped
+from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped, slist_check_app, slist_check_cmd
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 
 log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
@@ -141,15 +141,13 @@ def process_debug(debug, al_result):
 def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sysmon_tree: list, sysmon_procs: list) -> list:
     log.debug("Processing behavior results.")
     events = []  # This will contain all network events
-    # Skip these processes if they have no children (which would indicate that they were injected into) or calls
-    skipped_processes = ["lsass.exe"]
 
     # Make a Process Tree Section
     process_tree = behaviour["processtree"]
     copy_of_process_tree = process_tree[:]
     # Removing skipped processes
     for process in copy_of_process_tree:
-        if process["process_name"] in skipped_processes and process["children"] == [] and process in process_tree:
+        if slist_check_app(process["process_name"]) and process["children"] == [] and process in process_tree:
             process_tree.remove(process)
     # Cleaning keys, value pairs
     for process in process_tree:
@@ -180,7 +178,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
         pids_from_sysmon_we_need = list(set(sysmon_pids) - set(cuckoo_pids))
         processes = processes + [i for i in sysmon_procs if i["pid"] in pids_from_sysmon_we_need]
     for process in processes:
-        if process["process_name"] in skipped_processes and process["calls"] == []:
+        if slist_check_app(process["process_name"]) and process["calls"] == []:
             continue  # on to the next one
         process_struct = {
             "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
@@ -252,12 +250,12 @@ def _insert_child(parent: dict, potential_child: dict) -> bool:
     :return: bool
     """
     children = parent.get("children", [])
-    if parent.get("process_pid") and parent["process_pid"] == potential_child.get("process_pid"):
-        parent["children"].extend(potential_child.get("children", []))
+    if parent.get("process_pid") and parent["process_pid"] == potential_child.get("process_pid") and "children" in parent:
+        parent["children"].extend(potential_child["children"])
         return True
     if len(children) > 0:
         for potential_twin in children:
-            if potential_twin.get("process_pid") and potential_twin["process_pid"] == potential_child.get("process_pid"):
+            if potential_twin.get("process_pid") and potential_twin["process_pid"] == potential_child["process_pid"]:
                 potential_twin["children"].extend(potential_child.get("children", []))
                 return True
             else:
@@ -936,19 +934,6 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
     # Cut it out!
     index = _get_trimming_index(sysmon)
     trimmed_sysmon = sysmon[index:]
-    safelisted_parent_images = [
-        re.compile('C:\\\\tmp.+\\\\bin\\\\.+'),
-        re.compile('C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe'),
-        re.compile('C:\\\\WindowsAzure\\\\GuestAgent.*\\\\GuestAgent\\\\WindowsAzureGuestAgent\.exe')
-    ]
-    safelisted_parent_commandlines = [
-        re.compile('C:\\\\Python27\\\\pythonw\.exe C:/tmp.+/analyzer\.py'),
-    ]
-    safelisted_child_commandlines = [
-        re.compile('"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe" -Embedding'),
-        re.compile('"C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\.exe'),
-        re.compile('"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MOMPerfSnapshotHelper.exe\\" -Embedding')
-    ]
     process_tree = []
     for event in trimmed_sysmon:
         event_data = event["EventData"]
@@ -964,8 +949,7 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
             if name == "OriginalFileName":
                 child_process["process_name"] = text
             elif name == "CommandLine":
-                if any(safe_cmdline.match(text) for safe_cmdline in
-                       safelisted_child_commandlines):
+                if slist_check_cmd(text):
                     safelisted = True
                 child_process["command_line"] = text
             elif name == "ProcessId":
@@ -973,15 +957,13 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
 
             # Parent Process
             elif name == "ParentImage":
-                if any(safe_image.match(text) for safe_image in
-                       safelisted_parent_images):
+                if slist_check_app(text):
                     safelisted = True
                 process["process_name"] = text
             elif name == "ParentProcessId":
                 process["process_pid"] = int(text)
             elif name == "ParentCommandLine":
-                if any(safe_cmdline.match(text) for safe_cmdline in
-                       safelisted_parent_commandlines):
+                if slist_check_cmd(text):
                     safelisted = True
                 process["command_line"] = text
 
@@ -994,12 +976,17 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
             child_process["children"] = []
             process["children"] = [child_process]
             process_tree.append(process)
-        # Check if rundll32.exe is being run
-        elif process.get("process_pid") and child_process.get("process_pid")and safelisted:
+        elif process.get("process_pid") and child_process.get("process_pid") and safelisted:
+            # Check if rundll32.exe is being run
             if process.get("command_line") and \
                     "bin\\inject-x86.exe --app C:\\windows\System32\\rundll32.exe" in \
                     process["command_line"]:
                 process["timestamp"] = child_process["timestamp"] = timestamp
+                child_process["children"] = []
+                process_tree.append(child_process)
+            # When this command is used by Cuckoo, we want the child process added to the tree
+            elif process.get("command_line") and 'bin\\inject-x86.exe' in process["command_line"]:
+                child_process["timestamp"] = timestamp
                 child_process["children"] = []
                 process_tree.append(child_process)
 
@@ -1107,7 +1094,7 @@ def get_process_map(processes: dict = None) -> dict:
         "CryptDecrypt": ["buffer"],  # Used for certain malware files that use configuration files
     }
     for process in processes:
-        if process["process_name"] == "lsass.exe":
+        if slist_check_app(process["process_name"]):
             continue
         network_calls = []
         decrypted_buffers = []
