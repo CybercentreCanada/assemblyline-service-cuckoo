@@ -3,13 +3,25 @@
 import re
 
 SAFELIST_APPLICATIONS = {
-    'Acrobat Reader': r'c:\program files\adobe\reader 10.0\reader\acrord32.exe',
-    'DrWatson': r'c:\progra~1\common~1\micros~1\dw\dw20.exe',
-    'Excel': r'c:\program files\microsoft office\office12\excel.exe',
-    'Internet Explorer': r'c:\program files\internet explorer\iexplore.exe',
-    'PowerPoint': r'c:\program files\microsoft office\office11\powerpnt.exe',
-    'Windows Explorer': r'c:\windows\explorer.exe',
-    'Word': r'c:\program files\microsoft office\office12\winword.exe',
+    'Cuckoo1': 'C:\\\\tmp.+\\\\bin\\\\.+',
+    'Azure1': 'C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe',
+    'Azure2': 'C:\\\\WindowsAzure\\\\GuestAgent.*\\\\GuestAgent\\\\WindowsAzureGuestAgent\.exe',
+    'Sysmon1': 'C:\\\\Windows\\\\System32\\\\csrss\.exe',
+    'Sysmon2': 'dllhost.exe',
+    'Cuckoo2': 'lsass\.exe',
+    'Sysmon3': 'C:\\\\Windows\\\\System32\\\\SearchIndexer\.exe'
+}
+
+SAFELIST_COMMANDS = {
+    'Cuckoo1': 'C:\\\\Python27\\\\pythonw\.exe C:/tmp.+/analyzer\.py',
+    'Cuckoo2': 'C:\\\\windows\\\\system32\\\\lsass\.exe',
+    'Sysmon1': 'C:\\\\windows\\\\system32\\\\services\.exe',
+    'Sysmon2': 'C:\\\\windows\\\\system32\\\\sppsvc\.exe',
+    'Azure1': '"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe" -Embedding',
+    'Flash1': 'C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\.exe',
+    'Azure2': '"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MOMPerfSnapshotHelper.exe\\" -Embedding',
+    'Sysmon3': 'C:\\\\windows\\\\system32\\\\svchost\.exe -k DcomLaunch',
+    'Sysmon4': 'C:\\\\windows\\\\system32\\\\SearchIndexer\.exe \/Embedding',
 }
 
 # These domains may be present due to benign activity on the host
@@ -358,6 +370,10 @@ def match(data, sigs):
 
 def slist_check_app(application):
     return match(application, SAFELIST_APPLICATIONS)
+
+
+def slist_check_cmd(command):
+    return match(command, SAFELIST_COMMANDS)
 
 
 def slist_check_domain(domain):
