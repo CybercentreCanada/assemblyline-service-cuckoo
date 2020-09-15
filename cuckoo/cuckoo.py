@@ -23,6 +23,7 @@ from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
+from assemblyline.common.codec import encode_file
 
 from cuckoo.cuckooresult import generate_al_result
 from cuckoo.safelist import slist_check_hash, slist_check_dropped
@@ -585,8 +586,10 @@ class Cuckoo(ServiceBase):
                                   x.name.startswith("sysmon") and x.isfile()]:
                             sysmon_file_path = os.path.join(self.working_directory, f)
                             tar_obj.extract(f, path=self.working_directory)
-                            self.log.debug(f"Adding extracted file {f}")
-                            self.request.add_extracted(sysmon_file_path, f, "Sysmon Logging Captured")
+                            # Cart Encoding the Sysmon logs
+                            target_path, name = encode_file(sysmon_file_path, f, metadata={"al": {"type": "metadata/sysmon"}})
+                            self.log.debug(f"Adding extracted file {name}")
+                            self.request.add_extracted(target_path, name, "Sysmon Logging Captured")
                         tar_obj.close()
                     except Exception as e:
                         self.log.exception(
