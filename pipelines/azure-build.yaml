@@ -24,6 +24,7 @@ stages:
     - script: |
         set -xv  # Echo commands before they are run
         export TAG=${BUILD_SOURCEBRANCH#"refs/tags/v"}
-        docker build --build-arg version=$TAG -t cccs/assemblyline-service-cuckoo:$TAG -t cccs/assemblyline-service-cuckoo:latest .
+        if [[ "$TAG" == *stable* ]]; then export BUILD_TYPE=stable; else export BUILD_TYPE=latest; fi
+        docker build --build-arg version=$TAG -t cccs/assemblyline-service-cuckoo:$TAG -t cccs/assemblyline-service-cuckoo:$BUILD_TYPE .
         docker push cccs/assemblyline-service-cuckoo
       displayName: Deploy to Docker Hub
