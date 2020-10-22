@@ -297,6 +297,9 @@ def _merge_process_trees(cuckoo_tree: list, sysmon_tree: list, sysmon_process_in
     :param sysmon_process_in_cuckoo_tree: bool
     :return: list
     """
+    if not cuckoo_tree:
+        return sysmon_tree
+
     for process in cuckoo_tree:
         # Change each name so it is apparent where the process came from
         if "(Sysmon)" not in process["process_name"] and not sysmon_process_in_cuckoo_tree:
@@ -667,15 +670,15 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             dest_country = None
 
             # Only find the location of the IP if it is not fake or local
-            if dst not in dns_servers and slist_check_ip(dst) is None and ip_address(dst) not in inetsim_network:
-                # noinspection PyBroadException
-                try:
-                    dest_country = DbIpCity.get(dst, api_key='free').country
-                except Exception as e:
-                    log.warning(f"IP {dst} causes the ip2geotools package to crash: {str(e)}")
-                    pass
-            elif ip_address(dst) in inetsim_network:
-                dest_country = "INetSim"  # if INetSim-resolved IP, set country to INetSim
+            # if dst not in dns_servers and slist_check_ip(dst) is None and ip_address(dst) not in inetsim_network:
+            #     # noinspection PyBroadException
+            #     try:
+            #         dest_country = DbIpCity.get(dst, api_key='free').country
+            #     except Exception as e:
+            #         log.warning(f"IP {dst} causes the ip2geotools package to crash: {str(e)}")
+            #         pass
+            # elif ip_address(dst) in inetsim_network:
+            # dest_country = "INetSim"  # if INetSim-resolved IP, set country to INetSim
             network_flow = {
                 "timestamp": datetime.datetime.fromtimestamp(network_call["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                 "protocol": protocol,
