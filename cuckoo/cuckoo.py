@@ -395,11 +395,11 @@ class Cuckoo(ServiceBase):
                         self.cuckoo_delete_task(self.cuckoo_task.id)
                     raise
                 except Exception as e:
-                    self.log.error("Error generating AL report: %s" % e)
+                    self.log.error("Error generating AL report: %s" % repr(e))
                     if self.cuckoo_task and self.cuckoo_task.id is not None:
                         self.cuckoo_delete_task(self.cuckoo_task.id)
                     raise CuckooProcessingException(
-                        "Unable to generate cuckoo al report for task due to: %s" % safe_str(e)
+                        "Unable to generate cuckoo al report for task due to: %s", repr(e)
                     )
 
             # Get the max size for extract files, used a few times after this
