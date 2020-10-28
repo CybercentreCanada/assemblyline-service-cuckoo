@@ -351,7 +351,7 @@ class Cuckoo(ServiceBase):
         else:
             task_options.append("screenshots=1")
 
-        if not simulate_user:
+        if simulate_user not in [True, 'True']:  # Not sure why sometimes this specific param is a string
             task_options.append("human=0")
 
         kwargs['options'] = ','.join(task_options)
@@ -992,7 +992,7 @@ class Cuckoo(ServiceBase):
             raise Exception(f"Unable to reach the Cuckoo nest ({self.base_url}) while trying to query machines. Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside of Assemblyline first before running the service.")
         if resp.status_code != 200:
             self.log.error("Failed to query machines: %s" % resp.status_code)
-            raise CuckooVMBusyException()
+            raise CuckooVMBusyException("Failed to query machines: %s" % resp.status_code)
         resp_dict = dict(resp.json())
         return resp_dict
 
@@ -1095,7 +1095,8 @@ class Cuckoo(ServiceBase):
                 break
 
         if not machine_name_exists:
-            raise Exception
+            self.log.error("Machine %s does not exist in %s", machine_name, self.machines)
+            return
 
         manager = self.cuckoo_task.report["info"]["machine"]["manager"]
         body = {

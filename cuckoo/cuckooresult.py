@@ -169,6 +169,8 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
             cuckoo_pids.append(item["pid"])
         sysmon_pids = []
         for item in sysmon_procs:
+            if not item.get("process_pid"):
+                continue
             sysmon_pids.append(item["process_pid"])
             item["process_path"] = item.pop("process_name")
             item["process_name"] = item["process_path"]
@@ -255,7 +257,7 @@ def _insert_child(parent: dict, potential_child: dict) -> bool:
         return True
     if len(children) > 0:
         for potential_twin in children:
-            if potential_twin.get("process_pid") and potential_twin["process_pid"] == potential_child["process_pid"]:
+            if potential_twin.get("process_pid") and potential_twin["process_pid"] == potential_child.get("process_pid"):
                 potential_twin["children"].extend(potential_child.get("children", []))
                 return True
             else:
@@ -309,16 +311,16 @@ def _merge_process_trees(cuckoo_tree: list, sysmon_tree: list, sysmon_process_in
             process["process_name"] += " (Sysmon)"
 
         for sysmon_proc in sysmon_tree:
-            sysmon_proc_pid = sysmon_proc["process_pid"]
+            sysmon_proc_pid = sysmon_proc.get("process_pid")
             # Check if sysmon process is in cuckoo tree
-            if sysmon_proc_pid not in [item["process_pid"] for item in cuckoo_tree]:
+            if sysmon_proc_pid not in [item.get("process_pid") for item in cuckoo_tree]:
                 # Add to cuckoo tree
                 sysmon_proc["process_name"] += " (Sysmon)"
                 cuckoo_tree.append(sysmon_proc)
 
-        cuckoo_proc_pid = process["process_pid"]
+        cuckoo_proc_pid = process.get("process_pid")
         cuckoo_children = process.get("children", [])
-        sysmon_procs_with_same_pid = [item for item in sysmon_tree if item["process_pid"] == cuckoo_proc_pid]
+        sysmon_procs_with_same_pid = [item for item in sysmon_tree if item.get("process_pid") == cuckoo_proc_pid]
         if len(sysmon_procs_with_same_pid) > 0:
             sysmon_proc_with_same_pid = sysmon_procs_with_same_pid[0]
         else:
