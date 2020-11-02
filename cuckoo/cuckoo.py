@@ -42,6 +42,11 @@ CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
 CUCKOO_API_QUERY_HOST_STATUS = "cuckoo/status"
 CUCKOO_POLL_DELAY = 5
 GUEST_VM_START_TIMEOUT = 75
+WINDOWS_7_IMAGE_TAG = "win7"
+WINDOWS_10_IMAGE_TAG = "win10"
+UBUNTU_1804_IMAGE_TAG = "ub1804"
+ALLOWED_IMAGES = [WINDOWS_7_IMAGE_TAG, WINDOWS_10_IMAGE_TAG, UBUNTU_1804_IMAGE_TAG]
+LINUX_FILES = ["executable/linux/elf64"]
 
 SUPPORTED_EXTENSIONS = [
     "cpl",
@@ -269,6 +274,41 @@ class Cuckoo(ServiceBase):
         if file_ext and self.request.sha256:
             self.file_name = original_ext[0] + file_ext
 
+        self.machines = self.cuckoo_query_machines()
+        guest_image = request.get_param("guest_image")
+
+        # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
+        if self.request.file_type in LINUX_FILES:
+            guest_image = UBUNTU_1804_IMAGE_TAG
+
+        # Only submit sample to specific VM type if VM type is available
+        requested_image_exists = False
+        image_options = set()
+        for machine in self.machines['machines']:
+            if guest_image in machine["name"]:
+                requested_image_exists = True
+                break
+            else:
+                for image_tag in ALLOWED_IMAGES:
+                    if image_tag in machine["name"]:
+                        image_options.add(image_tag)
+        if not requested_image_exists:
+            self.log.info(
+                "Cuckoo is exiting because the requested image '%s' is not available in %s" %
+                (guest_image, image_options)
+            )
+            # BAIL! Requested guest image does not exist
+            # Return Result Section with info about available images
+            no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
+            no_image_sec.body = f"The requested image of '{guest_image}' is currently unavailable. " \
+                                f"The current image options for this Cuckoo deployment " \
+                                f"include {image_options}. Please note that files identified as one " \
+                                f"of {LINUX_FILES} are only submitted to {UBUNTU_1804_IMAGE_TAG} images."
+            self.file_res.add_section(no_image_sec)
+            return
+
+        kwargs["tags"] = guest_image
+
         # Parse user args
         kwargs['timeout'] = request.get_param("analysis_timeout")
         generate_report = request.get_param("generate_report")
@@ -284,7 +324,6 @@ class Cuckoo(ServiceBase):
         take_screenshots = request.get_param("take_screenshots")
         sysmon_enabled = request.get_param("sysmon_enabled")
         simulate_user = request.get_param("simulate_user")
-        guest_image = request.get_param("guest_image")
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
@@ -326,10 +365,6 @@ class Cuckoo(ServiceBase):
                     kwargs["package"] = "dll_multi"
                     self.log.debug(f"Trying to run DLL with following function(s): {'|'.join(exports_available[:max_dll_exports])}")
 
-        # Currently these are the only supported images
-        if guest_image in ["win7", "win10", "ub1804"]:
-            kwargs["tags"] = guest_image
-
         if not sysmon_enabled:
             task_options.append("sysmon=0")
 
@@ -362,7 +397,6 @@ class Cuckoo(ServiceBase):
                                       **kwargs)
 
         try:
-            self.machines = self.cuckoo_query_machines()
             self.cuckoo_submit(file_content)
             if self.cuckoo_task.report:
 

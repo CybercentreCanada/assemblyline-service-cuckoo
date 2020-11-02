@@ -2,7 +2,7 @@ name: Cuckoo
 version: $SERVICE_TAG
 description: Provides dynamic malware analysis through sandboxing.
 
-accepts: (archive|executable/(windows|linux)|java|audiovisual|meta)/.*|unknown|document/installer/windows|document/office/excel|document/office/ole|document/office/powerpoint|document/office/rtf|document/office/unknown|document/office/word|document/pdf|document/email|code/javascript|code/jscript|code/python|code/vbs|code/wsf|code/html|code/ps1|code/batch|code/hta
+accepts: (archive|executable/(windows|linux)|java|audiovisual|meta)/.*|document/(installer/windows|office/(excel|ole|powerpoint|rtf|unknown|word)|pdf|email)|code/(javascript|jscript|python|vbs|wsf|html|ps1|batch|hta)
 rejects: empty|metadata/.*|archive/zip
 
 stage: CORE
@@ -27,7 +27,7 @@ config:
   recursion_limit: 10000
 
   # INetSim specifications
-  random_ip_range: 11.0.0.0/8
+  random_ip_range: 192.0.2.0/24
 
   # Cuckoo Service specifications
   dedup_similar_percent: 40

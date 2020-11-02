@@ -21,6 +21,7 @@ IP_REGEX = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
 DOMAIN_REGEX = r'(?![\d.]+)((xn--|_)?(xn--|_)?([a-z0-9A-Z]{2,24}\.))*[a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*'
 URL_REGEX = r"((\w+://)[-a-zA-Z0-9:@;?&=/%+.*!'(),$_{}^~\[\]`#|]+)"
 MD5_REGEX = r'([a-fA-F\d]{32})'
+UNIQUE_IP_LIMIT = 100
 
 
 # noinspection PyBroadException
@@ -663,6 +664,14 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             network_calls_made_to_unique_ips = []
             # Collapsing network calls into calls made to unique IP+port combos
             for network_call in network_calls:
+                if len(network_calls_made_to_unique_ips) >= 100:
+                    # BAIL! Too many to put in a table
+                    too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
+                    too_many_unique_ips_sec.body = f"The number of TCP calls displayed has been capped " \
+                                                   f"at {UNIQUE_IP_LIMIT}. The full results can be found " \
+                                                   f"in cuckoo_traffic.pcap"
+                    netflows_sec.add_subsection(too_many_unique_ips_sec)
+                    break
                 dst_port_pair = json.dumps({network_call["dst"]: network_call["dport"]})
                 if dst_port_pair not in [json.dumps({x["dst"]: x["dport"]}) for x in network_calls_made_to_unique_ips]:
                     network_calls_made_to_unique_ips.append(network_call)
@@ -670,7 +679,12 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
         for network_call in network_calls:
             dst = network_call["dst"]
             dest_country = None
-
+            src = network_call["src"]
+            src_port = None
+            if slist_check_ip(src):
+                src = None
+            if src:
+                src_port = network_call["sport"]
             # Only find the location of the IP if it is not fake or local
             # if dst not in dns_servers and slist_check_ip(dst) is None and ip_address(dst) not in inetsim_network:
             #     # noinspection PyBroadException
@@ -684,6 +698,8 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             network_flow = {
                 "timestamp": datetime.datetime.fromtimestamp(network_call["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                 "protocol": protocol,
+                "src_ip": src,
+                "src_port": src_port,
                 "dom": None,
                 "dest_ip": dst,
                 "dest_port": network_call["dport"],
@@ -708,13 +724,14 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
     # and remove items from the real one at the same time
     copy_of_network_table = network_flows_table[:]
     for network_flow in copy_of_network_table:
+        src = network_flow["src_ip"]
         dom = network_flow["dom"]
         dest_ip = network_flow["dest_ip"]
         # if domain is safelisted
         if dom and slist_check_domain(dom):
             network_flows_table.remove(network_flow)
-        # if destination ip is safelisted or is the dns server
-        elif slist_check_ip(dest_ip) or dest_ip in dns_servers:
+        # if no source ip and destination ip is safelisted or is the dns server
+        elif (not src and slist_check_ip(dest_ip)) or dest_ip in dns_servers:
             network_flows_table.remove(network_flow)
         # if dest ip is noise
         elif dest_ip not in resolved_ips and ip_address(dest_ip) in inetsim_network:
@@ -746,12 +763,19 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             if domain is not None and not contains_safelisted_value(domain):  # and not is_ip(domain):
                 dns_res_sec.add_tag("network.dynamic.domain", domain)
 
-            ip = network_flow["dest_ip"]
-            if ip_address(ip) not in inetsim_network:
-                protocol_res_sec.add_tag("network.dynamic.ip", ip)
+            dest_ip = network_flow["dest_ip"]
+            if ip_address(dest_ip) not in inetsim_network:
+                protocol_res_sec.add_tag("network.dynamic.ip", dest_ip)
+
+            src_ip = network_flow["src_ip"]
+            if src_ip and ip_address(src_ip) not in inetsim_network:
+                protocol_res_sec.add_tag("network.dynamic.ip", src_ip)
 
             dest_port = network_flow["dest_port"]
             protocol_res_sec.add_tag("network.port", dest_port)
+            src_port = network_flow["src_port"]
+            if src_port:
+                protocol_res_sec.add_tag("network.port", src_port)
 
             # add a shallow copy of network flow to the events list
             events.append(network_flow.copy())
