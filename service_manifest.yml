@@ -38,15 +38,10 @@ config:
 
 submission_params:
   # Cuckoo analysis specifications
-  - default: 150
+  - default: 0
     name: analysis_timeout
     type: int
-    value: 150
-
-  - default: false
-    name: enforce_timeout
-    type: bool
-    value: false
+    value: 0
 
   - default: true
     name: generate_report
@@ -113,8 +108,8 @@ submission_params:
   # can be either win7, win10, ub1804. If none, it's whichever victim VM is the oldest!
   - default: "win7"
     name: guest_image
-    type: str
-    value: "win7"
+    type: list
+    value: ["win7","win10","ub1804"]
 
 # TODO: implement routing options
 #  - default: inetsim

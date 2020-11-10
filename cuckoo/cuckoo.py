@@ -47,6 +47,7 @@ WINDOWS_10_IMAGE_TAG = "win10"
 UBUNTU_1804_IMAGE_TAG = "ub1804"
 ALLOWED_IMAGES = [WINDOWS_7_IMAGE_TAG, WINDOWS_10_IMAGE_TAG, UBUNTU_1804_IMAGE_TAG]
 LINUX_FILES = ["executable/linux/elf64"]
+ANALYSIS_TIMEOUT = 150
 
 SUPPORTED_EXTENSIONS = [
     "cpl",
@@ -310,14 +311,19 @@ class Cuckoo(ServiceBase):
         kwargs["tags"] = guest_image
 
         # Parse user args
-        kwargs['timeout'] = request.get_param("analysis_timeout")
+        timeout = request.get_param("analysis_timeout")
+        # If user specifies the timeout, then enforce it
+        if timeout:
+            kwargs['enforce_timeout'] = True
+            kwargs['timeout'] = timeout
+        else:
+            kwargs['enforce_timeout'] = False
+            kwargs['timeout'] = ANALYSIS_TIMEOUT
         generate_report = request.get_param("generate_report")
-        dump_processes = request.get_param("dump_processes")
         dll_function = request.get_param("dll_function")
         arguments = request.get_param("arguments")
         # dump_memory = request.get_param("dump_memory")  # TODO: cloud Cuckoo implementation does not have dump_memory functionality
         no_monitor = request.get_param("no_monitor")
-        kwargs['enforce_timeout'] = request.get_param("enforce_timeout")
         custom_options = request.get_param("custom_options")
         kwargs["clock"] = request.get_param("clock")
         force_sleepskip = request.get_param("force_sleepskip")
@@ -327,10 +333,6 @@ class Cuckoo(ServiceBase):
 
         if generate_report is True:
             self.log.debug("Setting generate_report flag.")
-
-        if dump_processes in [True, 'True']:  # Not sure why sometimes this specific param is a string
-            self.log.debug("Setting procmemdump flag in task options")
-            task_options.append('procmemdump=yes')
 
         # Do DLL specific stuff
         if dll_function:
@@ -500,40 +502,6 @@ class Cuckoo(ServiceBase):
                         console_output_file_path = os.path.join("/tmp", "console_output.txt")
                         if os.path.exists(console_output_file_path):
                             self.request.add_supplementary(console_output_file_path, "console_output.txt", "Console Output Observed")
-
-                        # process memory dump related
-                        memdesc_lookup = {
-                            "py": "IDA script to load process memory",
-                            "dmp": "Process Memory Dump",
-                            "exe_": "EXE Extracted from Memory Dump"
-                        }
-                        for f in [x.name for x in tar_obj.getmembers() if
-                                  x.name.startswith("memory") and x.isfile()]:
-                            mem_file_path = os.path.join(self.working_directory, f)
-                            tar_obj.extract(f, path=self.working_directory)
-                            # Lookup a more descriptive name, depending the filename suffix
-                            filename_suffix = f.split(".")[-1]
-                            memdesc = memdesc_lookup.get(filename_suffix, "Process Memory Artifact")
-                            # If PID is in file name, replace it with process name
-                            for pid in process_map:
-                                if str(pid) in f:
-                                    f = f.replace(str(pid), process_map[pid]["name"])
-                            if filename_suffix == "py":
-                                self.log.debug(f"Adding supplementary file {f}")
-                                self.request.add_supplementary(mem_file_path, f, memdesc)
-                            else:
-                                mem_filesize = os.stat(mem_file_path).st_size
-                                try:
-                                    self.log.debug(f"Adding extracted file {f}")
-                                    self.request.add_extracted(mem_file_path, f, memdesc)
-                                except MaxFileSizeExceeded:
-                                    self.file_res.add_section(ResultSection(
-                                        title_text="Extracted file too large to add",
-                                        body="Extracted file %s is %d bytes, which is larger than the maximum size "
-                                             "allowed for extracted files (%d). You can still access this file "
-                                             "by downloading the 'cuckoo_report.tar.gz' supplementary file" %
-                                             (f, mem_filesize, max_extracted_size)
-                                    ))
 
                         # HollowsHunter section
                         hollowshunter_sec = ResultSection(title_text='HollowsHunter')
