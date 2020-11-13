@@ -589,7 +589,7 @@ class Cuckoo(ServiceBase):
                             sysmon_file_path = os.path.join(self.working_directory, f)
                             tar_obj.extract(f, path=self.working_directory)
                             # Cart Encoding the Sysmon logs
-                            target_path, name = encode_file(sysmon_file_path, f, metadata={"al": {"type": "metadata/sysmon"}})
+                            target_path, name = encode_file(sysmon_file_path, f, metadata={'al': {'type': 'metadata/sysmon'}})
                             self.log.debug(f"Adding extracted file {name}")
                             self.request.add_extracted(target_path, name, "Sysmon Logging Captured")
                         tar_obj.close()

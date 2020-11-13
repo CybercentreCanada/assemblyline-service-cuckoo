@@ -48,11 +48,6 @@ submission_params:
     type: bool
     value: true
 
-  - default: false
-    name: dump_processes
-    type: bool
-    value: false
-
   - default: ""
     name: dll_function
     type: str
