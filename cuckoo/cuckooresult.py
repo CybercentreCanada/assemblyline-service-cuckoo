@@ -162,6 +162,16 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
         process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
         al_result.add_section(process_tree_section)
 
+    # Gathering apistats to determine if calls have been limited
+    apistats = behaviour["apistats"]
+    # Get the total number of api calls per pid
+    api_sums = {}
+    for pid in apistats:
+        api_sums[pid] = 0
+        process_apistats = apistats[pid]
+        for api_call in process_apistats:
+            api_sums[pid] += process_apistats[api_call]
+
     # Get information about processes to return as events
     processes = behaviour["processes"]
     if sysmon_procs:
@@ -180,18 +190,44 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
             item["first_seen"] = datetime.datetime.strptime(item.pop("timestamp"), "%Y-%m-%d %H:%M:%S.%f").timestamp()
         pids_from_sysmon_we_need = list(set(sysmon_pids) - set(cuckoo_pids))
         processes = processes + [i for i in sysmon_procs if i["pid"] in pids_from_sysmon_we_need]
+
+    limited_calls_section = ResultSection(title_text="Limited Process API Calls")
+    limited_calls_table = []
     for process in processes:
+        pid = str(process["pid"])
+
+        # if the number of calls made by process does not add up to the number recorded
+        # in apistats, then it is assumed that the api calls were limited
+        num_process_calls = len(process["calls"])
+        if num_process_calls > 0:
+            pid_api_sums = api_sums.get(pid, -1)
+            if pid_api_sums > num_process_calls:
+                limited_calls_table.append({
+                    "name": process["process_name"],
+                    "api_calls_made_in_detonation": pid_api_sums,
+                    "api_calls_included_in_report": num_process_calls
+                })
+
         if slist_check_app(process["process_name"]) and process["calls"] == []:
             continue  # on to the next one
         process_struct = {
             "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-            "process_name": process["process_name"] + " (" + str(process["pid"]) + ")",
+            "process_name": process["process_name"] + " (" + pid + ")",
             "image": process["process_path"] if process.get("process_path") else process["process_name"],
             "command_line": process["command_line"]
         }
 
         # add process to events list
         events.append(process_struct)
+    if len(limited_calls_table) > 0:
+        limited_calls_section.body = json.dumps(limited_calls_table)
+        limited_calls_section.body_format = BODY_FORMAT.TABLE
+        descr = f"For the sake of service processing, the number of the following " \
+                f"API calls has been reduced in the report.json. The cause of large volumes of specific API calls is " \
+                f"most likely related to the anti-sandbox technique known as API Hammering. For more information, look " \
+                f"to the api_hammering signature."
+        limited_calls_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
+        al_result.add_section(limited_calls_section)
 
     log.debug("Behavior processing completed.")
     return events

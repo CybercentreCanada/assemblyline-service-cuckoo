@@ -525,7 +525,8 @@ CUCKOO_SIGNATURES = {
   "network_http": "C2",
   "process_needed": "Suspicious Execution Chain",
   "winmgmts_process_create": "WMI",
-  "dll_load_uncommon_file_types": "Suspicious DLL"
+  "dll_load_uncommon_file_types": "Suspicious DLL",
+  "api_hammering": "Anti-sandbox"
 }
 
 CUCKOO_SIGNATURE_CATEGORIES = {
