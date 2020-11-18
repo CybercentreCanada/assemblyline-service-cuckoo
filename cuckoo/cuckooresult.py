@@ -204,7 +204,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
             if pid_api_sums > num_process_calls:
                 limited_calls_table.append({
                     "name": process["process_name"],
-                    "api_calls_made_in_detonation": pid_api_sums,
+                    "api_calls_made_during_detonation": pid_api_sums,
                     "api_calls_included_in_report": num_process_calls
                 })
 
