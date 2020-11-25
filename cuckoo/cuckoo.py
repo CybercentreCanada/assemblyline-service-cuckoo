@@ -215,7 +215,7 @@ class Cuckoo(ServiceBase):
         self.file_res = request.result
         file_content = request.file_contents
         self.cuckoo_task = None
-        self.file_name = os.path.basename(request.file_name)
+        self.file_name = os.path.basename(request.task.file_name)
 
         # Check the filename to see if it's mime encoded
         mime_re = re.compile(r"^=\?.*\?=$")
