@@ -46,7 +46,12 @@ WINDOWS_7_IMAGE_TAG = "win7"
 WINDOWS_10_IMAGE_TAG = "win10"
 UBUNTU_1804_IMAGE_TAG = "ub1804"
 ALLOWED_IMAGES = [WINDOWS_7_IMAGE_TAG, WINDOWS_10_IMAGE_TAG, UBUNTU_1804_IMAGE_TAG]
-LINUX_FILES = ["executable/linux/elf64", "executable/linux/elf32"]
+LINUX_FILES = [
+    "executable/linux/elf64",
+    "executable/linux/elf32",
+    "executable/linux/so64",
+    "executable/linux/so32"
+]
 ANALYSIS_TIMEOUT = 150
 
 SUPPORTED_EXTENSIONS = [
