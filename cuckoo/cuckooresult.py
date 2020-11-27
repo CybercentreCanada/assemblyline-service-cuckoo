@@ -163,7 +163,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
         al_result.add_section(process_tree_section)
 
     # Gathering apistats to determine if calls have been limited
-    apistats = behaviour["apistats"]
+    apistats = behaviour.get("apistats", [])
     # Get the total number of api calls per pid
     api_sums = {}
     for pid in apistats:
