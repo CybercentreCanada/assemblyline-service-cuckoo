@@ -187,7 +187,6 @@ class Cuckoo(ServiceBase):
         self.auth_header = None
         self.timeout = None
         self.max_report_size = None
-        self.report_count = 0
 
     def set_urls(self):
         self.base_url = "http://%s:%s" % (self.config['remote_host_ip'], self.config['remote_host_port'])
@@ -405,49 +404,6 @@ class Cuckoo(ServiceBase):
 
         try:
             self.cuckoo_submit(file_content)
-            if self.cuckoo_task.report:
-
-                try:
-                    machine_name = None
-                    report_info = self.cuckoo_task.report.get('info', {})
-                    machine = report_info.get('machine', {})
-
-                    if isinstance(machine, dict):
-                        machine_name = machine.get('name')
-
-                    if machine_name is None:
-                        self.log.warning('Unable to retrieve machine name from result.')
-                    else:
-                        self.report_machine_info(machine_name)
-                    self.log.debug("Generating AL Result from Cuckoo results..")
-                    process_map = generate_al_result(self.cuckoo_task.report,
-                                                 self.file_res,
-                                                 file_ext,
-                                                 self.config.get("random_ip_range"))
-                except RecoverableError as e:
-                    self.log.error("Recoverable error. Error message: %s" % e.message)
-                    if self.cuckoo_task and self.cuckoo_task.id is not None:
-                        self.cuckoo_delete_task(self.cuckoo_task.id)
-                    raise
-                except CuckooProcessingException:
-                    # Catching the CuckooProcessingException, attempting to delete the file, and then carrying on
-                    self.log.error("Processing error occurred generating AL report")
-                    if self.cuckoo_task and self.cuckoo_task.id is not None:
-                        self.cuckoo_delete_task(self.cuckoo_task.id)
-                    raise
-                except Exception as e:
-                    self.log.error("Error generating AL report: %s" % repr(e))
-                    if self.cuckoo_task and self.cuckoo_task.id is not None:
-                        self.cuckoo_delete_task(self.cuckoo_task.id)
-                    raise CuckooProcessingException(
-                        "Unable to generate cuckoo al report for task due to: %s", repr(e)
-                    )
-
-            # Get the max size for extract files, used a few times after this
-            request.max_file_size = self.config['max_file_size']
-            max_extracted_size = request.max_file_size
-
-            self.report_count += 1
 
             # Retrieve artifacts from analysis
             if generate_report is True:
@@ -471,6 +427,7 @@ class Cuckoo(ServiceBase):
 
                     # Attach report.json as a supplementary file. This is duplicating functionality
                     # a little bit, since this information is included in the JSON result section
+                    report_json_path = ""
                     try:
                         tar_obj = tarfile.open(tar_report_path)
                         if "reports/report.json" in tar_obj.getnames():
@@ -488,6 +445,55 @@ class Cuckoo(ServiceBase):
                             "Unable to add report.json for task %s. Exception: %s" %
                             (self.cuckoo_task.id, e)
                         )
+
+                    if report_json_path:
+                        try:
+                            # Setting environment recursion limit for large JSONs
+                            sys.setrecursionlimit(int(self.config['recursion_limit']))
+                            # Reading, decoding and converting to JSON
+                            self.cuckoo_task.report = json.loads(open(report_json_path, "rb").read().decode('utf-8'))
+                        except JSONDecodeError as e:
+                            self.log.exception(f"Failed to decode the json: {str(e)}")
+                            raise e
+                        except Exception:
+                            url = self.query_report_url % self.cuckoo_task.id + '/' + "all"
+                            raise Exception("Exception converting extracted cuckoo report into json from tar ball: "
+                                            "report url: %s, file_name: %s", url, self.file_name)
+                        try:
+                            machine_name = None
+                            report_info = self.cuckoo_task.report.get('info', {})
+                            machine = report_info.get('machine', {})
+
+                            if isinstance(machine, dict):
+                                machine_name = machine.get('name')
+
+                            if machine_name is None:
+                                self.log.warning('Unable to retrieve machine name from result.')
+                            else:
+                                self.report_machine_info(machine_name)
+                            self.log.debug("Generating AL Result from Cuckoo results..")
+                            process_map = generate_al_result(self.cuckoo_task.report,
+                                                             self.file_res,
+                                                             file_ext,
+                                                             self.config.get("random_ip_range"))
+                        except RecoverableError as e:
+                            self.log.error("Recoverable error. Error message: %s" % e.message)
+                            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                                self.cuckoo_delete_task(self.cuckoo_task.id)
+                            raise
+                        except CuckooProcessingException:
+                            # Catching the CuckooProcessingException, attempting to delete the file, and then carrying on
+                            self.log.error("Processing error occurred generating AL report")
+                            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                                self.cuckoo_delete_task(self.cuckoo_task.id)
+                            raise
+                        except Exception as e:
+                            self.log.error("Error generating AL report: %s" % repr(e))
+                            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                                self.cuckoo_delete_task(self.cuckoo_task.id)
+                            raise CuckooProcessingException(
+                                "Unable to generate cuckoo al report for task due to: %s", repr(e)
+                            )
 
                     # Check for any extra files in full report to add as extracted files
                     # special 'supplementary' directory
@@ -604,8 +610,6 @@ class Cuckoo(ServiceBase):
                             (self.cuckoo_task.id, e)
                         )
 
-                self.report_count += 1
-
                 if len(exports_available) > 0 and kwargs.get("package", "") == "dll_multi":
                     max_dll_exports = self.config["max_dll_exports_exec"]
                     dll_multi_section = ResultSection(
@@ -627,12 +631,7 @@ class Cuckoo(ServiceBase):
                 self.check_pcap(self.cuckoo_task.id)
 
         except Exception as e:
-            if self.report_count > 0:
-                # Hey at least we got something
-                self.file_res.add_section(ResultSection(title_text="Reporting Errors", body=e))
-            else:
-                # Send the exception off to ServiceBase
-                raise
+            raise Exception(e)
 
         # Delete and exit
         if self.cuckoo_task and self.cuckoo_task.id is not None:
@@ -792,7 +791,7 @@ class Cuckoo(ServiceBase):
             except Exception as e:
                 self.log.error(e)
                 return "service_container_disconnected"
-            if self.cuckoo_task.report and isinstance(self.cuckoo_task.report, dict):
+            if self.cuckoo_task.report:
                 return status
         else:
             self.log.debug("Waiting for task %d to finish. Current status: %s." % (self.cuckoo_task.id, status))
@@ -847,6 +846,10 @@ class Cuckoo(ServiceBase):
                 if int(resp.headers["Content-Length"]) > self.max_report_size:
                     # BAIL, TOO BIG and there is a strong chance it will crash the Docker container
                     resp.status_code = 413  # Request Entity Too Large
+                elif fmt == "json" and resp.status_code == 200:
+                    # We just want to confirm that the report.json has been created. We will extract it later
+                    # when we call for the tar ball
+                    pass
                 else:
                     for chunk in resp.iter_content(chunk_size=8192):
                         temp_report.write(chunk)
@@ -868,35 +871,18 @@ class Cuckoo(ServiceBase):
             elif resp.status_code == 413:
                 msg = f"Cuckoo report (type={fmt}) size is {int(resp.headers['Content-Length'])} which is bigger than the allowed size of {self.max_report_size}"
                 self.log.error(msg)
-                if self.report_count > 0:
-                    self.file_res.add_section(ResultSection(title_text="Reporting Errors", body=msg))
-                    return None
                 raise ReportSizeExceeded(msg)
             else:
                 msg = f"Failed to query report (type={fmt}). Status code: {resp.status_code}. There is a strong chance that this is due to the large size of file attempted to retrieve via API request."
                 self.log.error(msg)
-                if self.report_count > 0:
-                    self.file_res.add_section(ResultSection(title_text="Reporting Errors", body=msg))
-                    return None
                 raise Exception(msg)
 
         try:
-            # Setting the pointer in the temp file
-            temp_report.seek(0)
             if fmt == "json":
-                try:
-                    # Setting environment recursion limit for large JSONs
-                    sys.setrecursionlimit(int(self.config['recursion_limit']))
-                    # Reading, decoding and converting to JSON
-                    report_data = json.loads(temp_report.read().decode('utf-8'))
-                except JSONDecodeError as e:
-                    self.log.exception(f"Failed to decode the json: {str(e)}")
-                    raise e
-                except Exception:
-                    url = self.query_report_url % task_id + '/' + fmt
-                    raise Exception("Exception converting cuckoo report http response into json: "
-                                    "report url: %s, file_name: %s", url, self.file_name)
+                report_data = "exists"
             else:
+                # Setting the pointer in the temp file
+                temp_report.seek(0)
                 # Reading as bytes
                 report_data = temp_report.read()
         finally:
