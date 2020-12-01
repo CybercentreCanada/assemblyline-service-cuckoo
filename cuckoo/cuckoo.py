@@ -557,46 +557,29 @@ class Cuckoo(ServiceBase):
                             self.file_res.add_section(hollowshunter_sec)
 
                         # Extract buffers, screenshots and anything extracted
-                        extracted_buffers = [x.name for x in tar_obj.getmembers()
-                                             if x.name.startswith("buffer") and x.isfile()]
-                        for f in extracted_buffers:
-                            buffer_file_path = os.path.join(self.working_directory, f)
-                            tar_obj.extract(f, path=self.working_directory)
-                            self.log.debug(f"Adding extracted file {f}")
-                            self.request.add_extracted(buffer_file_path, f, "Extracted buffer")
-                        for f in [x.name for x in tar_obj.getmembers() if
-                                  x.name.startswith("extracted") and x.isfile()]:
-                            extracted_file_path = os.path.join(self.working_directory, f)
-                            tar_obj.extract(f, path=self.working_directory)
-                            self.log.debug(f"Adding extracted file {f}")
-                            self.request.add_extracted(extracted_file_path, f, "Cuckoo extracted file")
-                        # There is an api option for this: https://cuckoo.readthedocs.io/en/latest/usage/api/#tasks-shots
-                        for f in [x.name for x in tar_obj.getmembers() if
-                                  x.name.startswith("shots") and x.isfile()]:
-                            screenshot_file_path = os.path.join(self.working_directory, f)
-                            tar_obj.extract(f, path=self.working_directory)
-                            self.log.debug(f"Adding extracted file {f}")
-                            self.request.add_extracted(screenshot_file_path, f, "Screenshots from Cuckoo analysis")
-                        for f in [x.name for x in tar_obj.getmembers() if
-                                  x.name.startswith("polarproxy") and x.isfile()]:
-                            polarproxy_file_path = os.path.join(self.working_directory, f)
-                            tar_obj.extract(f, path=self.working_directory)
-                            self.log.debug(f"Adding extracted file {f}")
-                            self.request.add_extracted(polarproxy_file_path, f, "HTTPS .pcap from PolarProxy capture")
-                        for f in [x.name for x in tar_obj.getmembers() if
-                                  x.name.startswith("sum") and x.isfile()]:
-                            sum_file_path = os.path.join(self.working_directory, f)
-                            tar_obj.extract(f, path=self.working_directory)
-                            self.log.debug(f"Adding extracted file {f}")
-                            self.request.add_extracted(sum_file_path, f, "All traffic from TCPDUMP and PolarProxy")
-                        for f in [x.name for x in tar_obj.getmembers() if
-                                  x.name.startswith("sysmon") and x.isfile()]:
-                            sysmon_file_path = os.path.join(self.working_directory, f)
-                            tar_obj.extract(f, path=self.working_directory)
-                            # Cart Encoding the Sysmon logs
-                            target_path, name = encode_file(sysmon_file_path, f, metadata={'al': {'type': 'metadata/sysmon'}})
-                            self.log.debug(f"Adding extracted file {name}")
-                            self.request.add_extracted(target_path, name, "Sysmon Logging Captured")
+                        extracted_file_map = {
+                            "buffer": "Extracted buffer",
+                            "extracted": "Cuckoo extracted file",
+                            # There is an api option for this: https://cuckoo.readthedocs.io/en/latest/usage/api/#tasks-shots
+                            "shots": "Screenshots from Cuckoo analysis",
+                            "polarproxy": "HTTPS .pcap from PolarProxy capture",
+                            "sum": "All traffic from TCPDUMP and PolarProxy",
+                            "sysmon": "Sysmon Logging Captured"
+                        }
+                        # Get the max size for extract files, used a few times after this
+                        request.max_file_size = self.config['max_file_size']
+                        max_extracted_size = request.max_file_size
+                        tar_obj_members = [x.name for x in tar_obj.getmembers() if x.isfile()]
+                        for key, value in extracted_file_map.items():
+                            key_hits = [x for x in tar_obj_members if x.startswith(key)]
+                            for f in key_hits:
+                                destination_file_path = os.path.join(self.working_directory, f)
+                                tar_obj.extract(f, path=self.working_directory)
+                                if key == "sysmon":
+                                    destination_file_path, f = encode_file(
+                                        destination_file_path, f, metadata={'al': {'type': 'metadata/sysmon'}})
+                                self.log.debug(f"Adding extracted file {f}")
+                                self.request.add_extracted(destination_file_path, f, value)
                         tar_obj.close()
                     except Exception as e:
                         self.log.exception(
