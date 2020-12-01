@@ -568,7 +568,7 @@ class Cuckoo(ServiceBase):
                             "extracted": "Cuckoo extracted file",
                             # There is an api option for this: https://cuckoo.readthedocs.io/en/latest/usage/api/#tasks-shots
                             "shots": "Screenshots from Cuckoo analysis",
-                            "polarproxy": "HTTPS .pcap from PolarProxy capture",
+                            # "polarproxy": "HTTPS .pcap from PolarProxy capture",
                             "sum": "All traffic from TCPDUMP and PolarProxy",
                             "sysmon": "Sysmon Logging Captured"
                         }
@@ -607,11 +607,11 @@ class Cuckoo(ServiceBase):
 
                     self.file_res.add_section(dll_multi_section)
 
-                self.log.debug("Checking for dropped files and pcap.")
+                self.log.debug("Checking for dropped files.")
                 # Submit dropped files and pcap if available:
                 self.check_dropped(request, self.cuckoo_task.id)
                 self.check_powershell()
-                self.check_pcap(self.cuckoo_task.id)
+                # self.check_pcap(self.cuckoo_task.id)
 
         except Exception as e:
             raise Exception(e)
@@ -879,26 +879,26 @@ class Cuckoo(ServiceBase):
 
         return report_data
 
-    @retry(wait_fixed=2000)
-    def cuckoo_query_pcap(self, task_id):
-        try:
-            resp = self.session.get(self.query_pcap_url % task_id, headers=self.auth_header, timeout=self.timeout)
-        except requests.exceptions.Timeout:
-            if self.cuckoo_task and self.cuckoo_task.id is not None:
-                self.cuckoo_delete_task(self.cuckoo_task.id)
-            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to query the pcap for task %s" % task_id)
-        except requests.ConnectionError:
-            raise Exception("Unable to reach the Cuckoo nest while trying to query the pcap for task %s"
-                                   % task_id)
-        pcap_data = None
-        if resp.status_code != 200:
-            if resp.status_code == 404:
-                self.log.error("Task or pcap not found for task: %s" % task_id)
-            else:
-                self.log.error("Failed to query pcap for task %s. Status code: %d" % (task_id, resp.status_code))
-        else:
-            pcap_data = resp.content
-        return pcap_data
+    # @retry(wait_fixed=2000)
+    # def cuckoo_query_pcap(self, task_id):
+    #     try:
+    #         resp = self.session.get(self.query_pcap_url % task_id, headers=self.auth_header, timeout=self.timeout)
+    #     except requests.exceptions.Timeout:
+    #         if self.cuckoo_task and self.cuckoo_task.id is not None:
+    #             self.cuckoo_delete_task(self.cuckoo_task.id)
+    #         raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to query the pcap for task %s" % task_id)
+    #     except requests.ConnectionError:
+    #         raise Exception("Unable to reach the Cuckoo nest while trying to query the pcap for task %s"
+    #                                % task_id)
+    #     pcap_data = None
+    #     if resp.status_code != 200:
+    #         if resp.status_code == 404:
+    #             self.log.error("Task or pcap not found for task: %s" % task_id)
+    #         else:
+    #             self.log.error("Failed to query pcap for task %s. Status code: %d" % (task_id, resp.status_code))
+    #     else:
+    #         pcap_data = resp.content
+    #     return pcap_data
 
     def cuckoo_query_task(self, task_id):
         try:
@@ -1034,32 +1034,32 @@ class Cuckoo(ServiceBase):
                 self.log.debug(f"Adding extracted file {ps1_file_name}")
                 self.request.add_extracted(ps1_path, ps1_file_name, "Deobfuscated PowerShell script from Cuckoo analysis")
 
-    def check_pcap(self, task_id):
-        # Make sure there's actual network information to report before including the pcap.
-        # TODO: This is also a bit (REALLY) hacky, we should probably flag this during result generation.
-        has_network = False
-        for section in self.file_res.sections:
-            if section.title_text == "Network Activity":
-                has_network = True
-                break
-        if not has_network:
-            return
-
-        pcap_data = self.cuckoo_query_pcap(task_id)
-        if pcap_data:
-            pcap_file_name = "cuckoo_traffic.pcap"
-            pcap_path = os.path.join(self.working_directory, pcap_file_name)
-            pcap_file = open(pcap_path, 'wb')
-            pcap_file.write(pcap_data)
-            pcap_file.close()
-
-            # Resubmit analysis pcap file
-            try:
-                self.log.debug(f"Adding extracted file {pcap_file_name}")
-                self.request.add_extracted(pcap_path, pcap_file_name, "PCAP from Cuckoo analysis")
-            except MaxExtractedExceeded:
-                self.log.error("The maximum amount of files to be extracted is 501, "
-                               "which has been exceeded in this submission")
+    # def check_pcap(self, task_id):
+    #     # Make sure there's actual network information to report before including the pcap.
+    #     # TODO: This is also a bit (REALLY) hacky, we should probably flag this during result generation.
+    #     has_network = False
+    #     for section in self.file_res.sections:
+    #         if section.title_text == "Network Activity":
+    #             has_network = True
+    #             break
+    #     if not has_network:
+    #         return
+    #
+    #     pcap_data = self.cuckoo_query_pcap(task_id)
+    #     if pcap_data:
+    #         pcap_file_name = "cuckoo_traffic.pcap"
+    #         pcap_path = os.path.join(self.working_directory, pcap_file_name)
+    #         pcap_file = open(pcap_path, 'wb')
+    #         pcap_file.write(pcap_data)
+    #         pcap_file.close()
+    #
+    #         # Resubmit analysis pcap file
+    #         try:
+    #             self.log.debug(f"Adding extracted file {pcap_file_name}")
+    #             self.request.add_extracted(pcap_path, pcap_file_name, "PCAP from Cuckoo analysis")
+    #         except MaxExtractedExceeded:
+    #             self.log.error("The maximum amount of files to be extracted is 501, "
+    #                            "which has been exceeded in this submission")
 
     def report_machine_info(self, machine_name):
         self.log.debug("Querying machine info for %s" % machine_name)
