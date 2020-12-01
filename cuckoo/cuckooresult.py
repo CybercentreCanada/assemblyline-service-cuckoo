@@ -1173,7 +1173,9 @@ def get_process_map(processes: dict = None) -> dict:
                 for arg in api_calls_of_interest.get(api, []):
                     if arg in args:
                         args_of_interest[arg] = args[arg]
-                network_calls.append({api: args_of_interest})
+                item_to_add = {api: args_of_interest}
+                if item_to_add not in network_calls:
+                    network_calls.append(item_to_add)
             if category == "crypto" and api in api_calls_of_interest.keys():
                 args = call["arguments"]
                 args_of_interest = {}
