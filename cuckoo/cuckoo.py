@@ -1102,7 +1102,7 @@ class Cuckoo(ServiceBase):
                 break
 
         if not machine_name_exists:
-            self.log.error("Machine %s does not exist in %s", machine_name, self.machines)
+            self.log.warning("Machine %s does not exist in %s", machine_name, self.machines)
             return
 
         manager = self.cuckoo_task.report["info"]["machine"]["manager"]
