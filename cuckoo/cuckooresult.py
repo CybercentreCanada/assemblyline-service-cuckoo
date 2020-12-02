@@ -85,9 +85,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
             log.debug(
                 "It doesn't look like this file executed (unsupported file type?)")
             noexec_res = ResultSection(title_text="Notes")
-            noexec_res.add_line('Unrecognized file type: '
-                                'No program available to execute a file with the following extension: %s'
-                                % safe_str(file_ext))
+            noexec_res.add_line(f"No program available to execute a file with the following extension: {safe_str(file_ext)}")
             al_result.add_section(noexec_res)
         else:
             # Otherwise, moving on!
@@ -439,7 +437,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 continue
 
         # Setting up result section for each signature
-        title = "Signature: %s" % sig_name
+        title = f"Signature: {sig_name}"
         description = sig.get('description', 'No description for signature.')
         sig_res = ResultSection(
             title_text=title,
@@ -450,7 +448,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
         # Severity is 0-5ish with 0 being least severe.
         sig_id = get_category_id(sig_name)
         if sig_id == 9999:
-            log.warning("Unknown signature detected: %s" % sig)
+            log.warning(f"Unknown signature detected: {sig}")
 
         # Creating heuristic
         sig_heur = Heuristic(sig_id)
@@ -510,21 +508,21 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                 if not is_ip(mark[item]) or \
                                         (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
                                     if item == "description":
-                                        sig_res.add_line('\tFun fact: %s' % safe_str(mark[item]))
+                                        sig_res.add_line(f'\tFun fact: {safe_str(mark[item])}')
                                     else:
-                                        sig_res.add_line('\tIOC: %s' % safe_str(mark[item]))
+                                        sig_res.add_line(f'\tIOC: {safe_str(mark[item])}')
                                 else:
                                     fp_count += 1
                             else:
                                 fp_count += 1
                 elif mark_type == "generic" and sig_name == "process_martian":
-                    sig_res.add_line('\tParent process %s did the following: %s' % (safe_str(mark["parent_process"]), safe_str(mark["martian_process"])))
+                    sig_res.add_line(f'\tParent process {safe_str(mark["parent_process"])} did the following: {safe_str(mark["martian_process"])}')
                 elif mark_type == "generic" and sig_name == "network_cnc_http":
                     http_string = mark["suspicious_request"].split()
                     if not contains_safelisted_value(http_string[1]):
-                        sig_res.add_line('\tFun fact: %s' % safe_str(mark["suspicious_features"]))
+                        sig_res.add_line(f'\tFun fact: {safe_str(mark["suspicious_features"])}')
                         sig_res.add_tag("network.dynamic.uri", http_string[1])
-                        sig_res.add_line('\tIOC: %s' % safe_str(mark["suspicious_request"]))
+                        sig_res.add_line(f'\tIOC: {safe_str(mark["suspicious_request"])}')
                     else:
                         fp_count += 1
                 elif mark_type == "generic" and sig_name == "nolookup_communication":
@@ -534,9 +532,9 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                         fp_count += 1
                 elif mark_type == "generic" and sig_name == "suspicious_powershell":
                     if mark.get("options"):
-                        sig_res.add_line('\tIOC: %s via %s' % (safe_str(mark["value"]), safe_str(mark["option"])))
+                        sig_res.add_line(f'\tIOC: {safe_str(mark["value"])} via {safe_str(mark["option"])}')
                     else:
-                        sig_res.add_line('\tIOC: %s' % safe_str(mark["value"]))
+                        sig_res.add_line(f'\tIOC: {safe_str(mark["value"])}')
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")
@@ -567,7 +565,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                             # All other signatures do.
                                             if sig_name != "application_raises_exception":
                                                ioc = ioc.replace(str(key), process_map[key]["name"])
-                                sig_res.add_line('\tIOC: %s' % safe_str(ioc))
+                                sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
                             else:
                                 fp_count += 1
                         else:
@@ -581,7 +579,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
 
                 # Displaying the process name
                 elif mark_type == "call" and process_name is not None and len(process_names) == 0:
-                    sig_res.add_line('\tProcess Name: %s' % safe_str(process_name))
+                    sig_res.add_line(f'\tProcess Name: {safe_str(process_name)}')
                     process_names.append(process_name)
                 # Displaying the injected process
                 if mark_type == "call" and get_signature_category(sig_name) == "Injection":
@@ -589,7 +587,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     injected_process_name = process_map.get(injected_process, {}).get("name")
                     if injected_process_name and injected_process_name not in injected_processes:
                         injected_processes.append(injected_process_name)
-                        sig_res.add_line('\tInjected Process: %s' % safe_str(injected_process_name))
+                        sig_res.add_line(f'\tInjected Process: {safe_str(injected_process_name)}')
                 # If hidden file is created and wasn't a false positive, tag the file path
                 elif mark_type == "call" and sig_name == "creates_hidden_file":
                     filepath = mark["call"].get("arguments", {}).get("filepath")
@@ -600,11 +598,11 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                     oldfilepath = mark["call"].get("arguments", {}).get("oldfilepath")
                     newfilepath = mark["call"].get("arguments", {}).get("newfilepath")
                     if oldfilepath and newfilepath:
-                        sig_res.add_line('\tOld file path: %s, New file path: %s' % (safe_str(oldfilepath), safe_str(newfilepath)))
+                        sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}, New file path: {safe_str(newfilepath)}')
                 elif mark_type == "call" and sig_name == "creates_service":
                     service_name = mark["call"].get("arguments", {}).get("service_name")
                     if service_name:
-                        sig_res.add_line('\tNew service name: %s' % safe_str(service_name))
+                        sig_res.add_line(f'\tNew service name: {safe_str(service_name)}')
 
                 # If there is only one process name and one injected process and
                 # they have the same name, skip sig because it most likely is a
@@ -987,7 +985,7 @@ def process_curtain(curtain: dict, al_result: Result, process_map: dict):
         al_result.add_section(curtain_res)
 
 
-def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list, list):
+def process_sysmon(sysmon: list, al_result: Result, process_map: dict) -> (list, list):
     # TODO: obvsiouly a huge work in progress
     log.debug("Processing sysmon results.")
     sysmon_body = []
@@ -1073,7 +1071,7 @@ def process_sysmon(sysmon: dict, al_result: Result, process_map: dict) -> (list,
 
 
 def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: dict):
-    # TODO: obvsiouly a huge work in progress
+    # TODO: obviously a huge work in progress
     log.debug("Processing hollowshunter results.")
     hollowshunter_body = []
     hollowshunter_res = ResultSection(title_text="HollowsHunter Analysis", body_format=BODY_FORMAT.TABLE)
@@ -1191,19 +1189,3 @@ def get_process_map(processes: dict = None) -> dict:
             "decrypted_buffers": decrypted_buffers
         }
     return process_map
-
-
-#  TEST CODE
-if __name__ == "__main__":
-    import sys
-    import json
-    report_path = sys.argv[1]
-    with open(report_path, 'r') as fh:
-        data = json.loads(fh.read())
-    res = Result()
-    # noinspection PyBroadException
-    try:
-        generate_al_result(data, res, '.js', Classification.UNRESTRICTED)
-    except Exception:
-        traceback.print_exc()
-    pprint(res)
