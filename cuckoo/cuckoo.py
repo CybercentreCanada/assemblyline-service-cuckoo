@@ -43,7 +43,7 @@ CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
 CUCKOO_API_QUERY_HOST_STATUS = "cuckoo/status"
 
 CUCKOO_POLL_DELAY = 5
-GUEST_VM_START_TIMEOUT = 75
+GUEST_VM_START_TIMEOUT = 360  # Give the VM at least 6 minutes to start up
 ANALYSIS_TIMEOUT = 150
 
 WINDOWS_7_IMAGE_TAG = "win7"
@@ -699,7 +699,7 @@ class Cuckoo(ServiceBase):
         # Need to kill the container; we're about to go down..
         self.log.info("Service is being stopped; removing all running containers and metadata..")
 
-    @retry(wait_fixed=1000,
+    @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
            stop_max_attempt_number=GUEST_VM_START_TIMEOUT,
            retry_on_result=_retry_on_none)
     def poll_started(self):
@@ -949,7 +949,7 @@ class Cuckoo(ServiceBase):
             machine_dict = resp_dict['machine']
         return machine_dict
 
-    @retry(wait_fixed=1000, stop_max_attempt_number=2)
+    @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000, stop_max_attempt_number=2)
     def delete_task(self, task_id):
         try:
             resp = self.session.get(self.delete_task_url % task_id, headers=self.auth_header, timeout=self.timeout)
