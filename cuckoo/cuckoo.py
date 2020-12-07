@@ -114,6 +114,7 @@ TASK_STARTED = "started"
 TASK_STARTING = "starting"
 TASK_COMPLETED = "completed"
 TASK_REPORTED = "reported"
+ANALYSIS_FAILED = "analysis_failed"
 
 
 class CuckooTimeoutException(Exception):
@@ -434,11 +435,12 @@ class Cuckoo(ServiceBase):
                         self.log.exception(f"Unable to add tar of complete report for "
                                            f"task {self.cuckoo_task.id} due to {e}")
 
+                    tar_obj = tarfile.open(tar_report_path)
+
                     # Attach report.json as a supplementary file. This is duplicating functionality
                     # a little bit, since this information is included in the JSON result section
                     report_json_path = ""
                     try:
-                        tar_obj = tarfile.open(tar_report_path)
                         if "reports/report.json" in tar_obj.getnames():
                             report_json_path = os.path.join(self.working_directory, "reports", "report.json")
                             tar_obj.extract("reports/report.json", path=self.working_directory)
@@ -448,7 +450,6 @@ class Cuckoo(ServiceBase):
                                 "report.json",
                                 "Cuckoo Sandbox report (json)"
                             )
-                        tar_obj.close()
                     except Exception as e:
                         self.log.exception(f"Unable to add report.json for task {self.cuckoo_task.id}. Exception: {e}")
 
@@ -503,8 +504,6 @@ class Cuckoo(ServiceBase):
                     # special 'supplementary' directory
                     # memory artifacts
                     try:
-                        tar_obj = tarfile.open(tar_report_path)
-
                         # Check if there are any files consisting of console output from detonation
                         console_output_file_path = os.path.join("/tmp", "console_output.txt")
                         if os.path.exists(console_output_file_path):
@@ -574,9 +573,8 @@ class Cuckoo(ServiceBase):
                         }
 
                         # Get the max size for extract files, used a few times after this
-                        request.max_file_size = self.config['max_file_size']
-                        max_extracted_size = request.max_file_size
-                        tar_obj_members = [x.name for x in tar_obj.getmembers() if x.isfile()]
+                        max_extracted_size = self.config['max_file_size']
+                        tar_obj_members = [x.name for x in tar_obj.getmembers() if x.isfile() and x.size < max_extracted_size]
                         for key, value in tarball_file_map.items():
                             key_hits = [x for x in tar_obj_members if x.startswith(key)]
                             for f in key_hits:
@@ -599,10 +597,10 @@ class Cuckoo(ServiceBase):
                                         self.request.add_extracted(destination_file_path, f, value)
                                     except MaxExtractedExceeded:
                                         self.log.warning(f"Cannot add extracted file {destination_file_path} due to MaxExtractedExceeded")
-                        tar_obj.close()
                     except Exception as e:
                         self.log.exception(f"Unable to add extra file(s) for "
                                            f"task {self.cuckoo_task.id}. Exception: {e}")
+                    tar_obj.close()
 
                 if len(exports_available) > 0 and kwargs.get("package", "") == "dll_multi":
                     max_dll_exports = self.config["max_dll_exports_exec"]
@@ -639,18 +637,16 @@ class Cuckoo(ServiceBase):
             task_id = self.submit_file(file_content)
             self.log.debug(f"Submitted file. Task id: {task_id}.")
             if not task_id:
-                err_msg = "Failed to get task for submitted file."
-                self.cuckoo_task.errors.append(err_msg)
-                self.log.error(err_msg)
+                self.log.error("Failed to get task for submitted file.")
                 return
             else:
                 self.cuckoo_task.id = task_id
         except Exception as e:
-            err_msg = "Error submitting to Cuckoo"
-            self.cuckoo_task.errors.append(f"{err_msg}: {safe_str(e)}")
+            err_msg = f"Error submitting to Cuckoo: {safe_str(e)}"
+            self.log.error(err_msg)
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.delete_task(self.cuckoo_task.id)
-            raise Exception(f"Unable to submit to Cuckoo due to: {safe_str(e)}")
+            raise Exception(err_msg)
 
         self.log.debug(f"Submission succeeded. File: {self.cuckoo_task.file} -- Task ID: {self.cuckoo_task.id}")
 
@@ -688,6 +684,12 @@ class Cuckoo(ServiceBase):
         elif status == MISSING_REPORT:
             # Raise an exception to force a retry
             raise RecoverableError(f"Retrying after {MISSING_REPORT} status")
+        elif status == ANALYSIS_FAILED:
+            task_id = self.cuckoo_task.id
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.delete_task(self.cuckoo_task.id)
+            raise Exception(f"The analysis of #{task_id} has failed. This is most likely because a non-native "
+                            f"file type was attempted to be detonated. Example: .dll on a Linux VM.")
 
         if err_msg:
             self.log.error(f"Error is: {err_msg}")
@@ -744,9 +746,8 @@ class Cuckoo(ServiceBase):
         # Check for errors first to avoid parsing exceptions
         status = task_info["status"]
         if "fail" in status:
-            self.log.error("Analysis has failed. Check cuckoo server logs for errors.")
-            self.cuckoo_task.errors = self.cuckoo_task.errors + task_info['errors']
-            return status
+            self.log.error(f"Analysis has failed for #{self.cuckoo_task.id} due to {task_info['errors']}.")
+            return ANALYSIS_FAILED
         elif status == TASK_COMPLETED:
             self.log.debug("Analysis has completed, waiting on report to be produced.")
         elif status == TASK_REPORTED:
