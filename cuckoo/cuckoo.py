@@ -6,7 +6,7 @@ import random
 from json import JSONDecodeError
 import ssdeep
 import hashlib
-import pefile
+from pefile import PE, PEFormatError
 import re
 import email.header
 import sys
@@ -362,7 +362,11 @@ class Cuckoo(ServiceBase):
             # only proceed if it looks like we have dll_multi
             # We have a DLL file, but no user specified function(s) to run. let's try to pick a few...
             # This is reliant on analyzer/windows/modules/packages/dll_multi.py
-            dll_parsed = pefile.PE(data=file_content)
+            dll_parsed = None
+            try:
+                dll_parsed = PE(data=file_content)
+            except PEFormatError as e:
+                self.log.warning(f"Could not parse PE file due to {safe_str(e)}")
 
             # Do we have any exports?
             if hasattr(dll_parsed, "DIRECTORY_ENTRY_EXPORT"):
