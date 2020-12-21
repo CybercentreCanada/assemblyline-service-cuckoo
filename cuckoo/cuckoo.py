@@ -378,12 +378,15 @@ class Cuckoo(ServiceBase):
                             exports_available.append(export_symbol.name.decode())
                     else:
                         exports_available.append(f"#{export_symbol.ordinal}")
+            else:
+                # No Exports available? Try DllMain and DllRegisterServer
+                exports_available.append("DllMain")
+                exports_available.append("DllRegisterServer")
 
-                if len(exports_available) > 0:
-                    max_dll_exports = self.config.get("max_dll_exports_exec", 5)
-                    task_options.append(f"function={'|'.join(exports_available[:max_dll_exports])}")
-                    kwargs["package"] = "dll_multi"
-                    self.log.debug(f"Trying to run DLL with following function(s): {'|'.join(exports_available[:max_dll_exports])}")
+            max_dll_exports = self.config.get("max_dll_exports_exec", 5)
+            task_options.append(f"function={'|'.join(exports_available[:max_dll_exports])}")
+            kwargs["package"] = "dll_multi"
+            self.log.debug(f"Trying to run DLL with following function(s): {'|'.join(exports_available[:max_dll_exports])}")
 
         if not sysmon_enabled:
             task_options.append("sysmon=0")
@@ -860,7 +863,7 @@ class Cuckoo(ServiceBase):
                     self.delete_task(self.cuckoo_task.id)
                 raise MissingCuckooReportException("Task or report not found")
             elif resp.status_code == 413:
-                msg = f"Cuckoo report (type={fmt}) size is {int(resp.headers['Content-Length'])} which is bigger than the allowed size of {self.max_report_size}"
+                msg = f"Cuckoo report (type={fmt}) size is {int(resp.headers['Content-Length'])} for task #{self.cuckoo_task.id} which is bigger than the allowed size of {self.max_report_size}"
                 self.log.error(msg)
                 raise ReportSizeExceeded(msg)
             else:
