@@ -18,7 +18,7 @@ from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DR
 
 log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 IP_REGEX = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
-DOMAIN_REGEX = r'(?![\d.]+)((xn--|_)?(xn--|_)?([a-z0-9A-Z]{2,24}\.))*[a-z0-9-]+\.([a-z0-9]{2,24})+(\.co\.([a-z0-9]{2,24})|\.([a-z0-9]{2,24}))*'
+DOMAIN_REGEX = r'(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?)'
 URL_REGEX = r"((\w+://)[-a-zA-Z0-9:@;?&=/%+.*!'(),$_{}^~\[\]`#|]+)"
 MD5_REGEX = r'([a-fA-F\d]{32})'
 UNIQUE_IP_LIMIT = 100
@@ -498,7 +498,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 # Mapping the process name to the process id
                 process_map.get(pid, {})
                 process_name = process_map.get(pid, {}).get("name")
-                if mark_type == "generic" and sig_name not in ["process_martian", "network_cnc_http", "nolookup_communication", "suspicious_powershell"]:
+                if mark_type == "generic" and sig_name not in ["process_martian", "network_cnc_http", "nolookup_communication", "suspicious_powershell", "exploit_heapspray"]:
                     for item in mark:
                         # Check if key is not flagged to skip, and that we
                         # haven't already raised this ioc
@@ -535,6 +535,8 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                         sig_res.add_line(f'\tIOC: {safe_str(mark["value"])} via {safe_str(mark["option"])}')
                     else:
                         sig_res.add_line(f'\tIOC: {safe_str(mark["value"])}')
+                elif mark_type == "generic" and sig_name == "exploit_heapspray":
+                    sig_res.add_line(f"\tFun fact: Data was committed to memory at the protection level {safe_str(mark['protection'])}")
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")
@@ -1092,14 +1094,19 @@ def process_decrypted_buffers(process_map: dict, al_result: Result):
         if not buffer_calls:
             continue
         for call in buffer_calls:
+            buffer = ""
             if call.get("CryptDecrypt"):
                 buffer = call["CryptDecrypt"]["buffer"]
-                ips = re.findall(IP_REGEX, buffer)
-                unique_ips = unique_ips.union(set(ips))
-                domains = re.findall(DOMAIN_REGEX, buffer)
-                unique_domains = unique_domains.union(set(domains))
-                if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
-                    buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
+            elif call.get("OutputDebugStringA"):
+                buffer = call["OutputDebugStringA"]["string"]
+            if not buffer:
+                continue
+            ips = re.findall(IP_REGEX, buffer)
+            unique_ips = unique_ips.union(set(ips))
+            domains = re.findall(DOMAIN_REGEX, buffer)
+            unique_domains = unique_domains.union(set(domains))
+            if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
+                buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
     for ip in unique_ips:
         safe_ip = safe_str(ip)
         buffer_res.add_tag("network.static.ip", safe_ip)
@@ -1155,6 +1162,7 @@ def get_process_map(processes: dict = None) -> dict:
         # "recv": ["buffer"],  # HTTP Response, TODO not sure what to do with this yet
         # "InternetReadFile": ["buffer"]  # HTTP Response, TODO not sure what to do with this yet
         "CryptDecrypt": ["buffer"],  # Used for certain malware files that use configuration files
+        "OutputDebugStringA": ["string"],  # Used for certain malware files that use configuration files
     }
     for process in processes:
         if slist_check_app(process["process_name"]):
@@ -1171,16 +1179,26 @@ def get_process_map(processes: dict = None) -> dict:
                 for arg in api_calls_of_interest.get(api, []):
                     if arg in args:
                         args_of_interest[arg] = args[arg]
-                item_to_add = {api: args_of_interest}
-                if item_to_add not in network_calls:
-                    network_calls.append(item_to_add)
-            if category == "crypto" and api in api_calls_of_interest.keys():
+                if args_of_interest:
+                    item_to_add = {api: args_of_interest}
+                    if item_to_add not in network_calls:
+                        network_calls.append(item_to_add)
+            elif category == "crypto" and api in api_calls_of_interest.keys():
                 args = call["arguments"]
                 args_of_interest = {}
                 for arg in api_calls_of_interest.get(api, []):
                     if arg in args:
                         args_of_interest[arg] = args[arg]
-                decrypted_buffers.append({api: args_of_interest})
+                if args_of_interest:
+                    decrypted_buffers.append({api: args_of_interest})
+            elif category in ["system"] and api in api_calls_of_interest.keys():
+                args = call["arguments"]
+                args_of_interest = {}
+                for arg in api_calls_of_interest.get(api, []):
+                    if arg in args and "cfg:" in args[arg]:
+                        args_of_interest[arg] = args[arg]
+                if args_of_interest:
+                    decrypted_buffers.append({api: args_of_interest})
         pid = process["pid"]
         process_map[pid] = {
             "name": process["process_name"],
