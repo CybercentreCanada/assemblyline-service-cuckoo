@@ -315,10 +315,11 @@ class Cuckoo(ServiceBase):
             # BAIL! Requested guest image does not exist
             # Return Result Section with info about available images
             no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
-            no_image_sec.body = f"The requested image of '{guest_image}' is currently unavailable. " \
-                                f"The current image options for this Cuckoo deployment " \
-                                f"include {image_options}. Please note that files identified as one " \
-                                f"of {LINUX_FILES} are only submitted to {UBUNTU_1804_IMAGE_TAG} images."
+            no_image_sec.body = f"The requested image of '{guest_image}' is currently unavailable.\n\n " \
+                                f"General Information:\nAt the moment, the current image options for this " \
+                                f"Cuckoo deployment include {image_options}. Also note that if a file is identified " \
+                                f"as one of {LINUX_FILES}, that file is only submitted to {UBUNTU_1804_IMAGE_TAG} " \
+                                f"images."
             self.file_res.add_section(no_image_sec)
             return
 
