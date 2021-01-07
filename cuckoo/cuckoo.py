@@ -103,6 +103,8 @@ SUPPORTED_EXTENSIONS = [
     "pub",
 ]
 
+ILLEGAL_FILENAME_CHARS = set('<>:"/\|?*')
+
 # Enumeration for statuses
 TASK_MISSING = "missing"
 TASK_STOPPED = "stopped"
@@ -252,6 +254,11 @@ class Cuckoo(ServiceBase):
                 self.log.warning(f"Problem decoding filename. Using randomly "
                                  f"generated filename {new_filename}. Error: {e}")
                 self.file_name = new_filename
+
+        # Remove illegal characters from file name
+        if any(ch in self.file_name for ch in ILLEGAL_FILENAME_CHARS):
+            self.log.debug(f"Renaming {self.file_name} because it contains one of {ILLEGAL_FILENAME_CHARS}")
+            self.file_name = ''.join(ch for ch in self.file_name if ch not in ILLEGAL_FILENAME_CHARS)
 
         # Check the file extension
         original_ext = self.file_name.rsplit('.', 1)
