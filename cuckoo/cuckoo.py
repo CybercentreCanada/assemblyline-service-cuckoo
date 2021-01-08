@@ -46,16 +46,22 @@ CUCKOO_POLL_DELAY = 5
 GUEST_VM_START_TIMEOUT = 360  # Give the VM at least 6 minutes to start up
 ANALYSIS_TIMEOUT = 150
 
-WINDOWS_7_IMAGE_TAG = "win7"
+WINDOWS_7x64_IMAGE_TAG = "win7x64"
+WINDOWS_7x86_IMAGE_TAG = "win7x86"
 WINDOWS_10_IMAGE_TAG = "win10"
 UBUNTU_1804_IMAGE_TAG = "ub1804"
-ALLOWED_IMAGES = [WINDOWS_7_IMAGE_TAG, WINDOWS_10_IMAGE_TAG, UBUNTU_1804_IMAGE_TAG]
+ALLOWED_IMAGES = [WINDOWS_7x64_IMAGE_TAG, WINDOWS_7x86_IMAGE_TAG, WINDOWS_10_IMAGE_TAG, UBUNTU_1804_IMAGE_TAG]
 
 LINUX_FILES = [
     "executable/linux/elf64",
     "executable/linux/elf32",
     "executable/linux/so64",
     "executable/linux/so32"
+]
+
+WINDOWS_x86_FILES = [
+    'executable/windows/pe32',
+    'executable/windows/dll32'
 ]
 
 SUPPORTED_EXTENSIONS = [
@@ -305,6 +311,10 @@ class Cuckoo(ServiceBase):
         # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
         if self.request.file_type in LINUX_FILES:
             guest_image = UBUNTU_1804_IMAGE_TAG
+
+        # If 32-bit file meant to run on Windows is submitted, make sure it runs on a 32-bit Windows operating system
+        if self.request.file_type in WINDOWS_x86_FILES:
+            guest_image = WINDOWS_7x86_IMAGE_TAG
 
         # Only submit sample to specific VM type if VM type is available
         requested_image_exists = False

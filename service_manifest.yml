@@ -100,11 +100,11 @@ submission_params:
     type: bool
     value: true
 
-  # can be either win7, win10, ub1804. If none, it's whichever victim VM is the oldest!
-  - default: "win7"
+  # can be either win7x64, win7x86, win10, ub1804.
+  - default: "win7x64"
     name: guest_image
     type: list
-    value: ["win7","win10","ub1804"]
+    value: ["win7x64", "win7x86", "win10","ub1804"]
 
 # TODO: implement routing options
 #  - default: inetsim
