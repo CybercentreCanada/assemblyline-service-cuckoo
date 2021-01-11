@@ -2,14 +2,10 @@ import datetime
 import logging
 import re
 import os
-import traceback
 import json
 import copy
 from ipaddress import ip_address, ip_network
 from urllib.parse import urlparse
-from ip2geotools.databases.noncommercial import DbIpCity
-
-from pprint import pprint
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, Heuristic
@@ -714,23 +710,12 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
             network_calls = network_calls_made_to_unique_ips
         for network_call in network_calls:
             dst = network_call["dst"]
-            dest_country = None
             src = network_call["src"]
             src_port = None
             if slist_check_ip(src):
                 src = None
             if src:
                 src_port = network_call["sport"]
-            # Only find the location of the IP if it is not fake or local
-            # if dst not in dns_servers and slist_check_ip(dst) is None and ip_address(dst) not in inetsim_network:
-            #     # noinspection PyBroadException
-            #     try:
-            #         dest_country = DbIpCity.get(dst, api_key='free').country
-            #     except Exception as e:
-            #         log.warning(f"IP {dst} causes the ip2geotools package to crash: {str(e)}")
-            #         pass
-            # elif ip_address(dst) in inetsim_network:
-            # dest_country = "INetSim"  # if INetSim-resolved IP, set country to INetSim
             network_flow = {
                 "timestamp": datetime.datetime.fromtimestamp(network_call["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                 "protocol": protocol,
@@ -739,7 +724,6 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
                 "dom": None,
                 "dest_ip": dst,
                 "dest_port": network_call["dport"],
-                "dest_country": dest_country,
                 "process_name": None
             }
             if dst in resolved_ips.keys():
@@ -940,7 +924,6 @@ def process_all_events(al_result: Result, network_events: list = [], process_eve
             "dom": event.pop("dom", None),
             "dest_ip": event.pop("dest_ip", None),
             "dest_port": event.pop("dest_port", None),
-            "dest_country": event.pop("dest_country", None)
         }
     for event in process_events:
         event["event_type"] = "process"
