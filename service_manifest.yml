@@ -275,6 +275,8 @@ heuristics:
     attack_id: T1071
     name: C2
     score: 250
+    signature_score_map:
+      dead_host: 10  # This signature ranges from 2-8 -> 100-1000
     filetype: '*'
     description: Communicates with a server controlled by a malicious actor.
 
