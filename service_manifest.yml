@@ -127,7 +127,7 @@ heuristics:
     description: Exploits an known software vulnerability or security flaw.
 
   - heur_id: 2
-    attack_id: T1086
+    attack_id: T1059.001
     name: PowerShell
     score: 500
     signature_score_map:
@@ -136,7 +136,7 @@ heuristics:
     description: Leverages Powershell to attack Windows operating systems.
 
   - heur_id: 3
-    attack_id: T1086
+    attack_id: T1059
     name: Hacking tool
     score: 750
     filetype: '*'
@@ -150,7 +150,7 @@ heuristics:
     description: Prevents access to system data and files.
 
   - heur_id: 5
-    attack_id: T1063
+    attack_id: T1518.001
     name: Anti-analysis
     score: 250
     filetype: '*'
@@ -171,7 +171,7 @@ heuristics:
     description: Makes Android API calls not consistent with expected/standard behaviour.
 
   - heur_id: 8
-    attack_id: [T1063, T1089]
+    attack_id: [T1518.001, T1562.001]
     name: Anti-antivirus
     score: 250
     filetype: '*'
@@ -185,7 +185,7 @@ heuristics:
     description: Attempts to detect if it is being run in virtualized environment.
 
   - heur_id: 10
-    attack_id: [T1057, T1063]
+    attack_id: [T1057, T1518.001]
     name: Anti-debug
     score: 100
     filetype: '*'
@@ -224,7 +224,7 @@ heuristics:
     description: Designed to block access to a system until a sum of money is paid.
 
   - heur_id: 16
-    attack_id: [T1060, T1103, T1098]
+    attack_id: [T1547.001, T1546.010, T1098]
     name: Persistence
     score: 250
     signature_score_map:
@@ -281,11 +281,11 @@ heuristics:
     description: Communicates with a server controlled by a malicious actor.
 
   - heur_id: 23
-    attack_id: [T1090, T1188]
+    attack_id: [T1090, T1090.003]
     name: Tor
     score: 250
     filetype: '*'
-    description: Intalls/Leverages Tor to enable anonymous communication.
+    description: Installs/Leverages Tor to enable anonymous communication.
 
   - heur_id: 24
     name: Web Mail
@@ -301,14 +301,14 @@ heuristics:
     description: Attempts to detect if it is in a sandbox.
 
   - heur_id: 26
-    attack_id: [T1036, T1158, T1070]
+    attack_id: [T1036, T1564.001, T1070]
     name: Stealth
     score: 250
     filetype: '*'
     description: Leverages/modifies internal processes and settings to conceal itself.
 
   - heur_id: 27
-    attack_id: T1045
+    attack_id: T1027.002
     name: Packer
     score: 100
     signature_score_map:
@@ -329,7 +329,7 @@ heuristics:
     description: Steals information related to financial transactions, including credit card information.
 
   - heur_id: 30
-    attack_id: T1089
+    attack_id: T1562.001
     name: Bypass
     score: 250
     filetype: '*'
