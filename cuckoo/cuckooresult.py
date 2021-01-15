@@ -961,11 +961,6 @@ def process_curtain(curtain: dict, al_result: Result, process_map: dict):
         for behaviour in curtain[pid]["behaviors"]:
             curtain_res.add_tag("file.powershell.cmdlet", behaviour)
     if len(curtain_body) > 0:
-        curtain_sig = "suspicious_powershell"
-        sig_id = get_category_id(curtain_sig)
-        curtain_heur = Heuristic(sig_id)
-        curtain_heur.add_signature_id(curtain_sig)
-        curtain_res.heuristic = curtain_heur
         curtain_res.body = json.dumps(curtain_body)
         al_result.add_section(curtain_res)
 
