@@ -230,6 +230,7 @@ heuristics:
     signature_score_map:
       creates_shortcut: 10
       creates_exe: 10
+      persistence_ads: 10
     filetype: '*'
     description: Technique used to maintain presence in system(s) across interruptions that could cut off access.
 
