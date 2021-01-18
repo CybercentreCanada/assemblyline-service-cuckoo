@@ -151,6 +151,10 @@ SAFELIST_DOMAINS = {
     'Java': r'(www\.)?java\.com$',
     'Oracle': r'sldc-esd\.oracle\.com$',
     'Java Sun': r'javadl\.sun\.com$',
+
+    # Digicert
+    'OCSP Digicert': r'ocsp\.digicert\.com$',
+    'CRL Digicert': r'crl[0-9]\.digicert\.com$',
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
@@ -358,6 +362,10 @@ SAFELIST_URIS = {
 
     # Azure
     'WPAD': r'https?://wpad\.reddog\.microsoft\.com/wpad\.dat',
+
+    # Digicert
+    'OCSP Digicert': r'https?://ocsp\.digicert\.com/*',
+    'CRL Digicert': r'https?://crl[0-9]\.digicert\.com/*',
 }
 
 
