@@ -83,7 +83,7 @@ SAFELIST_DOMAINS = {
     'NCSI': r'www\.msftncsi\.com$',
     'Internet Explorer': r'iecvlist\.microsoft\.com$',
     'Internet Explorer Too': r'r20swj13mr\.microsoft\.com$',
-    'Microsoft Edge': r'fp\.msedge\.net$',
+    'Microsoft Edge': r'(([a-z]-ring(-fallback){0,1})|(fp)|(segments-[a-z]))\.msedge\.net$',
 
     # Windows
     'Windows Settings': r'settings-win\.data\.microsoft\.com$',
@@ -155,6 +155,13 @@ SAFELIST_DOMAINS = {
     # Digicert
     'OCSP Digicert': r'ocsp\.digicert\.com$',
     'CRL Digicert': r'crl[0-9]\.digicert\.com$',
+
+    # Symantec
+    'Symantec Certificates': r's[a-z0-9]{0,1}\.symc[bd]\.com$',
+    'Symantec OCSP/CRL': r'(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com$',
+
+    # Thawte
+    'Thawte OCSP': r'ocsp\.thawte\.com$',
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
@@ -366,6 +373,17 @@ SAFELIST_URIS = {
     # Digicert
     'OCSP Digicert': r'https?://ocsp\.digicert\.com/*',
     'CRL Digicert': r'https?://crl[0-9]\.digicert\.com/*',
+
+    # Symantec
+    'Symantec Certificates': r'https?://s[a-z0-9]{0,1}\.symc[bd]\.com/*',
+    'Symantec OCSP/CRL': r'https?://(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com/*',
+
+    # Thawte
+    'Thawte OCSP': r'https?://ocsp\.thawte\.com/*',
+
+    # Entrust
+    'Entrust OCSP': r'https?://ocsp\.entrust\.net/*',
+    'Entrust CRL': r'https?://crl\.entrust\.net/*'
 }
 
 
