@@ -83,7 +83,7 @@ SAFELIST_DOMAINS = {
     'NCSI': r'www\.msftncsi\.com$',
     'Internet Explorer': r'iecvlist\.microsoft\.com$',
     'Internet Explorer Too': r'r20swj13mr\.microsoft\.com$',
-    'Microsoft Edge': r'(([a-z]-ring(-fallback){0,1})|(fp)|(segments-[a-z]))\.msedge\.net$',
+    'Microsoft Edge': r'(([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\.msedge\.net$',
 
     # Windows
     'Windows Settings': r'settings-win\.data\.microsoft\.com$',
@@ -157,7 +157,7 @@ SAFELIST_DOMAINS = {
     'CRL Digicert': r'crl[0-9]\.digicert\.com$',
 
     # Symantec
-    'Symantec Certificates': r's[a-z0-9]{0,1}\.symc[bd]\.com$',
+    'Symantec Certificates': r's[a-z0-9]?\.symc[bd]\.com$',
     'Symantec OCSP/CRL': r'(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com$',
 
     # Thawte
@@ -375,7 +375,7 @@ SAFELIST_URIS = {
     'CRL Digicert': r'https?://crl[0-9]\.digicert\.com/*',
 
     # Symantec
-    'Symantec Certificates': r'https?://s[a-z0-9]{0,1}\.symc[bd]\.com/*',
+    'Symantec Certificates': r'https?://s[a-z0-9]?\.symc[bd]\.com/*',
     'Symantec OCSP/CRL': r'https?://(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com/*',
 
     # Thawte
