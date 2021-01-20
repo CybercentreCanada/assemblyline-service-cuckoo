@@ -162,6 +162,10 @@ SAFELIST_DOMAINS = {
 
     # Thawte
     'Thawte OCSP': r'ocsp\.thawte\.com$',
+
+    # GlobalSign
+    'GlobalSign OCSP': r'ocsp[0-9]?\.globalsign\.com$',
+    'GlobalSign CRL': r'crl\.globalsign\.(com|net)$',
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
@@ -383,7 +387,11 @@ SAFELIST_URIS = {
 
     # Entrust
     'Entrust OCSP': r'https?://ocsp\.entrust\.net/*',
-    'Entrust CRL': r'https?://crl\.entrust\.net/*'
+    'Entrust CRL': r'https?://crl\.entrust\.net/*',
+
+    # GlobalSign
+    'GlobalSign OCSP': r'https?://ocsp[0-9]?\.globalsign\.com/*',
+    'GlobalSign CRL': r'https?://crl\.globalsign\.(com|net)/*',
 }
 
 

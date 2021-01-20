@@ -298,6 +298,8 @@ heuristics:
     attack_id: T1497
     name: Anti-sandbox
     score: 250
+    signature_score_map:
+      antisandbox_idletime: 10
     filetype: '*'
     description: Attempts to detect if it is in a sandbox.
 

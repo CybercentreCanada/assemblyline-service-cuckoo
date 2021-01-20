@@ -40,7 +40,6 @@ CUCKOO_API_QUERY_REPORT = "tasks/report/%s"
 CUCKOO_API_QUERY_PCAP = "pcap/get/%s"
 CUCKOO_API_QUERY_MACHINES = "machines/list"
 CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
-CUCKOO_API_QUERY_HOST_STATUS = "cuckoo/status"
 
 CUCKOO_POLL_DELAY = 5
 GUEST_VM_START_TIMEOUT = 360  # Give the VM at least 6 minutes to start up
@@ -202,7 +201,6 @@ class Cuckoo(ServiceBase):
         self.query_pcap_url = None
         self.query_machines_url = None
         self.query_machine_info_url = None
-        self.query_host_url = None
         self.file_res = None
         self.request = None
         self.cuckoo_task = None
@@ -222,7 +220,6 @@ class Cuckoo(ServiceBase):
         self.query_pcap_url = f"{self.base_url}/{CUCKOO_API_QUERY_PCAP}"
         self.query_machines_url = f"{self.base_url}/{CUCKOO_API_QUERY_MACHINES}"
         self.query_machine_info_url = f"{self.base_url}/{CUCKOO_API_QUERY_MACHINE_INFO}"
-        self.query_host_url = f"{self.base_url}/{CUCKOO_API_QUERY_HOST_STATUS}"
 
     def start(self):
         self.auth_header = {'Authorization': self.config['auth_header_value']}
