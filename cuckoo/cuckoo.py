@@ -355,6 +355,7 @@ class Cuckoo(ServiceBase):
         no_monitor = request.get_param("no_monitor")
         custom_options = request.get_param("custom_options")
         kwargs["clock"] = request.get_param("clock")
+        max_total_size_of_uploaded_files = request.get_param("max_total_size_of_uploaded_files")
         force_sleepskip = request.get_param("force_sleepskip")
         take_screenshots = request.get_param("take_screenshots")
         sysmon_enabled = request.get_param("sysmon_enabled")
@@ -415,6 +416,9 @@ class Cuckoo(ServiceBase):
 
         if no_monitor:
             task_options.append("free=yes")
+
+        if max_total_size_of_uploaded_files:
+            task_options.append(f"max_total_size_of_uploaded_files={max_total_size_of_uploaded_files}")
 
         if force_sleepskip:
             task_options.append("force-sleepskip=1")
@@ -645,8 +649,12 @@ class Cuckoo(ServiceBase):
                 # self.check_pcap(self.cuckoo_task.id)
 
         except RecoverableError:
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.delete_task(self.cuckoo_task.id)
             raise
         except Exception as e:
+            if self.cuckoo_task and self.cuckoo_task.id is not None:
+                self.delete_task(self.cuckoo_task.id)
             raise Exception(e)
 
         # Delete and exit
