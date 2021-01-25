@@ -384,8 +384,8 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
     silent_iocs = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_process", "uses_windows_utilities", "creates_exe", "deletes_executed_files"]
     # Sometimes the filename gets shortened
     target_filename_remainder = target_filename
-    if len(target_filename) > 19:
-        target_filename_remainder = target_filename[-18:]
+    if len(target_filename) > 12:
+        target_filename_remainder = target_filename[-11:]
 
     for sig in sigs:
         sig_injected_itself = False  # this also indicates a false positive
@@ -966,7 +966,7 @@ def process_curtain(curtain: dict, al_result: Result, process_map: dict):
 
 
 def process_sysmon(sysmon: list, al_result: Result, process_map: dict) -> (list, list):
-    # TODO: obvsiouly a huge work in progress
+    # TODO: obviously a huge work in progress
     log.debug("Processing sysmon results.")
     sysmon_body = []
     sysmon_res = ResultSection(title_text="Sysmon Signatures", body_format=BODY_FORMAT.TABLE)

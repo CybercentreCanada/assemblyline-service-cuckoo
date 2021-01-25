@@ -104,7 +104,13 @@ submission_params:
   - default: "win7x64"
     name: guest_image
     type: list
-    value: ["win7x64", "win7x86", "win10","ub1804"]
+    value: ["win10x64", "win7x64", "win7x86", "ub1804x64"]
+
+  # The maximum total size of all files uploaded per analysis
+  - default: 134217728
+    name: max_total_size_of_uploaded_files
+    type: int
+    value: 134217728
 
 # TODO: implement routing options
 #  - default: inetsim
