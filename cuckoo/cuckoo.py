@@ -47,9 +47,9 @@ ANALYSIS_TIMEOUT = 150
 
 WINDOWS_7x64_IMAGE_TAG = "win7x64"
 WINDOWS_7x86_IMAGE_TAG = "win7x86"
-WINDOWS_10_IMAGE_TAG = "win10"
-UBUNTU_1804_IMAGE_TAG = "ub1804"
-ALLOWED_IMAGES = [WINDOWS_7x64_IMAGE_TAG, WINDOWS_7x86_IMAGE_TAG, WINDOWS_10_IMAGE_TAG, UBUNTU_1804_IMAGE_TAG]
+WINDOWS_10x64_IMAGE_TAG = "win10x64"
+UBUNTU_1804x64_IMAGE_TAG = "ub1804x64"
+ALLOWED_IMAGES = [WINDOWS_7x64_IMAGE_TAG, WINDOWS_7x86_IMAGE_TAG, WINDOWS_10x64_IMAGE_TAG, UBUNTU_1804x64_IMAGE_TAG]
 
 LINUX_FILES = [
     "executable/linux/elf64",
@@ -307,7 +307,7 @@ class Cuckoo(ServiceBase):
 
         # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
         if self.request.file_type in LINUX_FILES:
-            guest_image = UBUNTU_1804_IMAGE_TAG
+            guest_image = UBUNTU_1804x64_IMAGE_TAG
 
         # If 32-bit file meant to run on Windows is submitted, make sure it runs on a 32-bit Windows operating system
         if self.request.file_type in WINDOWS_x86_FILES:
@@ -332,7 +332,7 @@ class Cuckoo(ServiceBase):
             no_image_sec.body = f"The requested image of '{guest_image}' is currently unavailable.\n\n " \
                                 f"General Information:\nAt the moment, the current image options for this " \
                                 f"Cuckoo deployment include {image_options}. Also note that if a file is identified " \
-                                f"as one of {LINUX_FILES}, that file is only submitted to {UBUNTU_1804_IMAGE_TAG} " \
+                                f"as one of {LINUX_FILES}, that file is only submitted to {UBUNTU_1804x64_IMAGE_TAG} " \
                                 f"images."
             self.file_res.add_section(no_image_sec)
             return
