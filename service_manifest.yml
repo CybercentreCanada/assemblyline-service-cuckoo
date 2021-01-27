@@ -112,6 +112,12 @@ submission_params:
     type: int
     value: 134217728
 
+  # Used for development, when you want to send a file to a specific machine
+  - default: ""
+    name: specific_machine
+    type: str
+    value: ""
+
 # TODO: implement routing options
 #  - default: inetsim
 #    name: routing

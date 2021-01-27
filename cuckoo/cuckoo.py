@@ -303,41 +303,56 @@ class Cuckoo(ServiceBase):
             self.file_name = original_ext[0] + file_ext
 
         self.machines = self.query_machines()
-        guest_image = request.get_param("guest_image")
+        try:
+            specific_machine = request.get_param("specific_machine")
+        except Exception as exc:
+            if "Service submission parameter not found: specific_machine" in repr(exc):
+                # If you don't want this parameter available to users of AL, it's okay, I forgive you
+                specific_machine = None
+            else:
+                raise
+
+        if specific_machine and any(specific_machine == machine["name"] for machine in self.machines["machines"]):
+            # If a specific machine exists that the user wants, then we don't care about the preferred guest image to use
+            kwargs["machine"] = specific_machine
+            guest_image = None
+        else:
+            guest_image = request.get_param("guest_image")
 
         # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
-        if self.request.file_type in LINUX_FILES:
+        if guest_image and self.request.file_type in LINUX_FILES:
             guest_image = UBUNTU_1804x64_IMAGE_TAG
 
         # If 32-bit file meant to run on Windows is submitted, make sure it runs on a 32-bit Windows operating system
-        if self.request.file_type in WINDOWS_x86_FILES:
+        if guest_image and self.request.file_type in WINDOWS_x86_FILES:
             guest_image = WINDOWS_7x86_IMAGE_TAG
 
         # Only submit sample to specific VM type if VM type is available
-        requested_image_exists = False
-        image_options = set()
-        for machine in self.machines['machines']:
-            if guest_image in machine["name"]:
-                requested_image_exists = True
-                break
-            else:
-                for image_tag in ALLOWED_IMAGES:
-                    if image_tag in machine["name"]:
-                        image_options.add(image_tag)
-        if not requested_image_exists:
-            self.log.info(f"The requested image '{guest_image}' is not available in {image_options}")
-            # BAIL! Requested guest image does not exist
-            # Return Result Section with info about available images
-            no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
-            no_image_sec.body = f"The requested image of '{guest_image}' is currently unavailable.\n\n " \
-                                f"General Information:\nAt the moment, the current image options for this " \
-                                f"Cuckoo deployment include {image_options}. Also note that if a file is identified " \
-                                f"as one of {LINUX_FILES}, that file is only submitted to {UBUNTU_1804x64_IMAGE_TAG} " \
-                                f"images."
-            self.file_res.add_section(no_image_sec)
-            return
+        if guest_image:
+            requested_image_exists = False
+            image_options = set()
+            for machine in self.machines['machines']:
+                if guest_image and guest_image in machine["name"]:
+                    requested_image_exists = True
+                    break
+                else:
+                    for image_tag in ALLOWED_IMAGES:
+                        if image_tag in machine["name"]:
+                            image_options.add(image_tag)
+            if not requested_image_exists:
+                self.log.info(f"The requested image '{guest_image}' is not available in {image_options}")
+                # BAIL! Requested guest image does not exist
+                # Return Result Section with info about available images
+                no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
+                no_image_sec.body = f"The requested image of '{guest_image}' is currently unavailable.\n\n " \
+                                    f"General Information:\nAt the moment, the current image options for this " \
+                                    f"Cuckoo deployment include {image_options}. Also note that if a file is identified " \
+                                    f"as one of {LINUX_FILES}, that file is only submitted to {UBUNTU_1804x64_IMAGE_TAG} " \
+                                    f"images."
+                self.file_res.add_section(no_image_sec)
+                return
 
-        kwargs["tags"] = guest_image
+            kwargs["tags"] = guest_image
 
         # Parse user args
         timeout = request.get_param("analysis_timeout")
