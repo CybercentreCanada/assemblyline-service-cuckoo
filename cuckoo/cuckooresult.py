@@ -66,7 +66,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         target = api_report.get("target", {})
         target_file = target.get("file", {})
         target_filename = target_file.get("name")
-        process_signatures(sigs, al_result, random_ip_range, target_filename, process_map)
+        is_process_martian = process_signatures(sigs, al_result, random_ip_range, target_filename, process_map)
 
     sysmon_tree = []
     sysmon_procs = []
@@ -85,7 +85,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
             al_result.add_section(noexec_res)
         else:
             # Otherwise, moving on!
-            process_events = process_behaviour(behaviour, al_result, process_map, sysmon_tree, sysmon_procs)
+            process_events = process_behaviour(behaviour, al_result, process_map, sysmon_tree, sysmon_procs, is_process_martian)
     if network:
         network_events = process_network(network, al_result, random_ip_range, process_map)
 
@@ -133,7 +133,7 @@ def process_debug(debug, al_result):
         al_result.add_section(error_res)
 
 
-def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sysmon_tree: list, sysmon_procs: list) -> list:
+def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sysmon_tree: list, sysmon_procs: list, is_process_martian: bool) -> list:
     log.debug("Processing behavior results.")
     events = []  # This will contain all network events
 
@@ -154,6 +154,13 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = json.dumps(process_tree)
         process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
+        if is_process_martian:
+            sig_name = "process_martian"
+            heur_id = get_category_id(sig_name)
+            process_martian_heur = Heuristic(heur_id)
+            # Let's keep this heuristic as informational
+            process_martian_heur.add_signature_id(sig_name, score=10)
+            process_tree_section.heuristic = process_martian_heur
         al_result.add_section(process_tree_section)
 
     # Gathering apistats to determine if calls have been limited
@@ -365,20 +372,20 @@ def _merge_process_trees(cuckoo_tree: list, sysmon_tree: list, sysmon_process_in
     return cuckoo_tree
 
 
-def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, target_filename: str, process_map: dict):
+def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, target_filename: str, process_map: dict) -> bool:
     log.debug("Processing signature results.")
     if len(sigs) <= 0:
-        return
+        return False
 
+    # Flag used to indicate if process_martian signature should be used in process_behaviour
+    is_process_martian = False
     sigs_res = ResultSection(title_text="Signatures")
-    # ['dead_host', 'has_authenticode', 'network_icmp', 'network_http', 'allocates_rwx', 'has_pdb']
     skipped_sigs = CUCKOO_DROPPED_SIGNATURES
-    # 'dropper', 'suspicious_write_exe', 'suspicious_process', 'uses_windows_utilities', 'persistence_autorun']
     skipped_sig_iocs = []
     skipped_mark_items = ["type", "suspicious_features", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
-    false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut", "process_martian"]  # Signatures that need to be double checked in case they return false positives
+    false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut"]  # Signatures that need to be double checked in case they return false positives
     inetsim_network = ip_network(random_ip_range)
     skipped_paths = ["/"]
     silent_iocs = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_process", "uses_windows_utilities", "creates_exe", "deletes_executed_files"]
@@ -392,6 +399,8 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
         sig_name = sig['name']
 
         if sig_name in skipped_sigs:
+            if sig_name == "process_martian":
+                is_process_martian = True
             continue
 
         # Check if signature is a false positive
@@ -421,11 +430,6 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                         fp_count += 1
                     elif 'AppData\\Roaming\\Microsoft\\Office\\Recent\\Temp.LNK' in mark.get("ioc"):
                         # Microsoft Word creates temporary .lnk files when a Word doc is opened
-                        fp_count += 1
-                elif sig_name == "process_martian":
-                    # This signature is hit just by the sample being run, therefore a false positive
-                    filepath = "AppData\\Local\\Temp\\" + target_filename
-                    if filepath in mark["martian_process"] and mark["parent_process"] == "cmd.exe":
                         fp_count += 1
                 if fp_count == len(marks):
                     fp = True
@@ -494,7 +498,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                 # Mapping the process name to the process id
                 process_map.get(pid, {})
                 process_name = process_map.get(pid, {}).get("name")
-                if mark_type == "generic" and sig_name not in ["process_martian", "network_cnc_http", "nolookup_communication", "suspicious_powershell", "exploit_heapspray"]:
+                if mark_type == "generic" and sig_name not in ["network_cnc_http", "nolookup_communication", "suspicious_powershell", "exploit_heapspray"]:
                     for item in mark:
                         # Check if key is not flagged to skip, and that we
                         # haven't already raised this ioc
@@ -511,8 +515,6 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
                                     fp_count += 1
                             else:
                                 fp_count += 1
-                elif mark_type == "generic" and sig_name == "process_martian":
-                    sig_res.add_line(f'\tParent process {safe_str(mark["parent_process"])} did the following: {safe_str(mark["martian_process"])}')
                 elif mark_type == "generic" and sig_name == "network_cnc_http":
                     http_string = mark["suspicious_request"].split()
                     if not contains_safelisted_value(http_string[1]):
@@ -613,6 +615,7 @@ def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, targ
             sigs_res.add_subsection(sig_res)
     if len(sigs_res.subsections) > 0:
         al_result.add_section(sigs_res)
+    return is_process_martian
 
 
 def contains_safelisted_value(val: str) -> bool:

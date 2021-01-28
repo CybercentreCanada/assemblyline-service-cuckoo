@@ -727,7 +727,7 @@ CUCKOO_DROPPED_SIGNATURES = [
   'powershell_di', 'powerfun', 'powershell_dfsp', 'powershell_c2dns',
   'powershell_unicorn', 'spreading_autoruninf', 'sniffer_winpcap',
   'mutex_winscp', 'sharing_rghost', 'exp_3322_dom', 'mirc_file', 'vir_napolar',
-  'vertex_url', 'has_pdb'
+  'vertex_url', 'has_pdb', "process_martian"
 ]
 
 
