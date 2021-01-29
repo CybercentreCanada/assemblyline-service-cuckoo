@@ -8,15 +8,17 @@ from ipaddress import ip_address, ip_network
 from urllib.parse import urlparse
 
 from assemblyline.common.str_utils import safe_str
+from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, MD5_REGEX
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, Heuristic
 from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped, slist_check_app, slist_check_cmd
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 
 log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
-IP_REGEX = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
-DOMAIN_REGEX = r'(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?)'
-URL_REGEX = r"((\w+://)[-a-zA-Z0-9:@;?&=/%+.*!'(),$_{}^~\[\]`#|]+)"
-MD5_REGEX = r'([a-fA-F\d]{32})'
+DOMAIN_REGEX = re.compile(DOMAIN_REGEX)
+IP_REGEX = re.compile(IP_REGEX)
+# Remove the part of the regex that looks to match the entire line
+URL_REGEX = re.compile(FULL_URI.lstrip("^").rstrip("$"))
+MD5_REGEX = re.compile(MD5_REGEX)
 UNIQUE_IP_LIMIT = 100
 
 
@@ -1069,6 +1071,7 @@ def process_decrypted_buffers(process_map: dict, al_result: Result):
     buffer_body = []
     unique_ips = set()
     unique_domains = set()
+    unique_uris = set()
 
     for process in process_map:
         buffer_calls = process_map[process]["decrypted_buffers"]
@@ -1082,10 +1085,13 @@ def process_decrypted_buffers(process_map: dict, al_result: Result):
                 buffer = call["OutputDebugStringA"]["string"]
             if not buffer:
                 continue
-            ips = re.findall(IP_REGEX, buffer)
-            unique_ips = unique_ips.union(set(ips))
-            domains = re.findall(DOMAIN_REGEX, buffer)
-            unique_domains = unique_domains.union(set(domains))
+            ips = set(re.findall(IP_REGEX, buffer))
+            # There is overlap here between regular expressions, so we want to isolate domains that are not ips
+            domains = set(re.findall(DOMAIN_REGEX, buffer)) - ips
+            uris = set(re.findall(URL_REGEX, buffer))
+            unique_ips = unique_ips.union(ips)
+            unique_domains = unique_domains.union(domains)
+            unique_uris = unique_uris.union(uris)
             if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
                 buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
     for ip in unique_ips:
@@ -1094,6 +1100,9 @@ def process_decrypted_buffers(process_map: dict, al_result: Result):
     for domain in unique_domains:
         safe_domain = safe_str(domain)
         buffer_res.add_tag("network.static.domain", safe_domain)
+    for uri in unique_uris:
+        safe_uri = safe_str(uri)
+        buffer_res.add_tag("network.static.uri", safe_uri)
     if len(buffer_body) > 0:
         buffer_res.body = json.dumps(buffer_body)
         al_result.add_section(buffer_res)
