@@ -34,6 +34,7 @@ samples = [
     ),
 ]
 
+
 def create_tmp_manifest():
     temp_service_config_path = os.path.join("/tmp", SERVICE_CONFIG_NAME)
     if not os.path.exists(temp_service_config_path):
@@ -78,6 +79,8 @@ def dummy_task_class():
 
 @pytest.fixture
 def dummy_request_class(dummy_task_class):
+    from assemblyline_v4_service.common.task import MaxExtractedExceeded
+
     class DummyRequest(dict):
         def __init__(self, **some_dict):
             super(DummyRequest, self).__init__()
@@ -118,11 +121,14 @@ def dummy_tar_class():
                 "hollowshunter/hh_process_123_blah.shc",
             ]
 
-        def extract(self, output, path=input):
+        def extract(self, output, path=None):
             pass
 
         def getmembers(self):
             return self.members
+
+        def close(self):
+            pass
     yield DummyTar
 
 
@@ -139,6 +145,18 @@ def dummy_tar_member_class():
         def startswith(self, val):
             return val in self.name
     yield DummyTarMember
+
+
+@pytest.fixture
+def dummy_json_doc_class_instance():
+    # This class is just to create a doc to pass to JSONDecodeError for construction
+    class DummyJSONDoc(object):
+        def count(self, *args):
+            return 0
+
+        def rfind(self, *args):
+            return 0
+    yield DummyJSONDoc()
 
 
 def yield_sample_file_paths():
@@ -375,32 +393,31 @@ class TestCuckoo:
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_execute(sample, cuckoo_class_instance, cuckoo_task_class, mocker):
-        # Imports required to execute the sample
         from assemblyline_v4_service.common.task import Task
         from assemblyline.odm.messages.task import Task as ServiceTask
         from assemblyline_v4_service.common.request import ServiceRequest
         from cuckoo.cuckoo import Cuckoo
+        from assemblyline.common.exceptions import RecoverableError
 
-        # Creating the required objects for execution
-        service_task = ServiceTask(sample)
-        task = Task(service_task)
-        cuckoo_class_instance._task = task
-        service_request = ServiceRequest(task)
-
-        cuckoo_task_class_instance = cuckoo_task_class("blah", blah="blah")
-        cuckoo_task_class_instance.id = 1
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
-
-        # Mocking the response of the following methods
         mocker.patch('cuckoo.cuckoo.generate_random_words', return_value="blah")
         mocker.patch.object(Cuckoo, "_decode_mime_encoded_file_name", return_value=None)
         mocker.patch.object(Cuckoo, "_remove_illegal_characters_from_file_name", return_value=None)
-        mocker.patch.object(Cuckoo, "_assign_file_extension", return_value="blah")
         mocker.patch.object(Cuckoo, "query_machines", return_value={})
         mocker.patch.object(Cuckoo, "submit", return_value=None)
         mocker.patch.object(Cuckoo, "delete_task", return_value=None)
         mocker.patch.object(Cuckoo, "_generate_report", return_value=None)
 
+        service_task = ServiceTask(sample)
+        task = Task(service_task)
+        cuckoo_class_instance._task = task
+        service_request = ServiceRequest(task)
+
+        # Coverage test
+        mocker.patch.object(Cuckoo, "_assign_file_extension", return_value=None)
+        cuckoo_class_instance.execute(service_request)
+        assert True
+
+        mocker.patch.object(Cuckoo, "_assign_file_extension", return_value="blah")
         for generate_report in [True, False]:
             mocker.patch.object(Cuckoo, "_set_task_parameters", return_value=generate_report)
 
@@ -432,6 +449,16 @@ class TestCuckoo:
             correct_result_response.pop("supplementary")
             test_result_response.pop("supplementary")
             assert test_result_response == correct_result_response
+
+        # Exception tests for submit
+        mocker.patch.object(Cuckoo, "_set_task_parameters", return_value=None)
+        with mocker.patch.object(Cuckoo, "submit", side_effect=Exception("blah")):
+            with pytest.raises(Exception):
+                cuckoo_class_instance.execute(service_request)
+
+        with mocker.patch.object(Cuckoo, "submit", side_effect=RecoverableError("blah")):
+            with pytest.raises(RecoverableError):
+                cuckoo_class_instance.execute(service_request)
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -466,8 +493,7 @@ class TestCuckoo:
         all_statuses = [TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG,
                         SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED]
         file_content = "blah"
-        cuckoo_task_class_instance = cuckoo_task_class("blah", blah="blah")
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah", blah="blah")
 
         mocker.patch.object(Cuckoo, "submit_file", return_value=task_id)
         mocker.patch.object(Cuckoo, "delete_task", return_value=True)
@@ -526,9 +552,8 @@ class TestCuckoo:
         from retrying import RetryError
         from cuckoo.cuckoo import TASK_MISSING, TASK_STARTED, TASK_STARTING
 
-        cuckoo_task_class_instance = cuckoo_task_class("blah")
-        cuckoo_task_class_instance.id = 1
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah")
+        cuckoo_class_instance.cuckoo_task.id = 1
 
         # Mocking the time.sleep method that Retry uses, since decorators are loaded and immutable following module import
         with mocker.patch("time.sleep", side_effect=lambda _: None):
@@ -568,26 +593,15 @@ class TestCuckoo:
             {"id": 1, "status": "still_trucking"}
         ]
     )
-    def test_poll_report(return_value, cuckoo_class_instance, cuckoo_task_class, mocker):
+    def test_poll_report(return_value, cuckoo_class_instance, cuckoo_task_class, dummy_json_doc_class_instance, mocker):
         from cuckoo.cuckoo import Cuckoo, MissingCuckooReportException, JSONDecodeError, ReportSizeExceeded
         from assemblyline_v4_service.common.result import Result, ResultSection
         from retrying import RetryError
         from cuckoo.cuckoo import TASK_MISSING, ANALYSIS_FAILED, TASK_COMPLETED, TASK_REPORTED, MISSING_REPORT, \
             INVALID_JSON, REPORT_TOO_BIG, SERVICE_CONTAINER_DISCONNECTED
 
-        cuckoo_task_class_instance = cuckoo_task_class("blah")
-        cuckoo_task_class_instance.id = 1
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
-
-        # This class is just to create a doc to pass to JSONDecodeError for construction
-        class DummyJSONDoc(object):
-            def count(self, *args):
-                return 0
-
-            def rfind(self, *args):
-                return 0
-
-        doc = DummyJSONDoc()
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah")
+        cuckoo_class_instance.cuckoo_task.id = 1
 
         # Mocking the time.sleep method that Retry uses, since decorators are loaded and immutable following module import
         with mocker.patch("time.sleep", side_effect=lambda _: None):
@@ -614,7 +628,7 @@ class TestCuckoo:
                     for side_effect in side_effects:
                         # Mocking the Cuckoo.query_report method results since we only care about what exception is raised
                         if side_effect == JSONDecodeError:
-                            exc = side_effect("blah", doc, 1)
+                            exc = side_effect("blah", dummy_json_doc_class_instance, 1)
                         else:
                             exc = side_effect("blah")
                         with mocker.patch.object(Cuckoo, 'query_report', side_effect=exc):
@@ -672,10 +686,9 @@ class TestCuckoo:
         cuckoo_class_instance.submit_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_SUBMIT}"
         cuckoo_class_instance.session = Session()
 
-        file_name = "submit.me"
         file_content = "submit me!"
-        cuckoo_task_class_instance = cuckoo_task_class(file_name, blah="blah")
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah", blah="blah")
+        cuckoo_class_instance.cuckoo_task.id = task_id
 
         correct_rest_response = {"task_id": task_id}
         if task_ids:
@@ -737,10 +750,8 @@ class TestCuckoo:
         cuckoo_class_instance.session = Session()
         cuckoo_class_instance.max_report_size = cuckoo_class_instance.config["max_report_size"]
 
-        cuckoo_task_class_instance = cuckoo_task_class("blah", blah="blah")
-        cuckoo_task_class_instance.id = 1
-
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah", blah="blah")
+        cuckoo_class_instance.cuckoo_task.id = 1
 
         with requests_mock.Mocker() as m:
             with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
@@ -878,10 +889,8 @@ class TestCuckoo:
         cuckoo_class_instance.query_machine_info_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_MACHINE_INFO}"
         cuckoo_class_instance.session = Session()
 
-        cuckoo_task_class_instance = cuckoo_task_class("blah", blah="blah")
-        task_id = 1
-        cuckoo_task_class_instance.id = task_id
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah", blah="blah")
+        cuckoo_class_instance.cuckoo_task.id = 1
         machine_name = "blah"
 
         with requests_mock.Mocker() as m:
@@ -917,11 +926,9 @@ class TestCuckoo:
         cuckoo_class_instance.delete_task_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_DELETE_TASK}"
         cuckoo_class_instance.session = Session()
 
-        cuckoo_task_class_instance = cuckoo_task_class("blah", blah="blah")
         task_id = 1
-        cuckoo_task_class_instance.id = task_id
-
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah", blah="blah")
+        cuckoo_class_instance.cuckoo_task.id = task_id
 
         # Mocking the time.sleep method that Retry uses, since decorators are loaded and immutable following module import
         with mocker.patch("time.sleep", side_effect=lambda _: None):
@@ -1478,9 +1485,8 @@ class TestCuckoo:
         mocker.patch.object(Cuckoo, 'check_powershell', return_value=None)
         mocker.patch.object(Cuckoo, '_unpack_tar', return_value=None)
 
-        cuckoo_task_class_instance = cuckoo_task_class("blah")
-        cuckoo_task_class_instance.id = 1
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah")
+        cuckoo_class_instance.cuckoo_task.id = 1
         file_ext = "blah"
 
         cuckoo_class_instance._generate_report(file_ext)
@@ -1488,8 +1494,30 @@ class TestCuckoo:
         assert True
 
     @staticmethod
-    def test_unpack_tar(cuckoo_class_instance):
-        pass
+    def test_unpack_tar(cuckoo_class_instance, cuckoo_task_class, dummy_tar_class, mocker):
+        from cuckoo.cuckoo import Cuckoo
+
+        tar_report = "blah"
+        file_ext = "blah"
+
+        mocker.patch.object(Cuckoo, "_add_tar_ball_as_supplementary_file")
+        mocker.patch.object(Cuckoo, "_add_json_as_supplementary_file", return_value=True)
+        mocker.patch.object(Cuckoo, "_build_report")
+        mocker.patch.object(Cuckoo, "_extract_console_output")
+        mocker.patch.object(Cuckoo, "_extract_hollowshunter")
+        mocker.patch.object(Cuckoo, "_extract_artifacts")
+        mocker.patch("cuckoo.cuckoo.tarfile.open", return_value=dummy_tar_class())
+
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah")
+        cuckoo_class_instance.cuckoo_task.id = 1
+
+        cuckoo_class_instance._unpack_tar(tar_report, file_ext)
+        assert True
+
+        # Exception test for _extract_console_output or _extract_hollowshunter or _extract_artifacts
+        mocker.patch.object(Cuckoo, "_extract_console_output", side_effect=Exception)
+        cuckoo_class_instance._unpack_tar(tar_report, file_ext)
+        assert True
 
     @staticmethod
     def test_add_tar_ball_as_supplementary_file(cuckoo_class_instance, cuckoo_task_class, dummy_request_class, mocker):
@@ -1505,9 +1533,8 @@ class TestCuckoo:
         cuckoo_class_instance.request.task.supplementary = []
 
         mocker.patch('builtins.open', side_effect=Exception())
-        cuckoo_task_class_instance = cuckoo_task_class("blah")
-        cuckoo_task_class_instance.id = 1
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah")
+        cuckoo_class_instance.cuckoo_task.id = 1
         cuckoo_class_instance._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report)
 
         # Cleanup
@@ -1528,16 +1555,61 @@ class TestCuckoo:
         cuckoo_class_instance.request.task.supplementary = []
 
         mocker.patch.object(dummy_tar_class, 'getnames', side_effect=Exception())
-        cuckoo_task_class_instance = cuckoo_task_class("blah")
-        cuckoo_task_class_instance.id = 1
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class_instance
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah")
+        cuckoo_class_instance.cuckoo_task.id = 1
         report_json_path = cuckoo_class_instance._add_json_as_supplementary_file(tar_obj)
         assert cuckoo_class_instance.request.task.supplementary == []
         assert report_json_path == ""
 
     @staticmethod
-    def test_build_report(cuckoo_class_instance):
-        pass
+    @pytest.mark.parametrize("report_info", [{}, {"info": {"machine": {"name": "blah"}}}])
+    def test_build_report(report_info, cuckoo_class_instance, cuckoo_task_class, dummy_json_doc_class_instance, mocker):
+        from cuckoo.cuckoo import Cuckoo, CuckooProcessingException
+        from sys import getrecursionlimit
+        from json import JSONDecodeError
+        from assemblyline.common.exceptions import RecoverableError
+
+        report_json_path = "blah"
+        file_ext = "blah"
+        report_json = report_info
+
+        mocker.patch("builtins.open")
+        mocker.patch("json.loads", return_value=report_json)
+        mocker.patch.object(Cuckoo, "report_machine_info")
+        mocker.patch("cuckoo.cuckoo.generate_al_result")
+        mocker.patch.object(Cuckoo, "delete_task")
+
+        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah", blah="blah")
+        cuckoo_class_instance.cuckoo_task.id = 1
+        cuckoo_class_instance.cuckoo_task.report = None
+        cuckoo_class_instance.query_report_url = "%s"
+
+        cuckoo_class_instance._build_report(report_json_path, file_ext)
+
+        assert getrecursionlimit() == int(cuckoo_class_instance.config["recursion_limit"])
+        assert cuckoo_class_instance.cuckoo_task.report == report_info
+
+        # Exception tests for generate_al_result
+        mocker.patch("cuckoo.cuckoo.generate_al_result", side_effect=RecoverableError("blah"))
+        with pytest.raises(RecoverableError):
+            cuckoo_class_instance._build_report(report_json_path, file_ext)
+
+        mocker.patch("cuckoo.cuckoo.generate_al_result", side_effect=CuckooProcessingException("blah"))
+        with pytest.raises(CuckooProcessingException):
+            cuckoo_class_instance._build_report(report_json_path, file_ext)
+
+        mocker.patch("cuckoo.cuckoo.generate_al_result", side_effect=Exception("blah"))
+        with pytest.raises(CuckooProcessingException):
+            cuckoo_class_instance._build_report(report_json_path, file_ext)
+
+        # Exception tests for json.loads
+        mocker.patch("json.loads", side_effect=JSONDecodeError("blah", dummy_json_doc_class_instance, 1))
+        with pytest.raises(JSONDecodeError):
+            cuckoo_class_instance._build_report(report_json_path, file_ext)
+
+        mocker.patch("json.loads", side_effect=Exception("blah"))
+        with pytest.raises(Exception):
+            cuckoo_class_instance._build_report(report_json_path, file_ext)
 
     @staticmethod
     def test_extract_console_output(cuckoo_class_instance, dummy_request_class, mocker):
@@ -1551,6 +1623,8 @@ class TestCuckoo:
     @staticmethod
     def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class, mocker):
         from cuckoo.cuckoo import Cuckoo
+        from assemblyline_v4_service.common.task import MaxExtractedExceeded
+
         sysmon_path = "blah"
         sysmon_name = "blah"
         mocker.patch.object(Cuckoo, '_encode_sysmon_file', return_value=(sysmon_path, sysmon_name))
@@ -1594,9 +1668,17 @@ class TestCuckoo:
                 break
         assert all_supplementary
 
+        # Exception tests for add_extracted
+        cuckoo_class_instance.request.task.extracted = []
+        with mocker.patch.object(dummy_request_class, "add_extracted", side_effect=MaxExtractedExceeded):
+            cuckoo_class_instance._extract_artifacts(tar_obj)
+            assert cuckoo_class_instance.request.task.extracted == []
+
     @staticmethod
-    def test_extract_hollowshunter(cuckoo_class_instance, dummy_request_class, dummy_tar_class):
+    def test_extract_hollowshunter(cuckoo_class_instance, dummy_request_class, dummy_tar_class, mocker):
         from assemblyline_v4_service.common.result import Result, ResultSection, Heuristic
+        from assemblyline_v4_service.common.task import MaxExtractedExceeded
+
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance.file_res = Result()
         tar_obj = dummy_tar_class()
@@ -1608,17 +1690,20 @@ class TestCuckoo:
         correct_pe_heur = Heuristic(17)
         correct_pe_heur.add_signature_id("hollowshunter_pe")
         correct_pe_subsection_result_section.heuristic = correct_pe_heur
+        correct_result_section.add_subsection(correct_pe_subsection_result_section)
 
         correct_shc_subsection_result_section = ResultSection(title_text='HollowsHunter Shellcode')
         correct_shc_subsection_result_section.tags = {'dynamic.process.file_name': ['hollowshunter/hh_process_123_blah.shc']}
-
-        correct_result_section.add_subsection(correct_pe_subsection_result_section)
         correct_result_section.add_subsection(correct_shc_subsection_result_section)
+
         assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
         assert cuckoo_class_instance.request.task.extracted[0] == {"path": f"{cuckoo_class_instance.working_directory}/hollowshunter/hh_process_123_blah.exe", 'name': 'hollowshunter/hh_process_123_blah.exe', "description": 'HollowsHunter Injected Portable Executable'}
         assert cuckoo_class_instance.request.task.extracted[1] == {"path": f"{cuckoo_class_instance.working_directory}/hollowshunter/hh_process_123_blah.shc", 'name': 'hollowshunter/hh_process_123_blah.shc', "description": 'HollowsHunter Shellcode'}
         assert cuckoo_class_instance.request.task.supplementary[0] == {"path": f"{cuckoo_class_instance.working_directory}/hollowshunter/hh_process_123_dump_report.json", 'name': 'hollowshunter/hh_process_123_dump_report.json', "description": 'HollowsHunter report (json)'}
         assert cuckoo_class_instance.request.task.supplementary[1] == {"path": f"{cuckoo_class_instance.working_directory}/hollowshunter/hh_process_123_scan_report.json", 'name': 'hollowshunter/hh_process_123_scan_report.json', "description": 'HollowsHunter report (json)'}
 
-
-
+        # Exception tests for add_extracted
+        cuckoo_class_instance.request.task.extracted = []
+        mocker.patch.object(dummy_request_class, "add_extracted", side_effect=MaxExtractedExceeded)
+        cuckoo_class_instance._extract_hollowshunter(tar_obj)
+        assert cuckoo_class_instance.request.task.extracted == []
