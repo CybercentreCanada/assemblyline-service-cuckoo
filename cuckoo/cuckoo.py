@@ -264,7 +264,6 @@ class Cuckoo(ServiceBase):
 
         self.cuckoo_task = CuckooTask(self.file_name, **kwargs)
 
-        # TODO: 1000000% break this down into methods
         try:
             self.submit(self.request.file_contents)
 
@@ -1127,12 +1126,13 @@ class Cuckoo(ServiceBase):
             else:
                 self.report_machine_info(machine_name)
             self.log.debug("Generating AL Result from Cuckoo results..")
+            # TODO: why do we need process_map?
             process_map = generate_al_result(self.cuckoo_task.report,
                                              self.file_res,
                                              file_ext,
                                              self.config.get("random_ip_range"))
         except RecoverableError as e:
-            self.log.error(f"Recoverable error. Error message: {e.message}")
+            self.log.error(f"Recoverable error. Error message: {repr(e)}")
             if self.cuckoo_task and self.cuckoo_task.id is not None:
                 self.delete_task(self.cuckoo_task.id)
             raise
@@ -1249,7 +1249,8 @@ class Cuckoo(ServiceBase):
         if len(hollowshunter_sec.subsections) > 0:
             self.file_res.add_section(hollowshunter_sec)
 
-    def _encode_sysmon_file(self, destination_file_path, f):
+    @staticmethod
+    def _encode_sysmon_file(destination_file_path, f):
         return encode_file(destination_file_path, f, metadata={'al': {'type': 'metadata/sysmon'}})
 
 
