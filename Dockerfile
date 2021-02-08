@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y qemu-utils && rm -rf /var/lib/apt/lists
 USER assemblyline
 
 # Install pip packages
-RUN pip install --no-cache-dir --user jinja2 retrying pefile ip2geotools && rm -rf ~/.cache/pip
+RUN pip install --no-cache-dir --user jinja2 retrying pefile && rm -rf ~/.cache/pip
 
 # Copy Cuckoo service code
 WORKDIR /opt/al_service
