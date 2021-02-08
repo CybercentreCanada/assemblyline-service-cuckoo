@@ -25,7 +25,7 @@ jobs:
     - script: |
         install_path=`pwd`
         sudo apt-get update
-        sudo apt-get install -y qemu-utils
+        sudo apt-get install -y qemu-utils libffi-dev libfuzzy-dev libfuzzy2
         sudo rm -rf /var/lib/apt/lists/*
         sudo env "PATH=$PATH" python -m pip install -U --no-cache-dir assemblyline assemblyline_v4_service jinja2 retrying pefile ip2geotools -r `pwd`/requirements.txt
         sudo env "PATH=$PATH" python -m pip install -U -r `pwd`/test/requirements.txt
