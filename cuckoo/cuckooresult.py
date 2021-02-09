@@ -631,21 +631,20 @@ def contains_safelisted_value(val: str) -> bool:
         ip = ip.group()
         if slist_check_ip(ip):
             return True
+    elif domain is not None:
+        domain = domain.group()
+        if slist_check_domain(domain):
+            return True
     elif url is not None:
         url_pieces = urlparse(url.group())
         domain = url_pieces.netloc
-        if slist_check_domain(domain):
-            return True
-    elif domain is not None:
-        domain = domain.group()
         if slist_check_domain(domain):
             return True
     elif md5_hash is not None:
         md5_hash = md5_hash.group()
         if slist_check_hash(md5_hash):
             return True
-    else:
-        return False
+    return False
 
 
 def process_network(network: dict, al_result: Result, random_ip_range: str, process_map: dict) -> list:

@@ -159,6 +159,19 @@ def dummy_json_doc_class_instance():
     yield DummyJSONDoc()
 
 
+@pytest.fixture
+def dummy_result_class_instance():
+    class DummyResult(object):
+        from assemblyline_v4_service.common.result import ResultSection
+
+        def __init__(self):
+            self.sections = []
+
+        def add_section(self, res_sec: ResultSection):
+            self.sections.append(res_sec)
+    return DummyResult()
+
+
 def yield_sample_file_paths():
     samples_path = os.path.join(TEST_DIR, "samples")
     # For some reason os.listdir lists the same file twice, but with a trailing space on the second entry
@@ -1707,3 +1720,336 @@ class TestCuckoo:
         mocker.patch.object(dummy_request_class, "add_extracted", side_effect=MaxExtractedExceeded)
         cuckoo_class_instance._extract_hollowshunter(tar_obj)
         assert cuckoo_class_instance.request.task.extracted == []
+
+
+class TestCuckooResult:
+    @classmethod
+    def setup_class(cls):
+        create_tmp_manifest()
+
+    @classmethod
+    def teardown_class(cls):
+        remove_tmp_manifest()
+
+    @staticmethod
+    def test_constants():
+        pass
+
+    @staticmethod
+    def test_generate_al_result():
+        pass
+
+    @staticmethod
+    def test_process_debug():
+        pass
+
+    @staticmethod
+    def test_process_behaviour():
+        pass
+
+    @staticmethod
+    @pytest.mark.parametrize("process, process_map, correct_process",
+        [
+            ({"track": None, "first_seen": None, "ppid": None}, {}, {"process_pid": None, "signatures": {}}),
+            ({"track": None, "first_seen": None, "ppid": None, "pid": 1}, {1: {"signatures": ["{\"blah\":0}"]}}, {"process_pid": 1, "signatures": {"blah": 0}}),
+            ({"track": None, "first_seen": None, "ppid": None, "pid": 1, "children": [{"track": None, "first_seen": None, "ppid": None, "pid": 2}]}, {2: {"signatures": ["{\"blah\":0}"]}}, {"process_pid": 1, "signatures": {}, "children": [{"process_pid": 2, "signatures": {"blah": 0}}]}),
+        ]
+    )
+    def test_remove_process_keys(process, process_map, correct_process):
+        from cuckoo.cuckooresult import remove_process_keys
+        assert remove_process_keys(process, process_map) == correct_process
+
+    @staticmethod
+    @pytest.mark.parametrize("sysmon, correct_index",
+        [
+            ([], 0),
+            ([{"EventData": {"Data": []}}], 0),
+            ([{"EventData": {"Data": [{"@Name": "blah"}]}}], 0),
+            ([{"EventData": {"Data": [{"@Name": "blah", "#text": "blah"}]}}], 0),
+            ([{"EventData": {"Data": [{"@Name": "CurrentDirectory", "#text": "Current"}]}}], 0),
+            ([{"EventData": {"Data": [{"@Name": "blah", "#text": "C:\\Users\\buddy\\AppData\\Local\\Temp\\"}]}}], 0),
+            ([{"EventData": {"Data": []}}, {"EventData": {"Data": [{"@Name": "CurrentDirectory", "#text": "C:\\Users\\buddy\\AppData\\Local\\Temp\\"}]}}], 1),
+        ]
+    )
+    def test_get_trimming_index(sysmon, correct_index):
+        from cuckoo.cuckooresult import _get_trimming_index
+        assert _get_trimming_index(sysmon) == correct_index
+
+    @staticmethod
+    @pytest.mark.parametrize("parent, potential_child, expected_return_value",
+        [
+            ({}, {}, False),
+            ({"process_pid": "1", "children": []}, {"process_pid": "1", "children": []}, True),
+            ({"children": [{"process_pid": "1", "children": []}]}, {"process_pid": "1", "children": []}, True),
+            ({"children": [{"process_pid": "1", "children": [{"process_pid": "2", "children": []}]}]}, {"process_pid": "2"}, True),
+            ({"children": [{"process_pid": "1", "children": [{"process_pid": "3", "children": []}]}]}, {"process_pid": "2"}, False),
+        ]
+    )
+    def test_insert_child(parent, potential_child, expected_return_value):
+        from cuckoo.cuckooresult import _insert_child
+        assert _insert_child(parent, potential_child) == expected_return_value
+
+    @staticmethod
+    @pytest.mark.parametrize("process, processes, expected_processes",
+        [
+            ({}, [], [{}]),
+            ({"children": []}, [], []),
+            ({"children": [{"children": []}]}, [], [{}, {}]),
+        ]
+    )
+    def test_flatten_process_tree(process, processes, expected_processes):
+        from cuckoo.cuckooresult import _flatten_process_tree
+        assert _flatten_process_tree(process, processes) == expected_processes
+
+    @staticmethod
+    def test_merge_process_trees():
+        pass
+
+    @staticmethod
+    def test_process_signatures():
+        pass
+
+    @staticmethod
+    @pytest.mark.parametrize("val, expected_return",
+        [
+            (None, False),
+            (b"blah", False),
+            ("127.0.0.1", True),
+            ("http://blah.adobe.com", True),
+            ("play.google.com", True),
+            ("ac6f81bbb302fd4702c0b6c3440a5331", True),
+            ("blah.com", False)
+        ]
+    )
+    def test_contains_safelisted_value(val, expected_return):
+        from cuckoo.cuckooresult import contains_safelisted_value
+        assert contains_safelisted_value(val) == expected_return
+
+    @staticmethod
+    def test_process_network():
+        pass
+
+    @staticmethod
+    def test_process_all_events(dummy_result_class_instance):
+        from cuckoo.cuckooresult import process_all_events
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+        from copy import deepcopy
+
+        al_result = dummy_result_class_instance
+        network_events = [{"timestamp": 1}]
+        process_events = [{"command_line": "blah", "image": "blah", "timestamp": 1}]
+        test_network_events = deepcopy(network_events)
+        test_process_events = deepcopy(process_events)
+
+        correct_result_section = ResultSection(title_text="Events")
+        for event in network_events:
+            event["event_type"] = "network"
+            event["process_name"] = event.pop("process_name", None)
+            event["details"] = {
+                "protocol": event.pop("protocol", None),
+                "dom": event.pop("dom", None),
+                "dest_ip": event.pop("dest_ip", None),
+                "dest_port": event.pop("dest_port", None),
+            }
+        for event in process_events:
+            event["event_type"] = "process"
+            event["process_name"] = event.pop("process_name", None)
+            correct_result_section.add_tag("dynamic.process.command_line", event["command_line"])
+            correct_result_section.add_tag("dynamic.process.file_name", event["image"])
+            event["details"] = {
+                "image": event.pop("image", None),
+                "command_line": event.pop("command_line", None),
+            }
+        all_events = network_events + process_events
+        sorted_events = sorted(all_events, key=lambda k: k["timestamp"])
+        correct_result_section.body = json.dumps(sorted_events)
+        correct_result_section.body_format = BODY_FORMAT.TABLE
+
+        process_all_events(al_result, test_network_events, test_process_events)
+        assert check_section_equality(al_result.sections[0], correct_result_section)
+
+    @staticmethod
+    @pytest.mark.parametrize("curtain, process_map",
+    [
+        ({}, {"blah": "blah"}),
+        ({"1": {"events": [{"command": {"original": "blah", "altered": "blah"}}], "behaviors": ["blah"]}}, {"blah": "blah"}),
+        ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {"blah": "blah"}),
+        ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {"1": {"name": "blah.exe"}}),
+    ])
+    def test_process_curtain(curtain, process_map, dummy_result_class_instance):
+        from cuckoo.cuckooresult import process_curtain
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+
+        al_result = dummy_result_class_instance
+
+        curtain_body = []
+        correct_result_section = ResultSection(title_text="PowerShell Activity", body_format=BODY_FORMAT.TABLE)
+        for pid in curtain.keys():
+            process_name = process_map[int(pid)]["name"] if process_map.get(int(pid)) else "powershell.exe"
+            for event in curtain[pid]["events"]:
+                for command in event.keys():
+                    curtain_item = {
+                        "process_name": process_name,
+                        "original": event[command]["original"],
+                        "altered": None
+                    }
+                    altered = event[command]["altered"]
+                    if altered != "No alteration of event.":
+                        curtain_item["altered"] = altered
+                    curtain_body.append(curtain_item)
+            for behaviour in curtain[pid]["behaviors"]:
+                correct_result_section.add_tag("file.powershell.cmdlet", behaviour)
+        correct_result_section.body = json.dumps(curtain_body)
+
+        process_curtain(curtain, al_result, process_map)
+        if len(al_result.sections) > 0:
+            assert check_section_equality(al_result.sections[0], correct_result_section)
+        else:
+            assert al_result.sections == []
+
+    @staticmethod
+    @pytest.mark.parametrize("sysmon, process_map, correct_body, correct_process_tree, correct_processes",
+        [
+            ([], {}, None, [], []),
+            (
+                    [{"EventData": {"Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"}]}}],
+                    {},
+                    None,
+                    [{'signatures': {}, 'process_pid': 2, 'timestamp': None, 'children': [{'signatures': {}, 'process_pid': 1, 'timestamp': None, 'children': []}]}],
+                    [{'signatures': {}, 'process_pid': 1, 'timestamp': None}, {'signatures': {}, 'process_pid': 2, 'timestamp': None}]
+            ),
+            (
+                    [{"EventData": {"Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"}, {"@Name": "OriginalFileName", "#text": "blah"}, {"@Name": "CommandLine", "#text": "blah"}, {"@Name": "ParentImage", "#text": "blah"}, {"@Name": "ParentCommandLine", "#text": "blah"}, {"@Name": "UtcTime", "#text": "blah"}]}}],
+                    {},
+                    None,
+                    [{'signatures': {}, 'process_pid': 2, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': []}]}],
+                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}, {'signatures': {}, 'process_pid': 2, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}]
+            ),
+            (
+                    [{"EventData": {
+                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
+                                 {"@Name": "OriginalFileName", "#text": "blah"},
+                                 {"@Name": "CommandLine", "#text": "C:\\windows\\system32\\lsass.exe"},
+                                 {"@Name": "ParentImage", "#text": "lsass.exe"},
+                                 {"@Name": "ParentCommandLine", "#text": 'C:\\windows\\system32\\lsass.exe'},
+                                 {"@Name": "UtcTime", "#text": "blah"}]}}],
+                    {}, None, [], []
+            ),
+        ]
+    )
+    def test_process_sysmon(sysmon, process_map, correct_body, correct_process_tree, correct_processes, dummy_result_class_instance, mocker):
+        from cuckoo.cuckooresult import process_sysmon
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+
+        mocker.patch("cuckoo.cuckooresult._get_trimming_index", return_value=0)
+        mocker.patch("cuckoo.cuckooresult._insert_child", return_value=True)
+        # mocker.patch("cuckoo.cuckooresult._flatten_process_tree")
+
+        al_result = dummy_result_class_instance
+
+        assert process_sysmon(sysmon, al_result, process_map) == (correct_process_tree, correct_processes)
+
+        if correct_body is None:
+            assert al_result.sections == []
+        else:
+            correct_result_section = ResultSection(title_text="Sysmon Signatures", body_format=BODY_FORMAT.TABLE)
+            assert check_section_equality(al_result.sections[0], correct_result_section)
+
+    # TODO: method is in the works
+    # @staticmethod
+    # def test_process_hollowshunter(dummy_result_class_instance):
+    #     from cuckoo.cuckooresult import process_hollowshunter
+    #     from assemblyline_v4_service.common.result import ResultSection
+    #
+    #     hollowshunter = {"blah": "blah"}
+    #     process_map = {"blah": "blah"}
+    #
+    #     al_result = dummy_result_class_instance()
+    #     hollowshunter_body = []
+    #     correct_result_section = ResultSection(title_text="HollowsHunter Analysis", body_format=BODY_FORMAT.TABLE)
+    #     correct_result_section.body = json.dumps(hollowshunter_body)
+    #
+    #     process_hollowshunter(hollowshunter, al_result, process_map)
+    #     assert check_section_equality(al_result.sections[0], correct_result_section)
+
+    @staticmethod
+    @pytest.mark.parametrize("process_map, correct_buffer_body, correct_tags",
+        [
+            ({0: {"decrypted_buffers": []}}, None, None),
+            ({0: {"decrypted_buffers": [{"blah": "blah"}]}}, None, None),
+            ({0: {"decrypted_buffers": [{"CryptDecrypt": {"buffer": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', None),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', None),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}}, '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1'], 'network.static.uri': ['127.0.0.1']}),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.blah"}}]}}, '[{"Decrypted Buffer": "blah.blah"}]', {'network.static.domain': ['blah.blah'], 'network.static.uri': ['blah.blah']}),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}}, '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1'], 'network.static.uri': ['127.0.0.1:999']}),
+        ]
+    )
+    def test_process_decrypted_buffers(process_map, correct_buffer_body, correct_tags, dummy_result_class_instance):
+        from cuckoo.cuckooresult import process_decrypted_buffers
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+
+        al_result = dummy_result_class_instance
+
+        process_decrypted_buffers(process_map, al_result)
+
+        if correct_buffer_body is None:
+            assert al_result.sections == []
+        else:
+            correct_result_section = ResultSection(title_text="Decrypted Buffers", body_format=BODY_FORMAT.TABLE)
+            correct_result_section.body = correct_buffer_body
+            correct_result_section.tags = correct_tags
+            assert check_section_equality(al_result.sections[0], correct_result_section)
+
+    @staticmethod
+    @pytest.mark.parametrize("val", ["not an ip", "127.0.0.1"])
+    def test_is_ip(val):
+        from ipaddress import ip_address
+        from cuckoo.cuckooresult import is_ip
+        try:
+            ip_address(val)
+            assert is_ip(val)
+        except ValueError:
+            assert not is_ip(val)
+
+    @staticmethod
+    @pytest.mark.parametrize("score", [1, 2, 3, 4, 5, 6, 7, 8, 9])
+    def test_translate_score(score):
+        from cuckoo.cuckooresult import translate_score
+        score_translation = {
+            1: 10,
+            2: 100,
+            3: 250,
+            4: 500,
+            5: 750,
+            6: 1000,
+            7: 1000,
+            8: 1000
+        }
+        if score not in score_translation:
+            with pytest.raises(KeyError):
+                translate_score(score)
+        else:
+            assert score_translation[score] == translate_score(score)
+
+    @staticmethod
+    @pytest.mark.parametrize("processes, correct_process_map",
+        [
+            (None, {}),
+            ([{"process_name": "lsass.exe"}], {}),
+            ([{"process_name": "blah.exe", "calls": [], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"api": "blah"}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "getaddrinfo", "arguments": {"hostname": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"getaddrinfo": {"hostname": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "GetAddrInfoW", "arguments": {"hostname": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"GetAddrInfoW": {"hostname": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "connect", "arguments": {"ip_address": "blah", "port": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"connect": {"ip_address": "blah", "port": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectW", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"InternetConnectW": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectA", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"InternetConnectA": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "send", "arguments": {"buffer": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"send": {"buffer": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "crypto", "api": "CryptDecrypt", "arguments": {"buffer": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': [{"CryptDecrypt": {"buffer": "blah"}}]}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "cfg:blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': [{"OutputDebugStringA": {"string": "cfg:blah"}}]}}),
+        ]
+    )
+    def test_get_process_map(processes, correct_process_map):
+        from cuckoo.cuckooresult import get_process_map
+        assert get_process_map(processes) == correct_process_map
+
