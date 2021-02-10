@@ -1733,19 +1733,145 @@ class TestCuckooResult:
 
     @staticmethod
     def test_constants():
-        pass
+        from re import compile
+        from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex, FULL_URI as base_uri_regex, MD5_REGEX as base_md5_regex
+        from cuckoo.cuckooresult import DOMAIN_REGEX, IP_REGEX, URL_REGEX, MD5_REGEX, UNIQUE_IP_LIMIT
+        assert DOMAIN_REGEX == compile(base_domain_regex)
+        assert IP_REGEX == compile(base_ip_regex)
+        assert URL_REGEX == compile(base_uri_regex.lstrip("^").rstrip("$"))
+        assert MD5_REGEX == compile(base_md5_regex)
 
     @staticmethod
-    def test_generate_al_result():
-        pass
+    @pytest.mark.parametrize("api_report, file_ext, random_ip_range, correct_body",
+        [
+            ({}, None, None, None),
+            (
+                    {"info": {"started": "blah", "ended": "blah", "duration": "blah", "id": "blah", "route": "blah", "version": "blah"}},
+                    None, None,
+                    '{"ID": "blah", "Duration": -1, "Routing": "blah", "Version": "blah"}',
+            ),
+            (
+                    {"info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}},
+                    None, None,
+                    '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
+            ),
+            (
+                    {"debug": "blah", "signatures": "blah", "network": "blah", "behavior": {"blah": "blah"}, "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
+                    None, None, None
+            ),
+            (
+                    {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"summary": "blah"}},
+                    None, None,
+                    '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
+            ),
+            (
+                    {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"processtree": "blah"}},
+                    None, None,
+                    '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
+            ),
+            (
+                    {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"processes": "blah"}},
+                    None, None,
+                    '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
+            ),
+        ]
+    )
+    def test_generate_al_result(api_report, file_ext, random_ip_range, correct_body, dummy_result_class_instance, mocker):
+        from cuckoo.cuckooresult import generate_al_result
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+
+        correct_process_map = {"blah": "blah"}
+        mocker.patch("cuckoo.cuckooresult.process_debug")
+        mocker.patch("cuckoo.cuckooresult.get_process_map", return_value=correct_process_map)
+        mocker.patch("cuckoo.cuckooresult.process_signatures", return_value=False)
+        mocker.patch("cuckoo.cuckooresult.process_sysmon", return_value=({}, []))
+        mocker.patch("cuckoo.cuckooresult.process_behaviour", return_value=["blah"])
+        mocker.patch("cuckoo.cuckooresult.process_network", return_value=["blah"])
+        mocker.patch("cuckoo.cuckooresult.process_all_events")
+        mocker.patch("cuckoo.cuckooresult.process_curtain")
+        mocker.patch("cuckoo.cuckooresult.process_hollowshunter")
+        mocker.patch("cuckoo.cuckooresult.process_decrypted_buffers")
+        al_result = dummy_result_class_instance
+        assert generate_al_result(api_report, al_result, file_ext, random_ip_range) == correct_process_map
+
+        if api_report == {}:
+            assert al_result.sections == []
+        elif api_report.get("behavior") == {"blah": "blah"}:
+            correct_result_section = ResultSection(title_text='Notes', body=f'No program available to execute a file with the following extension: {file_ext}')
+            assert check_section_equality(al_result.sections[0], correct_result_section)
+        else:
+            correct_result_section = ResultSection(title_text='Analysis Information', body_format=BODY_FORMAT.KEY_VALUE, body=correct_body)
+            assert check_section_equality(al_result.sections[0], correct_result_section)
 
     @staticmethod
-    def test_process_debug():
-        pass
+    @pytest.mark.parametrize("debug, correct_body",
+        [
+            ({"errors": [], "log": [], "cuckoo": []}, None),
+            ({"errors": ["BLAH"], "log": [], "cuckoo": []}, "BLAH"),
+            ({"errors": ["BLAH", "BLAH"], "log": [], "cuckoo": []}, "BLAH\nBLAH"),
+            ({"errors": [], "log": ["blah"], "cuckoo": []}, None),
+            ({"errors": [], "log": ["ERROR: blah"], "cuckoo": []}, "blah"),
+            ({"errors": [], "log": ["ERROR: blah", "ERROR: blah\n"], "cuckoo": []}, "blah\nblah"),
+            ({"errors": [], "log": [], "cuckoo": ["blah"]}, None),
+            ({"errors": [], "log": [], "cuckoo": ["blah", "\n"]}, "blah"),
+            ({"errors": [], "log": [], "cuckoo": ["blah", "\n", "ERROR: blah"]}, "blah\nblah"),
+        ]
+    )
+    def test_process_debug(debug, correct_body, dummy_result_class_instance):
+        from cuckoo.cuckooresult import process_debug
+        from assemblyline_v4_service.common.result import ResultSection
+
+        al_result = dummy_result_class_instance
+        process_debug(debug, al_result)
+
+        if correct_body is None:
+            assert al_result.sections == []
+        else:
+            correct_result_section = ResultSection(title_text='Analysis Errors')
+            correct_result_section.body = correct_body
+            assert check_section_equality(al_result.sections[0], correct_result_section)
 
     @staticmethod
-    def test_process_behaviour():
-        pass
+    @pytest.mark.parametrize("behaviour, process_map, sysmon_tree, sysmon_procs, is_process_martian, api_limiting, correct_body, correct_events",
+        [
+            ({"processtree": [], "processes": []}, {}, [], [], False, False, [], []),
+            ({"processtree": [{"process_name": "lsass.exe", "children": []}], "processes": []}, {}, [], [], False, False, [], []),
+            ({"processtree": [{"process_name": "blah", "children": []}], "processes": []}, {}, ["blah"], [], False, False, '[{"process_name": "blah", "children": []}]', []),
+            ({"processtree": [{"process_name": "blah", "children": []}], "processes": []}, {}, ["blah"], [], True, False, '[{"process_name": "blah", "children": []}]', []),
+            ({"processtree": [], "processes": [{"pid": 0, "process_name": "blah", "calls": ["blah"], "first_seen": 1, "command_line": "blah"}], "apistats": {"0": {"blah": 2}}}, {}, [], [], False, True, '[{"name": "blah", "api_calls_made_during_detonation": 2, "api_calls_included_in_report": 1}]', [{'timestamp': '1970-01-01 00:00:01.000', 'process_name': 'blah (0)', 'image': 'blah', 'command_line': 'blah'}]),
+            ({"processtree": [], "processes": [{"pid": 0, "process_name": "blah", "calls": ["blah"], "first_seen": 1, "process_path": "blah_path", "command_line": "blah"}], "apistats": {"0": {"blah": 2}}}, {}, [], [], False, True, '[{"name": "blah", "api_calls_made_during_detonation": 2, "api_calls_included_in_report": 1}]', [{'command_line': 'blah', 'image': 'blah_path', 'process_name': 'blah (0)', 'timestamp': '1970-01-01 00:00:01.000'}]),
+            ({"processtree": [], "processes": [{"pid": 0, "process_name": "lsass.exe", "calls": []}], "apistats": {"0": {"blah": 2}}}, {}, [], [], False, False, [], []),
+            ({"processtree": [], "processes": [{"pid": 0, "process_name": "blah", "calls": [], "first_seen": 1, "command_line": "blah"}]}, {}, [], [{"pid": None}, {"process_pid": 1, "process_name": "blah", "process_path": "blah_path", "timestamp": "1111-11-11 11:11:11.11", "command_line": "blah"}], False, False, [], [{'timestamp': '1970-01-01 00:00:01.000', 'process_name': 'blah (0)', 'image': 'blah', 'command_line': 'blah'}, {'timestamp': '1111-11-11 11:11:11.110', 'process_name': 'blah (1)', 'image': 'blah', 'command_line': 'blah'}]),
+        ]
+    )
+    def test_process_behaviour(behaviour, process_map, sysmon_tree, sysmon_procs, is_process_martian, api_limiting, correct_body, correct_events, dummy_result_class_instance, mocker):
+        from cuckoo.cuckooresult import process_behaviour
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT, Heuristic
+        mocker.patch("cuckoo.cuckooresult.remove_process_keys")
+        mocker.patch("cuckoo.cuckooresult._merge_process_trees", return_value=behaviour["processtree"])
+        al_result = dummy_result_class_instance
+
+        assert process_behaviour(behaviour, al_result, process_map, sysmon_tree, sysmon_procs, is_process_martian) == correct_events
+
+        if sysmon_tree:
+            correct_result_section = ResultSection(title_text="Spawned Process Tree", body_format=BODY_FORMAT.PROCESS_TREE)
+            correct_result_section.body = correct_body
+            if is_process_martian:
+                correct_result_section.heuristic = Heuristic(19, score_map={"process_martian": 10}, signatures={"process_martian": 1})
+                correct_result_section.heuristic.frequency = 1
+            assert check_section_equality(al_result.sections[0], correct_result_section)
+        else:
+            if api_limiting:
+                correct_result_section = ResultSection(title_text="Limited Process API Calls", body_format=BODY_FORMAT.TABLE)
+                correct_result_section.body = correct_body
+                descr = f"For the sake of service processing, the number of the following " \
+                        f"API calls has been reduced in the report.json. The cause of large volumes of specific API calls is " \
+                        f"most likely related to the anti-sandbox technique known as API Hammering. For more information, look " \
+                        f"to the api_hammering signature."
+                correct_result_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
+                assert check_section_equality(al_result.sections[0], correct_result_section)
+            else:
+                assert al_result.sections == []
 
     @staticmethod
     @pytest.mark.parametrize("process, process_map, correct_process",
@@ -1802,12 +1928,92 @@ class TestCuckooResult:
         assert _flatten_process_tree(process, processes) == expected_processes
 
     @staticmethod
-    def test_merge_process_trees():
-        pass
+    @pytest.mark.parametrize("cuckoo_tree, sysmon_tree, sysmon_process_in_cuckoo_tree, correct_cuckoo_tree",
+        [
+            ([], [], False, []),
+            ([{"process_name": "blah"}], [], False, [{'process_name': 'blah (Cuckoo)'}]),
+            ([{"process_name": "blah"}], [{"process_name": "blah"}], False, [{'process_name': 'blah (Cuckoo)'}]),
+            ([{"process_name": "blah"}], [{"process_name": "blah"}], True, [{'process_name': 'blah (Sysmon)'}]),
+            ([{"process_name": "blah"}], [{"process_name": "blah", "process_pid": 1}], False, [{'process_name': 'blah (Cuckoo)'}, {'process_name': 'blah (Sysmon)', 'process_pid': 1}]),
+            ([{"process_name": "blah", "process_pid": 1}], [{"process_name": "blah", "process_pid": 1}], False, [{'process_name': 'blah (Cuckoo)', "process_pid": 1}]),
+        ]
+    )
+    def test_merge_process_trees(cuckoo_tree, sysmon_tree, sysmon_process_in_cuckoo_tree, correct_cuckoo_tree):
+        from cuckoo.cuckooresult import _merge_process_trees
+        assert _merge_process_trees(cuckoo_tree, sysmon_tree, sysmon_process_in_cuckoo_tree) == correct_cuckoo_tree
 
+    # TODO: complete tests for signatures
     @staticmethod
-    def test_process_signatures():
-        pass
+    @pytest.mark.parametrize("sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian",
+        [
+            (None, [], "", "", {}, None, False),
+            (None, [{"name": "blah", "severity": 1}], "192.0.2.0/24", "", {}, None, False),
+            ("blah", [{"name": "blah", "severity": 1, "markcount": 1}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
+            ("process_martian", [{"name": "process_martian"}], "192.0.2.0/24", "", {}, None, True),
+            ("creates_doc", [{"name": "creates_doc", "severity": 1, "markcount": 1, "marks": [{"ioc": "blahblah"}]}], "192.0.2.0/24", "blahblah", {}, None, False),
+            ("creates_hidden_file", [{"name": "creates_hidden_file", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"filepath": "blahblah"}}}]}], "192.0.2.0/24", "blahblah", {}, None, False),
+            ("creates_hidden_file", [{"name": "creates_hidden_file", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"filepath": "desktop.ini"}}}]}], "192.0.2.0/24", "blahblah", {}, None, False),
+            ("creates_exe", [{"name": "creates_exe", "severity": 1, "markcount": 1, "marks": [{"ioc": "AppData\\Roaming\\Microsoft\\Office\\Recent\\Temp.LNK"}]}], "192.0.2.0/24", "blahblah", {}, None, False),
+            ("creates_shortcut", [{"name": "creates_shortcut", "severity": 1, "markcount": 1, "marks": [{"ioc": "blahblah.lnk"}]}], "192.0.2.0/24", "blahblah.blah", {}, None, False),
+            ("attack_id", [{"name": "attack_id", "severity": 1, "markcount": 1, "marks": [], "ttp": ["T1186"]}], "192.0.2.0/24", "blahblahblahblah", {}, 'No description for signature.', False),
+            ("skipped_families", [{"name": "skipped_families", "severity": 1, "markcount": 1, "marks": [], "families": ["generic"]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
+            ("families", [{"name": "families", "severity": 1, "markcount": 1, "marks": [], "families": ["blah"]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tFamilies: blah', False),
+            ("console_output", [{"name": "console_output", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"buffer": "blah"}}, "type": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
+            ("process_map", [{"name": "process_map", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "blah"}]}], "192.0.2.0/24", "", {1: {"signatures": set()}}, 'No description for signature.', False),
+            ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tIOC: 1', False),
+            ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "domain": "blah.adobe.com"}]}], "192.0.2.0/24", "", {}, None, False),
+            ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "description": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tIOC: 1\n\tFun fact: blah', False),
+            ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "ip": "192.0.2.1"}]}], "192.0.2.0/24", "", {}, None, False),
+            ("network_cnc_http", [{"name": "network_cnc_http", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 127.0.0.1"}]}], "192.0.2.0/24", "", {}, None, False),
+            ("network_cnc_http", [{"name": "network_cnc_http", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 11.11.11.11", "suspicious_features": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tFun fact: blah\n\tIOC: blah 11.11.11.11', False),
+            ("nolookup_communication", [{"name": "nolookup_communication", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "host": "11.11.11.11"}]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
+            ("nolookup_communication", [{"name": "nolookup_communication", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "host": "127.0.0.1"}]}], "192.0.2.0/24", "", {}, None, False),
+            # ("suspicious_powershell", [{"name": "suspicious_powershell", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "value": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\t"IOC: blah', False),
+        ]
+    )
+    def test_process_signatures(sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian, dummy_result_class_instance):
+        from cuckoo.cuckooresult import process_signatures
+        from assemblyline_v4_service.common.result import ResultSection, Heuristic
+        al_result = dummy_result_class_instance
+        assert process_signatures(sigs, al_result, random_ip_range, target_filename, process_map) == correct_is_process_martian
+        if correct_body is None:
+            assert al_result.sections == []
+        else:
+            correct_result_section = ResultSection(title_text="Signatures")
+            if sig_name == "attack_id":
+                correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
+                correct_subsection.heuristic = Heuristic(9999, signatures={sig_name: 1}, score_map={sig_name: 10})
+                correct_subsection.heuristic.frequency = 1
+                correct_subsection.heuristic.attack_ids = ["T1186"]
+                correct_result_section.add_subsection(correct_subsection)
+            elif sig_name == "console_output":
+                correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
+                correct_subsection.heuristic = Heuristic(35, signatures={sig_name: 1}, score_map={sig_name: 10})
+                correct_subsection.heuristic.frequency = 1
+                correct_subsection.heuristic.attack_ids = ['T1003', 'T1005']
+                correct_result_section.add_subsection(correct_subsection)
+                os.remove("/tmp/console_output.txt")
+            elif sig_name == "process_map":
+                correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
+                correct_subsection.heuristic = Heuristic(9999, signatures={sig_name: 1}, score_map={sig_name: 10})
+                correct_subsection.heuristic.frequency = 1
+                correct_result_section.add_subsection(correct_subsection)
+                assert process_map == {1: {"signatures": {'{"process_map": 10}'}}}
+            elif sig_name in ["network_cnc_http", "nolookup_communication"]:
+                correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
+                correct_subsection.heuristic = Heuristic(22, signatures={sig_name: 1}, score_map={sig_name: 10})
+                correct_subsection.heuristic.frequency = 1
+                if sig_name == "network_cnc_http":
+                    correct_subsection.add_tag('network.dynamic.uri', '11.11.11.11')
+                elif sig_name == "nolookup_communication":
+                    correct_subsection.add_tag("network.dynamic.ip", "11.11.11.11")
+                correct_result_section.add_subsection(correct_subsection)
+            else:
+                correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
+                correct_subsection.heuristic = Heuristic(9999, signatures={sig_name: 1}, score_map={sig_name: 10})
+                correct_subsection.heuristic.frequency = 1
+                correct_result_section.add_subsection(correct_subsection)
+            assert check_section_equality(al_result.sections[0], correct_result_section)
 
     @staticmethod
     @pytest.mark.parametrize("val, expected_return",
@@ -1825,6 +2031,7 @@ class TestCuckooResult:
         from cuckoo.cuckooresult import contains_safelisted_value
         assert contains_safelisted_value(val) == expected_return
 
+    # TODO: complete unit tests for process_network
     @staticmethod
     def test_process_network():
         pass
@@ -1919,9 +2126,13 @@ class TestCuckooResult:
                     [{'signatures': {}, 'process_pid': 1, 'timestamp': None}, {'signatures': {}, 'process_pid': 2, 'timestamp': None}]
             ),
             (
-                    [{"EventData": {"Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"}, {"@Name": "OriginalFileName", "#text": "blah"}, {"@Name": "CommandLine", "#text": "blah"}, {"@Name": "ParentImage", "#text": "blah"}, {"@Name": "ParentCommandLine", "#text": "blah"}, {"@Name": "UtcTime", "#text": "blah"}]}}],
-                    {},
-                    None,
+                    [{"EventData": {
+                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
+                                 {"@Name": "OriginalFileName", "#text": "blah"},
+                                 {"@Name": "CommandLine", "#text": "blah"}, {"@Name": "ParentImage", "#text": "blah"},
+                                 {"@Name": "ParentCommandLine", "#text": "blah"},
+                                 {"@Name": "UtcTime", "#text": "blah"}]}}],
+                    {}, None,
                     [{'signatures': {}, 'process_pid': 2, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': []}]}],
                     [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}, {'signatures': {}, 'process_pid': 2, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}]
             ),
@@ -1935,6 +2146,50 @@ class TestCuckooResult:
                                  {"@Name": "UtcTime", "#text": "blah"}]}}],
                     {}, None, [], []
             ),
+            (
+                    [{"EventData": {
+                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
+                                 {"@Name": "OriginalFileName", "#text": "blah"},
+                                 {"@Name": "CommandLine", "#text": "blah"},
+                                 {"@Name": "ParentImage", "#text": "lsass.exe"},
+                                 {"@Name": "ParentCommandLine", "#text": "bin\\inject-x86.exe --app C:\\windows\System32\\rundll32.exe"},
+                                 {"@Name": "UtcTime", "#text": "blah"}]}}],
+                    {}, None,
+                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': []}],
+                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}]
+            ),
+            (
+                    [{"EventData": {
+                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
+                                 {"@Name": "OriginalFileName", "#text": "blah"},
+                                 {"@Name": "CommandLine", "#text": "blah"},
+                                 {"@Name": "ParentImage", "#text": "lsass.exe"},
+                                 {"@Name": "ParentCommandLine", "#text": "bin\\inject-x86.exe"},
+                                 {"@Name": "UtcTime", "#text": "blah"}]}}],
+                    {}, None,
+                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': []}],
+                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}]
+            ),
+            (
+                [{"EventData": {
+                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
+                                 {"@Name": "OriginalFileName", "#text": "blah"},
+                                 {"@Name": "CommandLine", "#text": "blah"},
+                                 {"@Name": "ParentImage", "#text": "lsass.exe"},
+                                 {"@Name": "ParentCommandLine", "#text": "bin\\inject-x86.exe"},
+                                 {"@Name": "UtcTime", "#text": "blah"}]}},
+                {"EventData": {
+                    "Data": [{"@Name": "ProcessId", "#text": "3"}, {"@Name": "ParentProcessId", "#text": "1"},
+                             {"@Name": "OriginalFileName", "#text": "blah"},
+                             {"@Name": "CommandLine", "#text": "blah"},
+                             {"@Name": "ParentImage", "#text": "lsass.exe"},
+                             {"@Name": "ParentCommandLine", "#text": "bin\\inject-x86.exe"},
+                             {"@Name": "UtcTime", "#text": "blah"}]}}
+                ],
+                {}, None,
+                [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': []}],
+                [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}]
+            )
         ]
     )
     def test_process_sysmon(sysmon, process_map, correct_body, correct_process_tree, correct_processes, dummy_result_class_instance, mocker):
@@ -2053,3 +2308,1062 @@ class TestCuckooResult:
         from cuckoo.cuckooresult import get_process_map
         assert get_process_map(processes) == correct_process_map
 
+
+class TestSignatures:
+    @staticmethod
+    def test_constants():
+        from cuckoo.signatures import CUCKOO_SIGNATURES, CUCKOO_SIGNATURE_CATEGORIES, CUCKOO_DROPPED_SIGNATURES
+        assert CUCKOO_SIGNATURES == {
+            "html_flash": "Exploit",
+            "powershell_bitstransfer": "PowerShell",
+            "powershell_empire": "Hacking tool",
+            "locker_cmd": "Locker",
+            "js_anti_analysis": "Anti-analysis",
+            "pdf_javascript": "Suspicious PDF API",
+            "application_sent_sms_messages": "Suspicious Android API",
+            "android_antivirus_virustotal": "Anti-antivirus",
+            "antivm_vmware_keys": "Anti-vm",
+            "antidbg_devices": "Anti-Debug",
+            "worm_phorpiex": "Worm",
+            "cloud_google": "Cloud",
+            "jeefo_mutexes": "Virus",
+            "rtf_unknown_version": "Suspicious Office",
+            "ransomware_files": "Ransomware",
+            "credential_dumping_lsass": "Persistence",
+            "injection_explorer": "Injection",
+            "dropper": "Dropper",
+            "process_martian": "Suspicious Execution Chain",
+            "trojan_redosru": "Trojan",
+            "rat_delf": "RAT",
+            "recon_beacon": "C2",
+            "network_tor": "Tor",
+            "smtp_gmail": "Web Mail",
+            "antisandbox_cuckoo_files": "Anti-sandbox",
+            "stealth_hide_notifications": "Stealth",
+            "packer_entropy": "Packer",
+            "banker_zeus_url": "Banker",
+            "blackpos_url": "Point-of-sale",
+            "exec_waitfor": "Bypass",
+            "exec_crash": "Crash",
+            "im_btb": "IM",
+            "blackenergy_mutexes": "Rootkit",
+            "browser_startpage": "Adware",
+            "modifies_certificates": "Infostealer",
+            "has_wmi": "WMI",
+            "suspicious_write_exe": "Downloader",
+            "dnsserver_dynamic": "DynDNS",
+            "betabot_url": "BOT",
+            "stack_pivot_shellcode_apis": "Rop",
+            "fraudtool_fakerean": "Fraud",
+            "urlshortcn_checkip": "URLshort",
+            "antiemu_wine": "Anti-emulation",
+            "cryptomining_stratum_command": "Cryptocurrency",
+            "network_bind": "Bind",
+            "exploitkit_mutexes": "Exploit",
+            "powershell_ddi_rc4": "PowerShell",
+            "powershell_meterpreter": "Hacking tool",
+            "locker_regedit": "Locker",
+            "antianalysis_detectfile": "Anti-analysis",
+            "pdf_attachments": "Suspicious PDF API",
+            "application_using_the_camera": "Suspicious Android API",
+            "antivirus_virustotal": "Anti-antivirus",
+            "antivm_generic_ide": "Anti-vm",
+            "antidbg_windows": "Anti-Debug",
+            "worm_psyokym": "Worm",
+            "cloud_dropbox": "Cloud",
+            "tufik_mutexes": "Virus",
+            "rtf_unknown_character_set": "Suspicious Office",
+            "modifies_desktop_wallpaper": "Ransomware",
+            "credential_dumping_lsass_access": "Persistence",
+            "injection_runpe": "Injection",
+            "office_dde": "Dropper",
+            "martian_command_process": "Suspicious Execution Chain",
+            "trojan_dapato": "Trojan",
+            "rat_naid_ip": "RAT",
+            "multiple_useragents": "C2",
+            "network_tor_service": "Tor",
+            "smtp_yahoo": "Web Mail",
+            "antisandbox_unhook": "Anti-sandbox",
+            "stealth_system_procname": "Stealth",
+            "packer_polymorphic": "Packer",
+            "banker_zeus_mutex": "Banker",
+            "pos_poscardstealer_url": "Point-of-sale",
+            "applocker_bypass": "Bypass",
+            "im_qq": "IM",
+            "bootkit": "Rootkit",
+            "installs_bho": "Adware",
+            "disables_spdy_firefox": "Infostealer",
+            "win32_process_create": "WMI",
+            "downloader_cabby": "Downloader",
+            "networkdyndns_checkip": "DynDNS",
+            "warbot_url": "BOT",
+            "stackpivot_shellcode_createprocess": "Rop",
+            "clickfraud_cookies": "Fraud",
+            "bitcoin_opencl": "Cryptocurrency",
+            "exploit_heapspray": "Exploit",
+            "powershell_dfsp": "PowerShell",
+            "metasploit_shellcode": "Hacking tool",
+            "locker_taskmgr": "Locker",
+            "js_iframe": "Anti-analysis",
+            "pdf_openaction": "Suspicious PDF API",
+            "android_embedded_apk": "Suspicious Android API",
+            "antivirus_irma": "Anti-antivirus",
+            "antivm_virtualpc": "Anti-vm",
+            "checks_debugger": "Anti-Debug",
+            "krepper_mutexes": "Worm",
+            "cloud_wetransfer": "Cloud",
+            "dofoil": "Virus",
+            "has_office_eps": "Suspicious Office",
+            "ransomware_extensions": "Ransomware",
+            "persistence_ads": "Persistence",
+            "injection_createremotethread": "Injection",
+            "exec_bits_admin": "Suspicious Execution Chain",
+            "pidief": "Trojan",
+            "bozok_key": "RAT",
+            "dead_host": "C2",
+            "network_torgateway": "Tor",
+            "smtp_mail_ru": "Web Mail",
+            "antisandbox_foregroundwindows": "Anti-sandbox",
+            "modifies_security_center_warnings": "Stealth",
+            "pe_features": "Packer",
+            "banker_zeus_p2p": "Banker",
+            "jackpos_file": "Point-of-sale",
+            "bypass_firewall": "Bypass",
+            "disables_spdy_ie": "Infostealer",
+            "malicious_document_urls": "Downloader",
+            "network_dns_txt_lookup": "DynDNS",
+            "bot_vnloader_url": "BOT",
+            "stack_pivot": "Rop",
+            "browser_security": "Fraud",
+            "miningpool": "Cryptocurrency",
+            "dep_heap_bypass": "Exploit",
+            "powershell_di": "PowerShell",
+            "locates_sniffer": "Anti-analysis",
+            "pdf_openaction_js": "Suspicious PDF API",
+            "application_queried_phone_number": "Suspicious Android API",
+            "antiav_bitdefender_libs": "Anti-antivirus",
+            "antivm_vbox_devices": "Anti-vm",
+            "checks_kernel_debugger": "Anti-Debug",
+            "worm_allaple": "Worm",
+            "cloud_mega": "Cloud",
+            "office_indirect_call": "Suspicious Office",
+            "ransomware_shadowcopy": "Ransomware",
+            "deletes_executed_files": "Persistence",
+            "injection_queueapcthread": "Injection",
+            "uses_windows_utilities": "Suspicious Execution Chain",
+            "obfus_mutexes": "Trojan",
+            "rat_zegost": "RAT",
+            "nolookup_communication": "C2",
+            "smtp_live": "Web Mail",
+            "antisandbox_sleep": "Anti-sandbox",
+            "creates_null_reg_entry": "Stealth",
+            "peid_packer": "Packer",
+            "banker_prinimalka": "Banker",
+            "alina_pos_file": "Point-of-sale",
+            "amsi_bypass": "Bypass",
+            "disables_spdy_chrome": "Infostealer",
+            "network_wscript_downloader": "Downloader",
+            "ponybot_url": "BOT",
+            "TAPI_DP_mutex": "Fraud",
+            "dep_stack_bypass": "Exploit",
+            "powershell_unicorn": "PowerShell",
+            "application_queried_private_information": "Suspicious Android API",
+            "antiav_detectfile": "Anti-antivirus",
+            "antivm_disk_size": "Anti-vm",
+            "gaelicum": "Worm",
+            "cloud_mediafire": "Cloud",
+            "office_check_doc_name": "Suspicious Office",
+            "ransomware_wbadmin": "Ransomware",
+            "terminates_remote_process": "Persistence",
+            "injection_resumethread": "Injection",
+            "tnega_mutexes": "Trojan",
+            "rat_plugx": "RAT",
+            "snort_alert": "C2",
+            "deepfreeze_mutex": "Anti-sandbox",
+            "shutdown_system": "Stealth",
+            "pe_unknown_resource_name": "Packer",
+            "banker_spyeye_url": "Banker",
+            "alina_pos_url": "Point-of-sale",
+            "modifies_firefox_configuration": "Infostealer",
+            "network_document_file": "Downloader",
+            "solarbot_url": "BOT",
+            "disables_browser_warn": "Fraud",
+            "exploit_blackhole_url": "Exploit",
+            "suspicious_powershell": "PowerShell",
+            "android_native_code": "Suspicious Android API",
+            "antiav_servicestop": "Anti-antivirus",
+            "antivm_sandboxie": "Anti-vm",
+            "worm_renocide": "Worm",
+            "cloud_rapidshare": "Cloud",
+            "office_platform_detect": "Suspicious Office",
+            "ransomware_message": "Ransomware",
+            "creates_service": "Persistence",
+            "injection_modifies_memory": "Injection",
+            "killdisk": "Trojan",
+            "rat_netobserve": "RAT",
+            "suricata_alert": "C2",
+            "antisandbox_joe_anubis_files": "Anti-sandbox",
+            "stealth_hidden_extension": "Stealth",
+            "packer_upx": "Packer",
+            "banker_spyeye_mutexes": "Banker",
+            "jackpos_url": "Point-of-sale",
+            "disables_ie_http2": "Infostealer",
+            "network_downloader_exe": "Downloader",
+            "ddos_blackrev_mutexes": "BOT",
+            "sweetorange_mutexes": "Exploit",
+            "powershell_c2dns": "PowerShell",
+            "application_uses_location": "Suspicious Android API",
+            "antiav_avast_libs": "Anti-antivirus",
+            "antivm_xen_keys": "Anti-vm",
+            "runouce_mutexes": "Worm",
+            "document_close": "Suspicious Office",
+            "ransomware_bcdedit": "Ransomware",
+            "exe_appdata": "Persistence",
+            "injection_write_memory": "Injection",
+            "trojan_kilim": "Trojan",
+            "rat_shadowbot": "RAT",
+            "suspicious_tld": "C2",
+            "antisandbox_threattrack_files": "Anti-sandbox",
+            "moves_self": "Stealth",
+            "packer_vmprotect": "Packer",
+            "banker_cridex": "Banker",
+            "dexter": "Point-of-sale",
+            "emotet_behavior": "Infostealer",
+            "creates_user_folder_exe": "Downloader",
+            "ddos_darkddos_mutexes": "BOT",
+            "js_eval": "Exploit",
+            "powershell_reg_add": "PowerShell",
+            "android_dangerous_permissions": "Suspicious Android API",
+            "antiav_srp": "Anti-antivirus",
+            "antivm_generic_scsi": "Anti-vm",
+            "worm_kolabc": "Worm",
+            "document_open": "Suspicious Office",
+            "ransomware_file_moves": "Ransomware",
+            "suspicious_command_tools": "Persistence",
+            "task_for_pid": "Injection",
+            "self_delete_bat": "Trojan",
+            "rat_spynet": "RAT",
+            "network_icmp": "C2",
+            "antisandbox_restart": "Anti-sandbox",
+            "reads_user_agent": "Stealth",
+            "suspicious_process": "Packer",
+            "banking_mutexes": "Banker",
+            "decebal_mutexes": "Point-of-sale",
+            "infostealer_derusbi_files": "Infostealer",
+            "excel_datalink": "Downloader",
+            "ddos_ipkiller_mutexes": "BOT",
+            "js_suspicious": "Exploit",
+            "powerworm": "PowerShell",
+            "android_google_play_diff": "Suspicious Android API",
+            "disables_security": "Anti-antivirus",
+            "antivm_network_adapters": "Anti-vm",
+            "vir_pykse": "Worm",
+            "office_eps_strings": "Suspicious Office",
+            "ransomware_appends_extensions": "Ransomware",
+            "sysinternals_tools_usage": "Persistence",
+            "darwin_code_injection": "Injection",
+            "trojan_lockscreen": "Trojan",
+            "rat_fynloski": "RAT",
+            "network_http_post": "C2",
+            "antisandbox_sunbelt_files": "Anti-sandbox",
+            "disables_app_launch": "Stealth",
+            "dyreza": "Banker",
+            "infostealer_browser": "Infostealer",
+            "ddos_eclipse_mutexes": "BOT",
+            "application_raises_exception": "Exploit",
+            "powershell_download": "PowerShell",
+            "application_queried_installed_apps": "Suspicious Android API",
+            "antiav_detectreg": "Anti-antivirus",
+            "antivm_generic_disk": "Anti-vm",
+            "puce_mutexes": "Worm",
+            "office_vuln_guid": "Suspicious Office",
+            "ransomware_dropped_files": "Ransomware",
+            "installs_appinit": "Persistence",
+            "allocates_execute_remote_process": "Injection",
+            "trojan_yoddos": "Trojan",
+            "rat_turkojan": "RAT",
+            "network_cnc_http": "C2",
+            "antisandbox_idletime": "Anti-sandbox",
+            "stealth_childproc": "Stealth",
+            "dridex_behavior": "Banker",
+            "sharpstealer_url": "Infostealer",
+            "bot_russkill": "BOT",
+            "raises_exception": "Exploit",
+            "powershell_request": "PowerShell",
+            "application_aborted_broadcast_receiver": "Suspicious Android API",
+            "stops_service": "Anti-antivirus",
+            "antivm_firmware": "Anti-vm",
+            "worm_palevo": "Worm",
+            "office_vuln_modules": "Suspicious Office",
+            "ransomware_recyclebin": "Ransomware",
+            "persistence_registry_javascript": "Persistence",
+            "injection_ntsetcontextthread": "Injection",
+            "vir_nebuler": "Trojan",
+            "rat_madness": "RAT",
+            "p2p_cnc": "C2",
+            "antisandbox_file": "Anti-sandbox",
+            "disables_wer": "Stealth",
+            "rovnix": "Banker",
+            "pwdump_file": "Infostealer",
+            "bot_athenahttp": "BOT",
+            "recon_fingerprint": "Exploit",
+            "application_deleted_app": "Suspicious Android API",
+            "av_detect_china_key": "Anti-antivirus",
+            "antivm_virtualpc_window": "Anti-vm",
+            "worm_xworm": "Worm",
+            "office_packager": "Suspicious Office",
+            "ransomware_message_ocr": "Ransomware",
+            "persistence_registry_exe": "Persistence",
+            "injection_network_trafic": "Injection",
+            "trojan_jorik": "Trojan",
+            "rat_mybot": "RAT",
+            "network_smtp": "C2",
+            "antisandbox_clipboard": "Anti-sandbox",
+            "creates_largekey": "Stealth",
+            "banker_bancos": "Banker",
+            "istealer_url": "Infostealer",
+            "bot_madness": "BOT",
+            "recon_checkip": "Exploit",
+            "application_installed_app": "Suspicious Android API",
+            "bagle": "Worm",
+            "office_create_object": "Suspicious Office",
+            "disables_system_restore": "Ransomware",
+            "persistence_registry_powershell": "Persistence",
+            "injection_write_memory_exe": "Injection",
+            "banload": "Trojan",
+            "rat_blackshades": "RAT",
+            "network_irc": "C2",
+            "antisandbox_fortinet_files": "Anti-sandbox",
+            "modify_uac_prompt": "Stealth",
+            "targeted_flame": "Infostealer",
+            "bot_dirtjumper": "BOT",
+            "recon_programs": "Exploit",
+            "application_queried_account_info": "Suspicious Android API",
+            "antivm_vbox_acpi": "Anti-vm",
+            "worm_rungbu": "Worm",
+            "office_check_project_name": "Suspicious Office",
+            "ransomware_mass_file_delete": "Ransomware",
+            "persistence_autorun": "Persistence",
+            "powerfun": "Injection",
+            "trojan_mrblack": "Trojan",
+            "rat_beastdoor": "RAT",
+            "memdump_tor_urls": "C2",
+            "antisandbox_mouse_hook": "Anti-sandbox",
+            "stealth_hidden_icons": "Stealth",
+            "disables_proxy": "Infostealer",
+            "bot_drive2": "BOT",
+            "queries_programs": "Exploit",
+            "android_reflection_code": "Suspicious Android API",
+            "antivm_parallels_keys": "Anti-vm",
+            "fesber_mutexes": "Worm",
+            "office_count_dirs": "Suspicious Office",
+            "ransomware_viruscoder": "Ransomware",
+            "persistence_bootexecute": "Persistence",
+            "allocates_rwx": "Injection",
+            "trojan_vbinject": "Trojan",
+            "rat_swrort": "RAT",
+            "memdump_ip_urls": "C2",
+            "antisandbox_sunbelt": "Anti-sandbox",
+            "stealth_window": "Stealth",
+            "infostealer_bitcoin": "Infostealer",
+            "bot_drive": "BOT",
+            "recon_systeminfo": "Exploit",
+            "android_dynamic_code": "Suspicious Android API",
+            "antivm_vbox_keys": "Anti-vm",
+            "winsxsbot": "Worm",
+            "office_appinfo_version": "Suspicious Office",
+            "nymaim_behavior": "Ransomware",
+            "javascript_commandline": "Persistence",
+            "memdump_urls": "Injection",
+            "trojan_pincav": "Trojan",
+            "rat_beebus_mutexes": "RAT",
+            "dns_freehosting_domain": "C2",
+            "stealth_hiddenfile": "Stealth",
+            "infostealer_clipboard": "Infostealer",
+            "c24_url": "BOT",
+            "application_stopped_processes": "Suspicious Android API",
+            "antivm_vmware_window": "Anti-vm",
+            "office_check_window": "Suspicious Office",
+            "chanitor_mutexes": "Ransomware",
+            "privilege_luid_check": "Persistence",
+            "protection_rx": "Injection",
+            "trojan_lethic": "Trojan",
+            "rat_bifrose": "RAT",
+            "creates_hidden_file": "Stealth",
+            "infostealer_ftp": "Infostealer",
+            "bot_kelihos": "BOT",
+            "application_registered_receiver_runtime": "Suspicious Android API",
+            "antivm_vmware_files": "Anti-vm",
+            "office_http_request": "Suspicious Office",
+            "cryptlocker": "Ransomware",
+            "wmi_persistance": "Persistence",
+            "shellcode_writeprocessmemory": "Injection",
+            "trojan_sysn": "Trojan",
+            "rat_fexel_ip": "RAT",
+            "clears_event_logs": "Stealth",
+            "perflogger": "Infostealer",
+            "bot_kovter": "BOT",
+            "application_executed_shell_command": "Suspicious Android API",
+            "antivm_hyperv_keys": "Anti-vm",
+            "office_recent_files": "Suspicious Office",
+            "wmi_service": "Persistence",
+            "injection_process_search": "Injection",
+            "coinminer_mutexes": "Trojan",
+            "rat_vertex": "RAT",
+            "clear_permission_event_logs": "Stealth",
+            "jintor_mutexes": "Infostealer",
+            "application_recording_audio": "Suspicious Android API",
+            "antivm_virtualpc_illegal_instruction": "Anti-vm",
+            "creates_doc": "Suspicious Office",
+            "creates_shortcut": "Persistence",
+            "memdump_yara": "Injection",
+            "trojan_ceatrg": "Trojan",
+            "rat_hupigon": "RAT",
+            "bad_certificate": "Stealth",
+            "ardamax_mutexes": "Infostealer",
+            "antivm_parallels_window": "Anti-vm",
+            "modifies_boot_config": "Persistence",
+            "dumped_buffer2": "Injection",
+            "renostrojan": "Trojan",
+            "rat_dibik": "RAT",
+            "has_authenticode": "Stealth",
+            "infostealer_keylogger": "Infostealer",
+            "antivm_vbox_provname": "Anti-vm",
+            "adds_user": "Persistence",
+            "dumped_buffer": "Injection",
+            "trojan_emotet": "Trojan",
+            "rat_blackhole": "RAT",
+            "removes_zoneid_ads": "Stealth",
+            "infostealer_im": "Infostealer",
+            "antivm_vbox_files": "Anti-vm",
+            "adds_user_admin": "Persistence",
+            "process_interest": "Injection",
+            "athena_url": "Trojan",
+            "rat_teamviewer": "RAT",
+            "modifies_zoneid": "Stealth",
+            "infostealer_mail": "Infostealer",
+            "antivm_generic_services": "Anti-vm",
+            "disables_windowsupdate": "Persistence",
+            "begseabugtd_mutexes": "Trojan",
+            "rat_jewdo": "RAT",
+            "modifies_proxy_autoconfig": "Infostealer",
+            "antivm_memory_available": "Anti-vm",
+            "creates_exe": "Persistence",
+            "carberp_mutex": "Trojan",
+            "rat_blackice": "RAT",
+            "modifies_proxy_override": "Infostealer",
+            "antivm_vbox_window": "Anti-vm",
+            "upatretd_mutexes": "Trojan",
+            "rat_adzok": "RAT",
+            "modifies_proxy_wpad": "Infostealer",
+            "antivm_vmware_in_instruction": "Anti-vm",
+            "rat_pasta": "RAT",
+            "isrstealer_url": "Infostealer",
+            "antivm_generic_cpu": "Anti-vm",
+            "rat_xtreme": "RAT",
+            "console_output": "Infostealer",
+            "antivm_generic_bios": "Anti-vm",
+            "rat_rbot": "RAT",
+            "antivm_shared_device": "Anti-vm",
+            "rat_flystudio": "RAT",
+            "antivm_vpc_keys": "Anti-vm",
+            "rat_likseput": "RAT",
+            "wmi_antivm": "Anti-vm",
+            "rat_urxbot": "RAT",
+            "antivm_queries_computername": "Anti-vm",
+            "rat_pcclient": "RAT",
+            "rat_hikit": "RAT",
+            "rat_trogbot": "RAT",
+            "rat_darkshell": "RAT",
+            "rat_siggenflystudio": "RAT",
+            "rat_travnet": "RAT",
+            "rat_bottilda": "RAT",
+            "rat_koutodoor": "RAT",
+            "rat_buzus_mutexes": "RAT",
+            "rat_comRAT": "RAT",
+            "poebot": "RAT",
+            "oldrea": "RAT",
+            "ircbrute": "RAT",
+            "expiro": "RAT",
+            "staser": "RAT",
+            "netshadow": "RAT",
+            "shylock": "RAT",
+            "ddos556": "RAT",
+            "cybergate": "RAT",
+            "kuluoz_mutexes": "RAT",
+            "senna": "RAT",
+            "ramnit": "RAT",
+            "magania_mutexes": "RAT",
+            "virut": "RAT",
+            "njrat": "RAT",
+            "evilbot": "RAT",
+            "shiza": "RAT",
+            "nakbot": "RAT",
+            "sadbot": "RAT",
+            "minerbot": "RAT",
+            "upatre": "RAT",
+            "trojan_bublik": "RAT",
+            "uroburos_mutexes": "RAT",
+            "darkcloud": "RAT",
+            "farfli": "RAT",
+            "urlspy": "RAT",
+            "bladabindi_mutexes": "RAT",
+            "ponfoy": "RAT",
+            "decay": "RAT",
+            "UFR_Stealer": "RAT",
+            "qakbot": "RAT",
+            "nitol": "RAT",
+            "icepoint": "RAT",
+            "andromeda": "RAT",
+            "bandook": "RAT",
+            "banker_tinba_mutexes": "RAT",
+            "btc": "RAT",
+            "fakeav_mutexes": "RAT",
+            "ghostbot": "RAT",
+            "hesperbot": "RAT",
+            "infinity": "RAT",
+            "karagany": "RAT",
+            "karakum": "RAT",
+            "katusha": "RAT",
+            "koobface": "RAT",
+            "luder": "RAT",
+            "netwire": "RAT",
+            "poisonivy": "RAT",
+            "putterpanda_mutexes": "RAT",
+            "ragebot": "RAT",
+            "rdp_mutexes": "RAT",
+            "spyrecorder": "RAT",
+            "uroburos_file": "RAT",
+            "vnc_mutexes": "RAT",
+            "wakbot": "RAT",
+            "generates_crypto_key": "Stealth",
+            "network_http": "C2",
+            "process_needed": "Suspicious Execution Chain",
+            "winmgmts_process_create": "WMI",
+            "dll_load_uncommon_file_types": "Suspicious DLL",
+            "api_hammering": "Anti-sandbox"
+        }
+
+        assert CUCKOO_SIGNATURE_CATEGORIES == {
+          "Exploit": {
+            "id": 1,
+            "description": "Exploits an known software vulnerability or security flaw."
+          },
+          "PowerShell": {
+            "id": 2,
+            "description": "Leverages Powershell to attack Windows operating systems."
+          },
+          "Hacking tool": {
+            "id": 3,
+            "description": "Programs designed to crack or break computer and network security measures."
+          },
+          "Locker": {
+            "id": 4,
+            "description": "Prevents access to system data and files."
+          },
+          "Anti-analysis": {
+            "id": 5,
+            "description": "Constructed to conceal or obfuscate itself to prevent analysis."
+          },
+          "Suspicious PDF API": {
+            "id": 6,
+            "description": "Makes API calls not consistent with expected/standard behaviour."
+          },
+          "Suspicious Android API": {
+            "id": 7,
+            "description": "Makes API calls not consistent with expected/standard behaviour."
+          },
+          "Anti-antivirus": {
+            "id": 8,
+            "description": "Attempts to conceal itself from detection by anti-virus."
+          },
+          "Anti-vm": {
+            "id": 9,
+            "description": "Attempts to detect if it is being run in virtualized environment."
+          },
+          "Anti-Debug": {
+            "id": 10,
+            "description": "Attempts to detect if it is being debugged."
+          },
+          "Worm": {
+            "id": 11,
+            "description": "Attempts to replicate itself in order to spread to other systems."
+          },
+          "Cloud": {
+            "id": 12,
+            "description": "Makes connection to cloud service."
+          },
+          "Virus": {
+            "id": 13,
+            "description": "Malicious software program"
+          },
+          "Suspicious Office": {
+            "id": 14,
+            "description": "Makes API calls not consistent with expected/standard behaviour"
+          },
+          "Ransomware": {
+            "id": 15,
+            "description": "Designed to block access to a system until a sum of money is paid."
+          },
+          "Persistence": {
+            "id": 16,
+            "description": "Technique used to maintain presence in system(s) across interruptions that could cut off access."
+          },
+          "Injection": {
+            "id": 17,
+            "description": "Input is not properly validated and gets processed by an interpreter as part of a command or query."
+          },
+          "Dropper": {
+            "id": 18,
+            "description": "Trojan that drops additional malware on an affected system."
+          },
+          "Suspicious Execution Chain": {
+            "id": 19,
+            "description": "Command shell or script process was created by unexpected parent process."
+          },
+          "Trojan": {
+            "id": 20,
+            "description": "Presents itself as legitimate in attempt to infiltrate a system."
+          },
+          "RAT": {
+            "id": 21,
+            "description": "Designed to provide the capability of covert surveillance and/or unauthorized access to a target."
+          },
+          "C2": {
+            "id": 22,
+            "description": "Communicates with a server controlled by a malicious actor."
+          },
+          "Tor": {
+            "id": 23,
+            "description": "Intalls/Leverages Tor to enable anonymous communication."
+          },
+          "Web Mail": {
+            "id": 24,
+            "description": "Connects to smtp.[domain] for possible spamming or data exfiltration."
+          },
+          "Anti-sandbox": {
+            "id": 25,
+            "description": "Attempts to detect if it is in a sandbox."
+          },
+          "Stealth": {
+            "id": 26,
+            "description": "Leverages/modifies internal processes and settings to conceal itself."
+          },
+          "Packer": {
+            "id": 27,
+            "description": "Compresses, encrypts, and/or modifies a malicious file's format."
+          },
+          "Banker": {
+            "id": 28,
+            "description": "Designed to gain access to confidential information stored or processed through online banking."
+          },
+          "Point-of-sale": {
+            "id": 29,
+            "description": "Steals information related to financial transactions, including credit card information."
+          },
+          "Bypass": {
+            "id": 30,
+            "description": "Attempts to bypass operating systems security controls (firewall, amsi, applocker, etc.)"
+          },
+          "Crash": {
+            "id": 31,
+            "description": "Attempts to crash the system."
+          },
+          "IM": {
+            "id": 32,
+            "description": "Leverages instant-messaging."
+          },
+          "Rootkit": {
+            "id": 33,
+            "description": "Designed to provide continued privileged access to a system while actively hiding its presence."
+          },
+          "Adware": {
+            "id": 34,
+            "description": "Displays unwanted, unsolicited advertisements."
+          },
+          "Infostealer": {
+            "id": 35,
+            "description": "Collects and disseminates information such as login details, usernames, passwords, etc."
+          },
+          "WMI": {
+            "id": 36,
+            "description": "Leverages Windows Management Instrumentation (WMI) to gather information and/or execute a process."
+          },
+          "Downloader": {
+            "id": 37,
+            "description": "Trojan that downloads installs files."
+          },
+          "DynDNS": {
+            "id": 38,
+            "description": "Utilizes dynamic DNS."
+          },
+          "BOT": {
+            "id": 39,
+            "description": "Appears to be a bot or exhibits bot-like behaviour."
+          },
+          "Rop": {
+            "id": 40,
+            "description": "Exploits trusted programs to execute malicious code from memory to evade data execution prevention."
+          },
+          "Fraud": {
+            "id": 41,
+            "description": "Presents itself as a legitimate program and/or facilitates fraudulent activity."
+          },
+          "URLshort": {
+            "id": 42,
+            "description": "Leverages URL shortening to obfuscate malicious destination."
+          },
+          "Anti-emulation": {
+            "id": 43,
+            "description": "Detects the presence of an emulator."
+          },
+          "Cryptocurrency": {
+            "id": 44,
+            "description": "Facilitates mining of cryptocurrency."
+          },
+          "Bind": {
+            "id": 45,
+            "description": "Allows a resource to be sent or received across a network."
+          },
+          "Suspicious DLL": {
+            "id": 46,
+            "description": "Attempts to load DLL that is inconsistent with expected/standard behaviour."
+          }
+        }
+
+        assert CUCKOO_DROPPED_SIGNATURES == [
+          'origin_langid', 'apt_cloudatlas', 'apt_carbunak', 'apt_sandworm_ip',
+          'apt_turlacarbon', 'apt_sandworm_url', 'apt_inception', 'rat_lolbot',
+          'backdoor_vanbot', 'rat_sdbot', 'backdoor_tdss', 'backdoor_whimoo',
+          'madness_url', 'volatility_svcscan_2', 'volatility_svcscan_3',
+          'volatility_modscan_1', 'volatility_handles_1', 'volatility_devicetree_1',
+          'volatility_ldrmodules_1', 'volatility_ldrmodules_2', 'volatility_malfind_2',
+          'volatility_svcscan_1', 'detect_putty', 'powerworm', 'powershell_ddi_rc4',
+          'powershell_di', 'powerfun', 'powershell_dfsp', 'powershell_c2dns',
+          'powershell_unicorn', 'spreading_autoruninf', 'sniffer_winpcap',
+          'mutex_winscp', 'sharing_rghost', 'exp_3322_dom', 'mirc_file', 'vir_napolar',
+          'vertex_url', 'has_pdb', "process_martian"
+        ]
+
+    @staticmethod
+    @pytest.mark.parametrize("sig, correct_int",
+        [
+            ("blah", 9999),
+            ("network_cnc_http", 22)
+        ]
+    )
+    def test_get_category_id(sig, correct_int):
+        from cuckoo.signatures import get_category_id
+        assert get_category_id(sig) == correct_int
+
+    @staticmethod
+    @pytest.mark.parametrize("sig, correct_string",
+        [
+            ("blah", "unknown"),
+            ("network_cnc_http", "C2")
+        ]
+    )
+    def test_get_signature_category(sig, correct_string):
+        from cuckoo.signatures import get_signature_category
+        assert get_signature_category(sig) == correct_string
+
+
+class TestSafelist:
+    @staticmethod
+    def test_constants():
+        from cuckoo.safelist import SAFELIST_IPS, SAFELIST_URIS, SAFELIST_DROPPED, SAFELIST_DOMAINS, SAFELIST_COMMANDS, \
+            SAFELIST_HASHES, SAFELIST_APPLICATIONS, SAFELIST_COMMON_PATTERNS, GUID_PATTERN
+        assert SAFELIST_APPLICATIONS == {
+            'Cuckoo1': 'C:\\\\tmp.+\\\\bin\\\\.+',
+            'Azure1': 'C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe',
+            'Azure2': 'C:\\\\WindowsAzure\\\\GuestAgent.*\\\\GuestAgent\\\\WindowsAzureGuestAgent\.exe',
+            'Sysmon1': 'C:\\\\Windows\\\\System32\\\\csrss\.exe',
+            'Sysmon2': 'dllhost.exe',
+            'Cuckoo2': 'lsass\.exe',
+            'Sysmon3': 'C:\\\\Windows\\\\System32\\\\SearchIndexer\.exe'
+        }
+        assert SAFELIST_COMMANDS == {
+            'Cuckoo1': 'C:\\\\Python27\\\\pythonw\.exe C:/tmp.+/analyzer\.py',
+            'Cuckoo2': 'C:\\\\windows\\\\system32\\\\lsass\.exe',
+            'Sysmon1': 'C:\\\\windows\\\\system32\\\\services\.exe',
+            'Sysmon2': 'C:\\\\windows\\\\system32\\\\sppsvc\.exe',
+            'Azure1': '"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe" -Embedding',
+            'Flash1': 'C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\.exe',
+            'Azure2': '"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MOMPerfSnapshotHelper.exe\\" -Embedding',
+            'Sysmon3': 'C:\\\\windows\\\\system32\\\\svchost\.exe -k DcomLaunch',
+            'Sysmon4': 'C:\\\\windows\\\\system32\\\\SearchIndexer\.exe \/Embedding',
+        }
+        assert SAFELIST_DOMAINS == {
+            'Adobe': r'.*\.adobe\.com$',
+            'Google Play': r'play\.google\.com$',
+            'Android NTP': r'.*\.android\.pool\.ntp\.org$',
+            'Android Googlesource': r'android\.googlesource\.com$',
+            'Android Schemas': r'schemas\.android\.com$',
+            'XMLPull': r'xmlpull\.org$',
+            'OpenXML': r'schemas\.openxmlformats\.org$',
+            'Akamaized': r'img-s-msn-com\.akamaized\.net$',
+            'Akamaihd': r'fbstatic-a\.akamaihd\.net$',
+            'AJAX ASPNet': r'ajax\.aspnetcdn\.com$',
+            'W3': r'(www\.)?w3\.org$',
+            'Omniroot': r'ocsp\.omniroot\.com$',
+            'Schemas': r'schemas\.microsoft\.com$',
+            'Microsoft IPv4To6': r'.*\.?teredo\.ipv6\.microsoft\.com$',
+            'Microsoft Watson': r'watson\.microsoft\.com$',
+            'Microsoft DNS Check': r'dns\.msftncsi\.com$',
+            'Microsoft IPv4 Check': r'www\.msftncsi\.com$',
+            'Microsoft IPv6 Check': r'ipv6\.msftncsi\.com$',
+            'Microsoft CRL server': r'crl\.microsoft\.com$',
+            'Microsoft WWW': r'(www|go)\.microsoft\.com$',
+            'ISATAP': r'isatap\..*\.microsoft\.com$',
+            'Tile Service': r'tile-service\.weather\.microsoft\.com$',
+            'Geover': r'.*\.prod\.do\.dsp\.mp\.microsoft\.com$',
+            'Live': r'login\.live\.com$',
+            'Office Apps': r'nexus\.officeapps\.live\.com$',
+            'Events': r'.*\.events\.data\.microsoft\.com$',
+            'WDCP': r'wdcp\.microsoft\.com$',
+            'FE3': r'fe3\.delivery\.mp\.microsoft\.com$',
+            'WNS': r'client\.wns\.windows\.com$',
+            'Go Microsoft': r'(www\.)?go\.microsoft\.com$',
+            'JS': r'js\.microsoft\.com$',
+            'Ajax': r'ajax\.microsoft\.com$',
+            'IEOnline': r'ieonline\.microsoft\.com$',
+            'DNS': r'dns\.msftncsi\.com$',
+            'MSOCSP': r'ocsp\.msocsp\.com$',
+            'FS': r'fs\.microsoft\.com$',
+            'ConnectTest': r'www\.msftconnecttest\.com$',
+            'NCSI': r'www\.msftncsi\.com$',
+            'Internet Explorer': r'iecvlist\.microsoft\.com$',
+            'Internet Explorer Too': r'r20swj13mr\.microsoft\.com$',
+            'Microsoft Edge': r'(([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\.msedge\.net$',
+            'Windows Settings': r'settings-win\.data\.microsoft\.com$',
+            'Windows Diagnostics': r'.*vortex-win\.data\.microsoft\.com$',
+            'Windows Update': r'.*\.windowsupdate\.com$',
+            'Windows Time Server': r'time\.(microsoft|windows)\.com$',
+            'Windows': r'.*\.windows\.com$',
+            'Windows Updater': r'.*\.update\.microsoft\.com$',
+            'Windows Downloader': r'.*download\.microsoft\.com$',
+            'Windows KMS': r'kms\.core\.windows\.net$',
+            'Windows Microsoft': r'.*windows\.microsoft\.com$',
+            'Windows IPv6': r'win10\.ipv6\.microsoft\.com$',
+            'MSN Content': r'cdn\.content\.prod\.cms\.msn\.com$',
+            'MSN': r'(www\.)?msn\.com$',
+            'S MSN': r'(www\.)?static-hp-eas\.s-msn\.com$',
+            'Img S MSN': r'img\.s-msn\.com$',
+            'Bing': r'(www\.)?bing\.com$',
+            'Bing API': r'api\.bing\.com$',
+            'Azure Monitoring Disk': r'md-ssd-.*\.blob\.core\.windows\.net$',
+            'Azure Monitoring Table': r'.*\.table\.core\.windows\.net',
+            'Azure Monitoring Blob': r'.*\.blob\.core\.windows\.net',
+            'Azure OpInsights': r'.*\.opinsights\.azure\.com',
+            'Reddog': r'.*reddog\.microsoft\.com$',
+            'Agent Service Api': r'agentserviceapi\.azure-automation\.net$',
+            'Guest Configuration Api': r'agentserviceapi\.guestconfiguration\.azure\.com$',
+            'Office Network Requests': r'config\.edge\.skype\.com',
+            'OneNote': r'cdn\.onenote\.net$',
+            'Verisign': r'(www\.)?verisign\.com$',
+            'Verisign CRL': 'csc3-2010-crl\.verisign\.com$',
+            'Verisign AIA': 'csc3-2010-aia\.verisign\.com$',
+            'Verisign OCSP': 'ocsp\.verisign\.com$',
+            'Verisign Logo': 'logo\.verisign\.com$',
+            'Verisign General CRL': 'crl\.verisign\.com$',
+            'Ubuntu Update': r'changelogs\.ubuntu\.com$',
+            'Ubuntu Netmon': r'daisy\.ubuntu\.com$',
+            'Ubuntu NTP': r'ntp\.ubuntu\.com$',
+            'Ubuntu DDebs': r'ddebs\.ubuntu\.com$',
+            'Azure Ubuntu': r'azure\.archive\.ubuntu\.com$',
+            'Security Ubuntu': r'security\.ubuntu\.com$',
+            'TCP Local': r'.*\.local$',
+            'Unix Local': r'local$',
+            'Localhost': r'localhost$',
+            "Comodo": r".*\.comodoca\.com$",
+            'IPv6 Reverse DNS': r'[0-9a-f\.]+\.ip6.arpa$',
+            'Java': r'(www\.)?java\.com$',
+            'Oracle': r'sldc-esd\.oracle\.com$',
+            'Java Sun': r'javadl\.sun\.com$',
+            'OCSP Digicert': r'ocsp\.digicert\.com$',
+            'CRL Digicert': r'crl[0-9]\.digicert\.com$',
+            'Symantec Certificates': r's[a-z0-9]?\.symc[bd]\.com$',
+            'Symantec OCSP/CRL': r'(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com$',
+            'Thawte OCSP': r'ocsp\.thawte\.com$',
+            'GlobalSign OCSP': r'ocsp[0-9]?\.globalsign\.com$',
+            'GlobalSign CRL': r'crl\.globalsign\.(com|net)$',
+        }
+        assert SAFELIST_IPS == {
+            'Public DNS': r'(^1\.1\.1\.1$)|(^8\.8\.8\.8$)',
+            'Local': r'(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*',
+            'Honeynet': r'169.169.169.169',
+            'Windows SSDP': r'239.255.255.250',
+            'Azure VM Version': r'169.254.169.254',
+            'Azure Telemetry': r'168.63.129.16',
+            'Windows IGMP': r'224\..*',
+        }
+        assert SAFELIST_DROPPED == [
+            "SharedDataEvents", "SharedDataEvents-journal", "AcroFnt09.lst", "AdobeSysFnt09.lst", "AdobeCMapFnt09.lst",
+            "ACECache10.lst", "UserCache.bin", "desktop.ini", "sRGB Color Space Profile.icm", "is330.icm",
+            "kodak_dc.icm", "R000000000007.clb", "JSByteCodeWin.bin", "Accessibility.api", "AcroForm.api", "Annots.api",
+            "Checker.api", "DigSig.api", "DVA.api", "eBook.api", "EScript.api", "HLS.api", "IA32.api",
+            "MakeAccessible.api", "Multimedia.api", "PDDom.api", "PPKLite.api", "ReadOutLoad.api", "reflow.api",
+            "SaveAsRTF.api", "Search5.api", "Search.api", "SendMail.api", "Spelling.api", "Updater.api", "weblink.api",
+            "ADMPlugin.apl", "Words.pdf", "Dynamic.pdf", "SignHere.pdf", "StandardBusiness.pdf", "AdobeID.pdf",
+            "DefaultID.pdf", "AdobePiStd.otf", "CourierStd.otf", "CourierStd-Bold.otf", "CourierStd-BoldOblique.otf",
+            "CourierStd-Oblique.otf", "MinionPro-Bold.otf", "MinionPro-BoldIt.otf", "MinionPro-It.otf",
+            "MinionPro-Regular.otf", "MyriadPro-Bold.otf", "MyriadPro-BoldIt.otf", "MyriadPro-It.otf",
+            "MyriadPro-Regular.otf", "SY______.PFB", "ZX______.PFB", "ZY______.PFB", "SY______.PFM", "zx______.pfm",
+            "zy______.pfm", "Identity-H", "Identity-V", "msointl.dll", "Normal.dot", "~$Normal.dotm", "wwintl.dll",
+            "Word11.pip", "Word12.pip", "shell32.dll", "oleacc.dll", "index.dat",
+        ]
+        assert SAFELIST_HASHES == [
+            'ac6f81bbb302fd4702c0b6c3440a5331', '34c4dbd7f13cfba281b554bf5ec185a4', '578c03ad278153d0d564717d8fb3de1d',
+            '05044fbab6ca6fd667f6e4a54469bd13', 'e16d04c25249a64f47bf6f2709f21fbe', '5d4d94ee7e06bbb0af9584119797b23a',
+            '7ad0077a4e63b28b3f23db81510143f9', 'd41d8cd98f00b204e9800998ecf8427e', '534c811e6cf1146241126513810a389e',
+            'f3b25701fe362ec84616a93a45ce9998', 'e62d73c60f743dd822a652c2c6d32e8b', '8e3e307a923321a27a9ed8e868159589',
+            '5a56faaf51109f44214b022e0cdddd80', '985a2930713d530334bd570ef447cc65', 'ba9b716bc18cf2010aefd580788a3a47',
+            '7031f4a5881dea5522d6aea11ed86fbc', 'd13eac51cd03eb893de24fc827b8cddb', 'be5eae9bd85769bce02d6e52a4927bcd',
+            '08e7d39a806b89366fb3e0328661aa93', 'd3cbe4cec3b40b336530a5a8e3371fda7696a3b1',
+        ]
+        assert GUID_PATTERN == r'{[A-F0-9]{8}\-([A-F0-9]{4}\-){3}[A-F0-9]{12}\}'
+        assert SAFELIST_COMMON_PATTERNS == {
+            'Office Temp Files': r'\\~[A-Z]{3}%s\.tmp$' % GUID_PATTERN,
+            'Meta Font': r'[A-F0-9]{7,8}\.(w|e)mf$',
+            'IE Recovery Store': r'RecoveryStore\.%s\.dat$' % GUID_PATTERN,
+            'IE Recovery Files': r'%s\.dat$' % GUID_PATTERN,
+            'Doc Tmp': r'(?:[a-f0-9]{2}|\~\$)[a-f0-9]{62}\.(doc|xls|ppt)x?$',
+            'CryptnetCache': r'AppData\\[^\\]+\\MicrosoftCryptnetUrlCache\\',
+            'Cab File': r'\\Temp\\Cab....\.tmp',
+            'Office File': r'\\Microsoft\\OFFICE\\DATA\\[a-z0-9]+\.dat$',
+            'Internet file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.MSO\\',
+            'Word file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.Word\\~WRS',
+            'Word Temp Files': r'.*\\Temp\\~\$[a-z0-9]+\.doc',
+            'Office Blocks': r'\\Microsoft\\Document Building Blocks\\[0-9]{4}\\',
+            'Office ACL': r'AppData\\Roaming\\MicrosoftOffice\\.*\.acl$',
+            'Office Dictionary': r'AppData\\Roaming\\Microsoft\\UProof\\CUSTOM.DIC$',
+            'Office 2003 Dictionary': r'.*AppData\\Roaming\\Microsoft\\Proof\\\~\$CUSTOM.DIC$',
+            'Office Form': r'AppData\\Local\\Temp\\Word...\\MSForms.exd$'
+        }
+        assert SAFELIST_URIS == {
+            'Localhost': r'(?:ftp|http)s?://localhost(?:$|/.*)',
+            'Local': r'(?:ftp|http)s?://(?:(?:(?:10|127)(?:\.(?:[2](?:[0-5][0-5]|[01234][6-9])|[1][0-9][0-9]|[1-9][0-9]|[0-9])){3})|(?:172\.(?:1[6-9]|2[0-9]|3[0-1])(?:\.(?:2[0-4][0-9]|25[0-5]|[1][0-9][0-9]|[1-9][0-9]|[0-9])){2}|(?:192\.168(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])){2})))(?:$|/.*)',
+            'Android': r'https?://schemas\.android\.com/apk/res(-auto|/android)',
+            'Android Googlesource': r'https?://android\.googlesource\.com/toolchain/llvm-project',
+            'XMLPull': r'https?://xmlpull\.org/v1/doc/features\.html(?:$|.*)',
+            'OpenXML': r'https?://schemas\.openxmlformats\.org(?:$|/.*)',
+            'OpenXML Office Relationships': r'https?://schemas\.openxmlformats\.org/officeDocument/2006/relationships/(image|attachedTemplate|header|footnotes|fontTable|customXml|endnotes|theme|settings|webSettings|glossaryDocument|numbering|footer|styles)',
+            'OpenXML 2006 Drawing': r'https?://schemas\.openxmlformats\.org/drawingml/2006/(main|wordprocessingDrawing)',
+            'OpenXML 2006 Relationships': r'https?://schemas\.openxmlformats\.org/package/2006/relationships',
+            'OpenXML 2006 Markup': r'https?://schemas\.openxmlformats\.org/markup-compatibility/2006',
+            'OpenXML Office Relationships/Math': r'https?://schemas\.openxmlformats\.org/officeDocument/2006/(relationships|math)',
+            'OpenXML Word': r'https?://schemas\.openxmlformats\.org/word/2010/wordprocessingShape',
+            'OpenXML Word Processing': r'https?://schemas\.openxmlformats\.org/wordprocessingml/2006/main',
+            'Schemas': r'https?://schemas\.microsoft\.com(?:$|/.*)',
+            'Update': r'https?: // ctldl\.windowsupdate\.com /.*',
+            '2010 Word': r'https?://schemas\.microsoft\.com/office/word/2010/(wordml|wordprocessingCanvas|wordprocessingInk|wordprocessingGroup|wordprocessingDrawing)',
+            '2012/2006 Word': r'https?://schemas\.microsoft\.com/office/word/(2012|2006)/wordml',
+            '2015 Word': r'https?://schemas\.microsoft\.com/office/word/2015/wordml/symex',
+            '2014 Word Drawing': r'https?://schemas\.microsoft\.com/office/drawing/2014/chartex',
+            '2015 Word Drawing': r'https?://schemas\.microsoft\.com/office/drawing/2015/9/8/chartex',
+            'Verisign': r'https?://www\.verisign\.com/(rpa0|rpa|cps0)',
+            'Verisign OCSP': r'https?://ocsp\.verisign\.com',
+            'Verisign Logo': r'https?://logo\.verisign\.com/vslogo\.gif04',
+            'Verisign CRL': r'https?://crl\.verisign\.com/pca3-g5\.crl04',
+            'Verisign CRL file': r'https?://csc3-2010-crl\.verisign\.com/CSC3-2010\.crl0D',
+            'Verisign AIA file': r'https?://csc3-2010-aia\.verisign\.com/CSC3-2010\.cer0',
+            'WPAD': r'https?://wpad\.reddog\.microsoft\.com/wpad\.dat',
+            'OCSP Digicert': r'https?://ocsp\.digicert\.com/*',
+            'CRL Digicert': r'https?://crl[0-9]\.digicert\.com/*',
+            'Symantec Certificates': r'https?://s[a-z0-9]?\.symc[bd]\.com/*',
+            'Symantec OCSP/CRL': r'https?://(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com/*',
+            'Thawte OCSP': r'https?://ocsp\.thawte\.com/*',
+            'Entrust OCSP': r'https?://ocsp\.entrust\.net/*',
+            'Entrust CRL': r'https?://crl\.entrust\.net/*',
+            'GlobalSign OCSP': r'https?://ocsp[0-9]?\.globalsign\.com/*',
+            'GlobalSign CRL': r'https?://crl\.globalsign\.(com|net)/*',
+        }
+
+    @staticmethod
+    @pytest.mark.parametrize("data, sigs, correct_result",
+        [
+            ("blah", {"name": "blah"}, "name"),
+            ("blah", {"name": "nope"}, None),
+        ]
+    )
+    def test_match(data, sigs, correct_result):
+        from cuckoo.safelist import match
+        assert match(data, sigs) == correct_result
+
+    @staticmethod
+    @pytest.mark.parametrize("application, correct_result",
+        [
+            ("lsass.exe", "Cuckoo2"),
+            ("blah", None),
+        ]
+    )
+    def test_slist_check_app(application, correct_result):
+        from cuckoo.safelist import slist_check_app
+        assert slist_check_app(application) == correct_result
+
+    @staticmethod
+    @pytest.mark.parametrize("command, correct_result",
+        [
+            ('C:\\windows\\system32\\lsass.exe', "Cuckoo2"),
+            ("blah", None),
+        ]
+    )
+    def test_slist_check_cmd(command, correct_result):
+        from cuckoo.safelist import slist_check_cmd
+        assert slist_check_cmd(command) == correct_result
+
+    @staticmethod
+    @pytest.mark.parametrize("domain, correct_result",
+        [
+            ('blah.adobe.com', "Adobe"),
+            ("blah", None),
+        ]
+    )
+    def test_slist_check_domain(domain, correct_result):
+        from cuckoo.safelist import slist_check_domain
+        assert slist_check_domain(domain) == correct_result
+
+    @staticmethod
+    @pytest.mark.parametrize("ip, correct_result",
+        [
+            ('127.0.0.1', "Local"),
+            ("blah", None),
+        ]
+    )
+    def test_slist_check_ip(ip, correct_result):
+        from cuckoo.safelist import slist_check_ip
+        assert slist_check_ip(ip) == correct_result
+
+    @staticmethod
+    @pytest.mark.parametrize("uri, correct_result",
+        [
+            ('http://localhost', "Localhost"),
+            ("blah", None),
+        ]
+    )
+    def test_slist_check_uri(uri, correct_result):
+        from cuckoo.safelist import slist_check_uri
+        assert slist_check_uri(uri) == correct_result
+
+    @staticmethod
+    @pytest.mark.parametrize("name, correct_result",
+        [
+            ('SharedDataEvents', True),
+            ('\\Temp\\~$blah.doc', True),
+            ("blah", False),
+        ]
+    )
+    def test_slist_check_dropped(name, correct_result):
+        from cuckoo.safelist import slist_check_dropped
+        assert slist_check_dropped(name) == correct_result
+
+    @staticmethod
+    @pytest.mark.parametrize("hash, correct_result",
+        [
+            ('ac6f81bbb302fd4702c0b6c3440a5331', True),
+            ("blah", False),
+        ]
+    )
+    def test_slist_check_hash(hash, correct_result):
+        from cuckoo.safelist import slist_check_hash
+        assert slist_check_hash(hash) == correct_result

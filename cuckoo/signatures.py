@@ -1,3 +1,4 @@
+# TODO: convert into list?
 CUCKOO_SIGNATURES = {
   "html_flash": "Exploit",
   "powershell_bitstransfer": "PowerShell",
