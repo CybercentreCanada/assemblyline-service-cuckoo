@@ -26,6 +26,7 @@ UNIQUE_IP_LIMIT = 100
 def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     log.debug("Generating AL Result.")
     info = api_report.get('info')
+    # TODO: should be it's own method
     if info is not None:
         start_time = info['started']
         end_time = info['ended']
@@ -41,6 +42,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         body = {
             'ID': info['id'],
             'Duration': analysis_time,
+            # TODO: change this to INetSim
             'Routing': info['route'],
             'Version': info['version']
         }
@@ -111,6 +113,7 @@ def process_debug(debug, al_result):
     error_res = ResultSection(title_text='Analysis Errors')
     for error in debug['errors']:
         err_str = str(error)
+        # TODO: what is the point of lower-casing it?
         err_str = err_str.lower()
         if err_str is not None and len(err_str) > 0:
             error_res.add_line(error)
@@ -135,6 +138,7 @@ def process_debug(debug, al_result):
         al_result.add_section(error_res)
 
 
+# TODO: this method needs to be split up
 def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sysmon_tree: list, sysmon_procs: list, is_process_martian: bool) -> list:
     log.debug("Processing behavior results.")
     events = []  # This will contain all network events
@@ -374,11 +378,13 @@ def _merge_process_trees(cuckoo_tree: list, sysmon_tree: list, sysmon_process_in
     return cuckoo_tree
 
 
-def process_signatures(sigs: dict, al_result: Result, random_ip_range: str, target_filename: str, process_map: dict) -> bool:
+# TODO: break this method up
+def process_signatures(sigs: list, al_result: Result, random_ip_range: str, target_filename: str, process_map: dict) -> bool:
     log.debug("Processing signature results.")
     if len(sigs) <= 0:
         return False
 
+    # TODO: these should be constants
     # Flag used to indicate if process_martian signature should be used in process_behaviour
     is_process_martian = False
     sigs_res = ResultSection(title_text="Signatures")
@@ -647,6 +653,7 @@ def contains_safelisted_value(val: str) -> bool:
     return False
 
 
+# TODO: break this up into methods
 def process_network(network: dict, al_result: Result, random_ip_range: str, process_map: dict) -> list:
     log.debug("Processing network results.")
     events = []  # This will contain all network events

@@ -25,6 +25,7 @@ SAFELIST_COMMANDS = {
 }
 
 # These domains may be present due to benign activity on the host
+# TODO: the keys play a useless role
 SAFELIST_DOMAINS = {
     # Adobe
     'Adobe': r'.*\.adobe\.com$',
@@ -169,6 +170,7 @@ SAFELIST_DOMAINS = {
 }
 
 # Note: This list should be updated if we change our analysis network topology/addresses
+# TODO: keys are useless
 SAFELIST_IPS = {
     'Public DNS': r'(^1\.1\.1\.1$)|(^8\.8\.8\.8$)',
     'Local': r'(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*',
@@ -316,13 +318,14 @@ SAFELIST_COMMON_PATTERNS = {
     'Meta Font': r'[A-F0-9]{7,8}\.(w|e)mf$',
     'IE Recovery Store': r'RecoveryStore\.%s\.dat$' % GUID_PATTERN,
     'IE Recovery Files': r'%s\.dat$' % GUID_PATTERN,
+    # TODO: use this elsewhere, like in signatures
     'Doc Tmp': r'(?:[a-f0-9]{2}|\~\$)[a-f0-9]{62}\.(doc|xls|ppt)x?$',
     'CryptnetCache': r'AppData\\[^\\]+\\MicrosoftCryptnetUrlCache\\',
     'Cab File': r'\\Temp\\Cab....\.tmp',
     'Office File': r'\\Microsoft\\OFFICE\\DATA\\[a-z0-9]+\.dat$',
     'Internet file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.MSO\\',
     'Word file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.Word\\~WRS',
-    'Word Temp Files': r'.*\\Temp\\~$[a-f0-9]+\.doc',
+    'Word Temp Files': r'.*\\Temp\\~\$[a-z0-9]+\.doc',
     'Office Blocks': r'\\Microsoft\\Document Building Blocks\\[0-9]{4}\\',
     'Office ACL': r'AppData\\Roaming\\MicrosoftOffice\\.*\.acl$',
     'Office Dictionary': r'AppData\\Roaming\\Microsoft\\UProof\\CUSTOM.DIC$',
@@ -330,6 +333,7 @@ SAFELIST_COMMON_PATTERNS = {
     'Office Form': r'AppData\\Local\\Temp\\Word...\\MSForms.exd$'
 }
 
+# TODO: keys are not used, convert to list
 SAFELIST_URIS = {
     # Local
     'Localhost': r'(?:ftp|http)s?://localhost(?:$|/.*)',
