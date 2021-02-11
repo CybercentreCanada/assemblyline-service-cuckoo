@@ -264,6 +264,14 @@ class TestModule:
         assert ANALYSIS_TIMEOUT == 150
 
     @staticmethod
+    def test_image_tag_constants(cuckoo_class_instance):
+        from cuckoo.cuckoo import LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX, x86_IMAGE_SUFFIX, x64_IMAGE_SUFFIX
+        assert LINUX_IMAGE_PREFIX == "ub"
+        assert WINDOWS_IMAGE_PREFIX == "win"
+        assert x86_IMAGE_SUFFIX == "x86"
+        assert x64_IMAGE_SUFFIX == "x64"
+
+    @staticmethod
     def test_file_constants(cuckoo_class_instance):
         from cuckoo.cuckoo import LINUX_FILES, WINDOWS_x86_FILES
         assert set(LINUX_FILES) == {"executable/linux/elf64", "executable/linux/elf32", "executable/linux/so64", "executable/linux/so32"}
