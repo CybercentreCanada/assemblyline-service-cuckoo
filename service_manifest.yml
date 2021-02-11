@@ -21,6 +21,7 @@ config:
   remote_host_ip: 127.0.0.1
   remote_host_port: 8090
   auth_header_value: Bearer sample_api_token
+  allowed_images: ["win10x64", "win7x64", "win7x86", "ub1804x64"]
 
   # Cuckoo request specification
   max_file_size: 80000000

@@ -264,15 +264,6 @@ class TestModule:
         assert ANALYSIS_TIMEOUT == 150
 
     @staticmethod
-    def test_image_tag_constants(cuckoo_class_instance):
-        from cuckoo.cuckoo import WINDOWS_7x64_IMAGE_TAG, WINDOWS_7x86_IMAGE_TAG, WINDOWS_10x64_IMAGE_TAG, UBUNTU_1804x64_IMAGE_TAG, ALLOWED_IMAGES
-        assert WINDOWS_7x64_IMAGE_TAG == "win7x64"
-        assert WINDOWS_7x86_IMAGE_TAG == "win7x86"
-        assert WINDOWS_10x64_IMAGE_TAG == "win10x64"
-        assert UBUNTU_1804x64_IMAGE_TAG == "ub1804x64"
-        assert ALLOWED_IMAGES == [WINDOWS_7x64_IMAGE_TAG, WINDOWS_7x86_IMAGE_TAG, WINDOWS_10x64_IMAGE_TAG, UBUNTU_1804x64_IMAGE_TAG]
-
-    @staticmethod
     def test_file_constants(cuckoo_class_instance):
         from cuckoo.cuckoo import LINUX_FILES, WINDOWS_x86_FILES
         assert set(LINUX_FILES) == {"executable/linux/elf64", "executable/linux/elf32", "executable/linux/so64", "executable/linux/so32"}
@@ -1242,86 +1233,72 @@ class TestCuckoo:
 
     @staticmethod
     @pytest.mark.parametrize(
-        "file_type, specific_machine, guest_image, machines",
+        "file_type, specific_machine, machine_exists, guest_image, image_exists, allowed_images, correct_guest_image",
         [
-            ("blah", None, "some_guest_image", None),
-            ("executable/linux/elf64", None, "some_guest_image", None),
-            ("executable/linux/elf32", None, "some_guest_image", None),
-            ("executable/linux/so64", None, "some_guest_image", None),
-            ("executable/linux/so32", None, "some_guest_image", None),
-            ('executable/windows/pe32', None, "some_guest_image", None),
-            ('executable/windows/dll32', None, "some_guest_image", None),
-            ("blah", "some_machine_name", "some_guest_image", {"machines": [{"name": "some_machine_name"}]}),
-            ("blah", "some_machine_name", "some_guest_image", {"machines": [{"name": "a_different_machine_name"}]}),
+            ("blah", None, False, "some_guest_image", False, [], None),
+            ("executable/linux/elf64", None, False, "ub1804x64", False, ["ub1804x64"], None),
+            ("executable/linux/elf64", None, False, "ub1804x64", True, ["ub1804x64"], "ub1804x64"),
+            ("executable/linux/elf32", None, False, "ub1804x64", False, ["ub1804x64"], None),
+            ("executable/linux/elf32", None, False, "ub1804x64", True, ["ub1804x64"], "ub1804x64"),
+            ("executable/linux/so64", None, False, "ub1804x64", False, ["ub1804x64"], None),
+            ("executable/linux/so64", None, False, "ub1804x64", True, ["ub1804x64"], "ub1804x64"),
+            ("executable/linux/so32", None, False, "ub1804x64", False, ["ub1804x64"], None),
+            ("executable/linux/so32", None, False, "ub1804x64", True, ["ub1804x64"], "ub1804x64"),
+            ('executable/windows/pe32', None, False, "win7x86", False, ["win7x86"], None),
+            ('executable/windows/pe32', None, False, "win7x86", True, ["win7x86"], "win7x86"),
+            ('executable/windows/dll32', None, False, "win7x86", False, ["win7x86"], None),
+            ('executable/windows/dll32', None, False, "win7x86", True, ["win7x86"], "win7x86"),
+            ("blah", "some_machine_name", True, None, False, [], None),
+            ("blah", "some_machine_name", False, "some_guest_image", False, [], None),
         ]
     )
-    def test_send_to_certain_machine(file_type, specific_machine, guest_image, machines, cuckoo_class_instance, dummy_request_class, mocker):
-        from cuckoo.cuckoo import Cuckoo, LINUX_FILES, WINDOWS_x86_FILES, \
-            UBUNTU_1804x64_IMAGE_TAG, WINDOWS_7x86_IMAGE_TAG
+    def test_send_to_certain_machine(file_type, specific_machine, machine_exists, guest_image, image_exists, allowed_images, correct_guest_image, cuckoo_class_instance, dummy_request_class, mocker):
+        from cuckoo.cuckoo import Cuckoo
         from assemblyline_v4_service.common.result import Result, ResultSection
 
         request_kwargs = dict()
         kwargs = dict()
-        if specific_machine:
+        if machine_exists:
             request_kwargs["specific_machine"] = specific_machine
-        if guest_image:
-            request_kwargs["guest_image"] = guest_image
+            cuckoo_class_instance.machines = {"machines": [{"name": specific_machine}]}
+        request_kwargs["guest_image"] = guest_image
 
-        cuckoo_class_instance.machines = machines
+        mocker.patch.object(Cuckoo, '_does_image_exist', return_value=(image_exists, allowed_images))
+
+        cuckoo_class_instance.allowed_images = allowed_images
         cuckoo_class_instance.request = dummy_request_class(**request_kwargs)
         cuckoo_class_instance.file_res = Result()
         cuckoo_class_instance.request.file_type = file_type
 
-        if specific_machine and any(specific_machine == machine["name"] for machine in cuckoo_class_instance.machines["machines"]):
-            cuckoo_class_instance._send_to_certain_machine(kwargs)
+        cuckoo_class_instance._send_to_certain_machine(kwargs)
+        if machine_exists:
             assert kwargs["machine"] == specific_machine
-            assert kwargs.get("tags", None) is None
         else:
-            if guest_image and file_type in LINUX_FILES:
-                guest_image = UBUNTU_1804x64_IMAGE_TAG
-            elif guest_image and file_type in WINDOWS_x86_FILES:
-                guest_image = WINDOWS_7x86_IMAGE_TAG
-            if guest_image:
-                mocker.patch.object(Cuckoo, '_does_image_exist', return_value=(True, set()))
-                cuckoo_class_instance._send_to_certain_machine(kwargs)
-                assert kwargs["tags"] == guest_image
+            assert kwargs.get("machine") is None
 
-                kwargs = dict()
-                mocker.patch.object(Cuckoo, '_does_image_exist', return_value=(False, set()))
-                correct_result_section = ResultSection(title_text='Requested Image Does Not Exist')
-                correct_result_section.body = f"The requested image of '{guest_image}' is currently unavailable.\n\n " \
+        assert kwargs.get("tags") == correct_guest_image
+
+        if not machine_exists and not image_exists:
+            correct_result_section = ResultSection(title_text='Requested Image Does Not Exist')
+            correct_result_section.body = f"The requested image of '{guest_image}' is currently unavailable.\n\n " \
                                     f"General Information:\nAt the moment, the current image options for this " \
-                                    f"Cuckoo deployment include {set()}. Also note that if a file is identified " \
-                                    f"as one of {LINUX_FILES}, that file is only submitted to {UBUNTU_1804x64_IMAGE_TAG} " \
-                                    f"images."
+                                    f"Cuckoo deployment include {allowed_images}."
 
-                cuckoo_class_instance._send_to_certain_machine(kwargs)
-                assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
-                assert kwargs.get("tags", None) is None
+            assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
 
     @staticmethod
     @pytest.mark.parametrize(
-        "guest_image, machines",
+        "guest_image, machines, allowed_images, correct_results",
         [
-            ("blah", {"machines": []}),
-            ("blah", {"machines": [{"name": "blah"}]}),
-            ("blah", {"machines": [{"name": "ub1804x64"}, {"name": "win7x64"}, {"name": "win10x64"}, {"name": "win7x86"}]}),
+            ("blah", {"machines": []}, [], (False, [])),
+            ("blah", {"machines": [{"name": "blah"}]}, [], (True, [])),
+            ("blah", {"machines": [{"name": "ub1804x64"}, {"name": "win7x64"}, {"name": "win10x64"}, {"name": "win7x86"}]}, ["win7x86"], (False, ["win7x86"])),
         ]
     )
-    def test_does_image_exist(guest_image, machines, cuckoo_class_instance):
-        from cuckoo.cuckoo import ALLOWED_IMAGES
+    def test_does_image_exist(guest_image, machines, allowed_images, correct_results, cuckoo_class_instance):
         cuckoo_class_instance.machines = machines
-        requested_image_exists = False
-        image_options = set()
-        for machine in machines['machines']:
-            if guest_image in machine["name"]:
-                requested_image_exists = True
-                break
-            else:
-                for image_tag in ALLOWED_IMAGES:
-                    if image_tag in machine["name"]:
-                        image_options.add(image_tag)
-        assert (requested_image_exists, image_options) == cuckoo_class_instance._does_image_exist(guest_image)
+        cuckoo_class_instance.allowed_images = allowed_images
+        assert cuckoo_class_instance._does_image_exist(guest_image) == correct_results
 
     @staticmethod
     @pytest.mark.parametrize(
