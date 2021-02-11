@@ -24,6 +24,7 @@ from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.codec import encode_file
+from assemblyline.common.constants import RECOGNIZED_TYPES
 
 from cuckoo.cuckooresult import generate_al_result
 from cuckoo.safelist import slist_check_hash, slist_check_dropped
@@ -53,18 +54,8 @@ WINDOWS_10x64_IMAGE_TAG = "win10x64"
 UBUNTU_1804x64_IMAGE_TAG = "ub1804x64"
 ALLOWED_IMAGES = [WINDOWS_7x64_IMAGE_TAG, WINDOWS_7x86_IMAGE_TAG, WINDOWS_10x64_IMAGE_TAG, UBUNTU_1804x64_IMAGE_TAG]
 
-# TODO: generate these dynamically
-LINUX_FILES = [
-    "executable/linux/elf64",
-    "executable/linux/elf32",
-    "executable/linux/so64",
-    "executable/linux/so32"
-]
-
-WINDOWS_x86_FILES = [
-    'executable/windows/pe32',
-    'executable/windows/dll32'
-]
+LINUX_FILES = [file_type for file_type in RECOGNIZED_TYPES if "linux" in file_type]
+WINDOWS_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["windows", "32"])]
 
 # TODO: is this necessary?
 SUPPORTED_EXTENSIONS = [
