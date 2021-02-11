@@ -275,8 +275,8 @@ class TestModule:
     @staticmethod
     def test_file_constants(cuckoo_class_instance):
         from cuckoo.cuckoo import LINUX_FILES, WINDOWS_x86_FILES
-        assert set(LINUX_FILES) == set(["executable/linux/elf64", "executable/linux/elf32", "executable/linux/so64", "executable/linux/so32"])
-        assert set(WINDOWS_x86_FILES) == set(['executable/windows/pe32', 'executable/windows/dll32'])
+        assert set(LINUX_FILES) == {"executable/linux/elf64", "executable/linux/elf32", "executable/linux/so64", "executable/linux/so32"}
+        assert set(WINDOWS_x86_FILES) == {'executable/windows/pe32', 'executable/windows/dll32'}
 
     @staticmethod
     def test_supported_extensions_constant(cuckoo_class_instance):
