@@ -47,12 +47,10 @@ GUEST_VM_START_TIMEOUT = 360  # Give the VM at least 6 minutes to start up
 REPORT_GENERATION_TIMEOUT = 300  # Give the analysis at least 5 minutes to generate the report
 ANALYSIS_TIMEOUT = 150
 
-# TODO: get these from the service manifest config section rather than hard coding them
-WINDOWS_7x64_IMAGE_TAG = "win7x64"
-WINDOWS_7x86_IMAGE_TAG = "win7x86"
-WINDOWS_10x64_IMAGE_TAG = "win10x64"
-UBUNTU_1804x64_IMAGE_TAG = "ub1804x64"
-ALLOWED_IMAGES = [WINDOWS_7x64_IMAGE_TAG, WINDOWS_7x86_IMAGE_TAG, WINDOWS_10x64_IMAGE_TAG, UBUNTU_1804x64_IMAGE_TAG]
+LINUX_IMAGE_PREFIX = "ub"
+WINDOWS_IMAGE_PREFIX = "win"
+x86_IMAGE_SUFFIX = "x86"
+x64_IMAGE_SUFFIX = "x64"
 
 LINUX_FILES = [file_type for file_type in RECOGNIZED_TYPES if "linux" in file_type]
 WINDOWS_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["windows", "32"])]
@@ -205,6 +203,7 @@ class Cuckoo(ServiceBase):
         self.auth_header = None
         self.timeout = None
         self.max_report_size = None
+        self.allowed_images = []
 
     # TODO: this should be after the execute() method, and these urls should be stored (or not stored at all) in a different way
     def set_urls(self):
@@ -222,6 +221,7 @@ class Cuckoo(ServiceBase):
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
         self.timeout = 120  # arbitrary number, not too big, not too small
         self.max_report_size = self.config.get('max_report_size', 275000000)
+        self.allowed_images = self.config.get("allowed_images", [])
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
@@ -849,12 +849,12 @@ class Cuckoo(ServiceBase):
 
         # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
         if guest_image and self.request.file_type in LINUX_FILES:
-            guest_image = UBUNTU_1804x64_IMAGE_TAG
+            guest_image = next((image for image in self.allowed_images if LINUX_IMAGE_PREFIX in image), None)
 
         # TODO: Convert to elif
         # If 32-bit file meant to run on Windows is submitted, make sure it runs on a 32-bit Windows operating system
         if guest_image and self.request.file_type in WINDOWS_x86_FILES:
-            guest_image = WINDOWS_7x86_IMAGE_TAG
+            guest_image = next((image for image in self.allowed_images if all(item in image for item in [WINDOWS_IMAGE_PREFIX, x86_IMAGE_SUFFIX])), None)
 
         # Only submit sample to specific VM type if VM type is available
         if guest_image:
@@ -866,9 +866,7 @@ class Cuckoo(ServiceBase):
                 no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
                 no_image_sec.body = f"The requested image of '{guest_image}' is currently unavailable.\n\n " \
                                     f"General Information:\nAt the moment, the current image options for this " \
-                                    f"Cuckoo deployment include {image_options}. Also note that if a file is identified " \
-                                    f"as one of {LINUX_FILES}, that file is only submitted to {UBUNTU_1804x64_IMAGE_TAG} " \
-                                    f"images."
+                                    f"Cuckoo deployment include {image_options}."
                 self.file_res.add_section(no_image_sec)
                 return
 
@@ -940,7 +938,7 @@ class Cuckoo(ServiceBase):
 
         return generate_report
 
-    def _does_image_exist(self, guest_image) -> (bool, set):
+    def _does_image_exist(self, guest_image) -> (bool, list):
         requested_image_exists = False
         image_options = set()
         for machine in self.machines['machines']:
@@ -948,10 +946,10 @@ class Cuckoo(ServiceBase):
                 requested_image_exists = True
                 break
             else:
-                for image_tag in ALLOWED_IMAGES:
+                for image_tag in self.allowed_images:
                     if image_tag in machine["name"]:
                         image_options.add(image_tag)
-        return requested_image_exists, image_options
+        return requested_image_exists, list(image_options)
 
     def _prepare_dll_submission(self, kwargs, task_options, file_ext):
         dll_function = self.request.get_param("dll_function")
