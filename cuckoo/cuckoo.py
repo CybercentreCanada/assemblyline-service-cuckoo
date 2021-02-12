@@ -51,6 +51,7 @@ LINUX_IMAGE_PREFIX = "ub"
 WINDOWS_IMAGE_PREFIX = "win"
 x86_IMAGE_SUFFIX = "x86"
 x64_IMAGE_SUFFIX = "x64"
+RELEVANT_IMAGE_TAG = "relevant"
 
 LINUX_FILES = [file_type for file_type in RECOGNIZED_TYPES if "linux" in file_type]
 WINDOWS_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["windows", "32"])]
@@ -250,6 +251,20 @@ class Cuckoo(ServiceBase):
             return
 
         self.machines = self.query_machines()
+
+        machine_requested, machine_exists = self._handle_specific_machine(kwargs)
+        if machine_requested and not machine_exists:
+            # If specific machine, then we are "specific_machine" or bust!
+            return
+
+        image_requested, relevant_images = self._handle_specific_image()
+        if image_requested and not relevant_images:
+            # If specific image, then we are "specific_image" or bust!
+            return
+
+        # TODO: for now, use the first relevant image
+        if image_requested:
+            kwargs["tags"] = relevant_images[0]
 
         generate_report = self._set_task_parameters(kwargs, file_ext)
 
@@ -829,46 +844,7 @@ class Cuckoo(ServiceBase):
         else:
             return None
 
-    def _send_to_certain_machine(self, specific_machine, specific_image, kwargs):
-        # TODO: this should be in a separate method
-        if specific_machine and any(specific_machine == machine["name"] for machine in self.machines["machines"]):
-            # If a specific machine exists that the user wants, then we don't care about the preferred guest image to use
-            kwargs["machine"] = specific_machine
-            guest_image = None
-        else:
-            guest_image = specific_image
-
-        # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
-        if guest_image and self.request.file_type in LINUX_FILES:
-            guest_image = next((image for image in self.allowed_images if LINUX_IMAGE_PREFIX in image), None)
-
-        # TODO: Convert to elif
-        # If 32-bit file meant to run on Windows is submitted, make sure it runs on a 32-bit Windows operating system
-        if guest_image and self.request.file_type in WINDOWS_x86_FILES:
-            guest_image = next((image for image in self.allowed_images if all(item in image for item in [WINDOWS_IMAGE_PREFIX, x86_IMAGE_SUFFIX])), None)
-
-        # Only submit sample to specific VM type if VM type is available
-        if guest_image:
-            requested_image_exists, image_options = self._does_image_exist(guest_image)
-            if not requested_image_exists:
-                self.log.info(f"The requested image '{guest_image}' is not available in {image_options}")
-                # BAIL! Requested guest image does not exist
-                # Return Result Section with info about available images
-                no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
-                no_image_sec.body = f"The requested image of '{guest_image}' is currently unavailable.\n\n " \
-                                    f"General Information:\nAt the moment, the current image options for this " \
-                                    f"Cuckoo deployment include {image_options}."
-                self.file_res.add_section(no_image_sec)
-                return
-
-            kwargs["tags"] = guest_image
-
     def _set_task_parameters(self, kwargs, file_ext) -> bool:
-        specific_machine = self._safely_get_param("specific_machine")
-        specific_image = self._safely_get_param("specific_image")
-        if specific_machine or specific_image:
-            self._send_to_certain_machine(specific_machine, specific_image, kwargs)
-
         # the 'options' kwargs
         task_options = []
 
@@ -932,18 +908,28 @@ class Cuckoo(ServiceBase):
 
         return generate_report
 
-    def _does_image_exist(self, guest_image) -> (bool, list):
-        requested_image_exists = False
-        image_options = set()
-        for machine in self.machines['machines']:
-            if guest_image in machine["name"]:
-                requested_image_exists = True
-                break
-            else:
-                for image_tag in self.allowed_images:
-                    if image_tag in machine["name"]:
-                        image_options.add(image_tag)
-        return requested_image_exists, list(image_options)
+    @staticmethod
+    def _does_image_exist(specific_image: str, machines: list, allowed_images: list) -> bool:
+        if specific_image not in allowed_images:
+            return False
+
+        machine_names = [machine["name"] for machine in machines]
+        if any(specific_image in machine for machine in machine_names):
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def _get_available_images(machines: list, allowed_images: list) -> list:
+        machine_names = [machine["name"] for machine in machines]
+        if not machine_names or not allowed_images:
+            return []
+
+        available_images = set()
+        for image in allowed_images:
+            if any(image in machine_name for machine_name in machine_names):
+                available_images.add(image)
+        return list(available_images)
 
     def _prepare_dll_submission(self, kwargs, task_options, file_ext):
         dll_function = self.request.get_param("dll_function")
@@ -1240,13 +1226,77 @@ class Cuckoo(ServiceBase):
         param_value = None
         try:
             param_value = self.request.get_param(param)
-        except Exception as exc:
-            if f"Service submission parameter not found: {param}" in repr(exc):
-                # If you don't want this parameter available to users of AL, it's okay, I forgive you
-                pass
-            else:
-                raise
+        except Exception:
+            pass
         return param_value
+
+    @staticmethod
+    def _determine_relevant_images(file_type: str, possible_images: list) -> list:
+        images_to_send_file_to = []
+        # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
+        if file_type in LINUX_FILES:
+            images_to_send_file_to.extend([image for image in possible_images if LINUX_IMAGE_PREFIX in image])
+
+        # If 32-bit file meant to run on Windows is submitted, make sure it runs on a 32-bit Windows operating system
+        if file_type in WINDOWS_x86_FILES:
+            images_to_send_file_to.extend([image for image in possible_images if
+                                           all(item in image for item in [WINDOWS_IMAGE_PREFIX, x86_IMAGE_SUFFIX])])
+
+        # If 64-bit Windows file is submitted, then send it to a 64-bit Windows image
+        if not any(file_type in file_list for file_list in [LINUX_FILES, WINDOWS_x86_FILES]):
+            images_to_send_file_to.extend([image for image in possible_images if
+                                           all(item in image for item in [WINDOWS_IMAGE_PREFIX, x64_IMAGE_SUFFIX])])
+        return images_to_send_file_to
+
+    @staticmethod
+    def _does_machine_exist(specific_machine_name: str, machine_names: list) -> bool:
+        if any(specific_machine_name == machine_name for machine_name in machine_names):
+            return True
+        else:
+            return False
+
+    def _handle_specific_machine(self, kwargs) -> (bool, bool):
+        machine_requested = False
+        machine_exists = False
+
+        specific_machine = self._safely_get_param("specific_machine")
+        if specific_machine:
+            machine_requested = True
+            machine_names = [machine["name"] for machine in self.machines["machines"]]
+            if self._does_machine_exist(specific_machine, machine_names):
+                machine_exists = True
+                kwargs["machine"] = specific_machine
+            else:
+                no_machine_sec = ResultSection(title_text='Requested Machine Does Not Exist')
+                no_machine_sec.body = f"The requested machine '{specific_machine}' is currently unavailable.\n\n" \
+                                      f"General Information:\nAt the moment, the current machine options for this " \
+                                      f"Cuckoo deployment include {machine_names}."
+                self.file_res.add_section(no_machine_sec)
+        return machine_requested, machine_exists
+
+    def _handle_specific_image(self) -> (bool, list):
+        image_requested = False
+        relevant_images = []
+
+        specific_image = self._safely_get_param("specific_image")
+        if specific_image:
+            image_requested = True
+            if specific_image == RELEVANT_IMAGE_TAG:
+                relevant_images = self._determine_relevant_images(self.request.file_type, self.allowed_images)
+                for relevant_image in relevant_images[:]:
+                    if not self._does_image_exist(relevant_image, self.machines["machines"], self.allowed_images):
+                        relevant_images.remove(relevant_image)
+            else:
+                if self._does_image_exist(specific_image, self.machines["machines"], self.allowed_images):
+                    relevant_images.append(specific_image)
+            if not relevant_images:
+                available_images = self._get_available_images(self.machines, self.allowed_images)
+                no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
+                no_image_sec.body = f"The requested image '{specific_image}' is currently unavailable.\n\n" \
+                                    f"General Information:\nAt the moment, the current image options for this " \
+                                    f"Cuckoo deployment include {available_images}."
+                self.file_res.add_section(no_image_sec)
+        return image_requested, relevant_images
 
 
 def generate_random_words(num_words):
