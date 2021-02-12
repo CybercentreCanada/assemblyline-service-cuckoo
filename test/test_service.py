@@ -1241,7 +1241,7 @@ class TestCuckoo:
 
     @staticmethod
     @pytest.mark.parametrize(
-        "file_type, specific_machine, machine_exists, guest_image, image_exists, allowed_images, correct_guest_image",
+        "file_type, specific_machine, machine_exists, specific_image, image_exists, allowed_images, correct_guest_image",
         [
             ("blah", None, False, "some_guest_image", False, [], None),
             ("executable/linux/elf64", None, False, "ub1804x64", False, ["ub1804x64"], None),
@@ -1260,7 +1260,7 @@ class TestCuckoo:
             ("blah", "some_machine_name", False, "some_guest_image", False, [], None),
         ]
     )
-    def test_send_to_certain_machine(file_type, specific_machine, machine_exists, guest_image, image_exists, allowed_images, correct_guest_image, cuckoo_class_instance, dummy_request_class, mocker):
+    def test_send_to_certain_machine(file_type, specific_machine, machine_exists, specific_image, image_exists, allowed_images, correct_guest_image, cuckoo_class_instance, dummy_request_class, mocker):
         from cuckoo.cuckoo import Cuckoo
         from assemblyline_v4_service.common.result import Result, ResultSection
 
@@ -1269,7 +1269,9 @@ class TestCuckoo:
         if machine_exists:
             request_kwargs["specific_machine"] = specific_machine
             cuckoo_class_instance.machines = {"machines": [{"name": specific_machine}]}
-        request_kwargs["guest_image"] = guest_image
+        else:
+            cuckoo_class_instance.machines = {"machines": []}
+        request_kwargs["guest_image"] = specific_image
 
         mocker.patch.object(Cuckoo, '_does_image_exist', return_value=(image_exists, allowed_images))
 
@@ -1278,7 +1280,7 @@ class TestCuckoo:
         cuckoo_class_instance.file_res = Result()
         cuckoo_class_instance.request.file_type = file_type
 
-        cuckoo_class_instance._send_to_certain_machine(kwargs)
+        cuckoo_class_instance._send_to_certain_machine(specific_machine, specific_image, kwargs)
         if machine_exists:
             assert kwargs["machine"] == specific_machine
         else:
@@ -1288,7 +1290,7 @@ class TestCuckoo:
 
         if not machine_exists and not image_exists:
             correct_result_section = ResultSection(title_text='Requested Image Does Not Exist')
-            correct_result_section.body = f"The requested image of '{guest_image}' is currently unavailable.\n\n " \
+            correct_result_section.body = f"The requested image of '{specific_image}' is currently unavailable.\n\n " \
                                     f"General Information:\nAt the moment, the current image options for this " \
                                     f"Cuckoo deployment include {allowed_images}."
 
@@ -1705,6 +1707,16 @@ class TestCuckoo:
         mocker.patch.object(dummy_request_class, "add_extracted", side_effect=MaxExtractedExceeded)
         cuckoo_class_instance._extract_hollowshunter(tar_obj)
         assert cuckoo_class_instance.request.task.extracted == []
+
+    @staticmethod
+    @pytest.mark.parametrize("param_exists, param, correct_value",
+                             [(True, "blah", "blah"), (False, "blah", None)])
+    def test_safely_get_param(param_exists, param, correct_value, cuckoo_class_instance, dummy_request_class):
+        if param_exists:
+            cuckoo_class_instance.request = dummy_request_class(**{param: "blah"})
+        else:
+            cuckoo_class_instance.request = dummy_request_class()
+        assert cuckoo_class_instance._safely_get_param(param) == correct_value
 
 
 class TestCuckooResult:
