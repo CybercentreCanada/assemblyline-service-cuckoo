@@ -829,23 +829,14 @@ class Cuckoo(ServiceBase):
         else:
             return None
 
-    def _send_to_certain_machine(self, kwargs):
-        try:
-            specific_machine = self.request.get_param("specific_machine")
-        except Exception as exc:
-            if "Service submission parameter not found: specific_machine" in repr(exc):
-                # If you don't want this parameter available to users of AL, it's okay, I forgive you
-                specific_machine = None
-            else:
-                raise
-
+    def _send_to_certain_machine(self, specific_machine, specific_image, kwargs):
         # TODO: this should be in a separate method
         if specific_machine and any(specific_machine == machine["name"] for machine in self.machines["machines"]):
             # If a specific machine exists that the user wants, then we don't care about the preferred guest image to use
             kwargs["machine"] = specific_machine
             guest_image = None
         else:
-            guest_image = self.request.get_param("guest_image")
+            guest_image = specific_image
 
         # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
         if guest_image and self.request.file_type in LINUX_FILES:
@@ -873,7 +864,10 @@ class Cuckoo(ServiceBase):
             kwargs["tags"] = guest_image
 
     def _set_task_parameters(self, kwargs, file_ext) -> bool:
-        self._send_to_certain_machine(kwargs)
+        specific_machine = self._safely_get_param("specific_machine")
+        specific_image = self._safely_get_param("specific_image")
+        if specific_machine or specific_image:
+            self._send_to_certain_machine(specific_machine, specific_image, kwargs)
 
         # the 'options' kwargs
         task_options = []
@@ -1241,6 +1235,18 @@ class Cuckoo(ServiceBase):
     @staticmethod
     def _encode_sysmon_file(destination_file_path, f):
         return encode_file(destination_file_path, f, metadata={'al': {'type': 'metadata/sysmon'}})
+
+    def _safely_get_param(self, param: str):
+        param_value = None
+        try:
+            param_value = self.request.get_param(param)
+        except Exception as exc:
+            if f"Service submission parameter not found: {param}" in repr(exc):
+                # If you don't want this parameter available to users of AL, it's okay, I forgive you
+                pass
+            else:
+                raise
+        return param_value
 
 
 def generate_random_words(num_words):

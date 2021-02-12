@@ -103,7 +103,7 @@ submission_params:
 
   # can be either win7x64, win7x86, win10, ub1804.
   - default: "win7x64"
-    name: guest_image
+    name: specific_image
     type: list
     value: ["win10x64", "win7x64", "win7x86", "ub1804x64"]
 
