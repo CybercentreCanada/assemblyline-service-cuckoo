@@ -49,7 +49,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         info_res = ResultSection(title_text='Analysis Information',
                                  body_format=BODY_FORMAT.KEY_VALUE,
                                  body=json.dumps(body))
-        al_result.add_section(info_res)
+        al_result.add_subsection(info_res)
 
     debug = api_report.get('debug', {})
     sigs = api_report.get('signatures', [])
@@ -86,7 +86,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
                 "It doesn't look like this file executed (unsupported file type?)")
             noexec_res = ResultSection(title_text="Notes")
             noexec_res.add_line(f"No program available to execute a file with the following extension: {safe_str(file_ext)}")
-            al_result.add_section(noexec_res)
+            al_result.add_subsection(noexec_res)
         else:
             # Otherwise, moving on!
             process_events = process_behaviour(behaviour, al_result, process_map, sysmon_tree, sysmon_procs, is_process_martian)
@@ -135,7 +135,7 @@ def process_debug(debug, al_result):
         previous_log = log
 
     if error_res.body and len(error_res.body) > 0:
-        al_result.add_section(error_res)
+        al_result.add_subsection(error_res)
 
 
 # TODO: this method needs to be split up
@@ -167,7 +167,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
             # Let's keep this heuristic as informational
             process_martian_heur.add_signature_id(sig_name, score=10)
             process_tree_section.heuristic = process_martian_heur
-        al_result.add_section(process_tree_section)
+        al_result.add_subsection(process_tree_section)
 
     # Gathering apistats to determine if calls have been limited
     apistats = behaviour.get("apistats", [])
@@ -234,7 +234,7 @@ def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sys
                 f"most likely related to the anti-sandbox technique known as API Hammering. For more information, look " \
                 f"to the api_hammering signature."
         limited_calls_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
-        al_result.add_section(limited_calls_section)
+        al_result.add_subsection(limited_calls_section)
 
     log.debug("Behavior processing completed.")
     return events
@@ -622,7 +622,7 @@ def process_signatures(sigs: list, al_result: Result, random_ip_range: str, targ
             # Adding the signature result section to the parent result section
             sigs_res.add_subsection(sig_res)
     if len(sigs_res.subsections) > 0:
-        al_result.add_section(sigs_res)
+        al_result.add_subsection(sigs_res)
     return is_process_martian
 
 
@@ -912,7 +912,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
         network_res.add_subsection(http_sec)
 
     if len(network_res.subsections) > 0:
-        al_result.add_section(network_res)
+        al_result.add_subsection(network_res)
 
     log.debug("Network processing complete.")
     return events
@@ -949,7 +949,7 @@ def process_all_events(al_result: Result, network_events: list = [], process_eve
     sorted_events = sorted(all_events, key=lambda k: k["timestamp"])
     events_section.body = json.dumps(sorted_events)
     events_section.body_format = BODY_FORMAT.TABLE
-    al_result.add_section(events_section)
+    al_result.add_subsection(events_section)
 
 
 def process_curtain(curtain: dict, al_result: Result, process_map: dict):
@@ -973,7 +973,7 @@ def process_curtain(curtain: dict, al_result: Result, process_map: dict):
             curtain_res.add_tag("file.powershell.cmdlet", behaviour)
     if len(curtain_body) > 0:
         curtain_res.body = json.dumps(curtain_body)
-        al_result.add_section(curtain_res)
+        al_result.add_subsection(curtain_res)
 
 
 def process_sysmon(sysmon: list, al_result: Result, process_map: dict) -> (list, list):
@@ -983,7 +983,7 @@ def process_sysmon(sysmon: list, al_result: Result, process_map: dict) -> (list,
     sysmon_res = ResultSection(title_text="Sysmon Signatures", body_format=BODY_FORMAT.TABLE)
     if len(sysmon_body) > 0:
         sysmon_res.body = json.dumps(sysmon_body)
-        al_result.add_section(sysmon_res)
+        al_result.add_subsection(sysmon_res)
 
     # Cut it out!
     index = _get_trimming_index(sysmon)
@@ -1068,7 +1068,7 @@ def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: d
     hollowshunter_res = ResultSection(title_text="HollowsHunter Analysis", body_format=BODY_FORMAT.TABLE)
     if len(hollowshunter_body) > 0:
         hollowshunter_res.body = json.dumps(hollowshunter_body)
-        al_result.add_section(hollowshunter_res)
+        al_result.add_subsection(hollowshunter_res)
 
 
 def process_decrypted_buffers(process_map: dict, al_result: Result):
@@ -1111,7 +1111,7 @@ def process_decrypted_buffers(process_map: dict, al_result: Result):
         buffer_res.add_tag("network.static.uri", safe_uri)
     if len(buffer_body) > 0:
         buffer_res.body = json.dumps(buffer_body)
-        al_result.add_section(buffer_res)
+        al_result.add_subsection(buffer_res)
 
 
 def is_ip(val: str) -> bool:
