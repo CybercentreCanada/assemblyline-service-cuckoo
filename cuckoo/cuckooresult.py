@@ -66,6 +66,7 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     network_events = []
     process_events = []
 
+    is_process_martian = False
     if sigs:
         target = api_report.get("target", {})
         target_file = target.get("file", {})
@@ -139,7 +140,7 @@ def process_debug(debug, al_result):
 
 
 # TODO: this method needs to be split up
-def process_behaviour(behaviour: dict, al_result: Result, process_map: dict, sysmon_tree: list, sysmon_procs: list, is_process_martian: bool) -> list:
+def process_behaviour(behaviour: dict, al_result: ResultSection, process_map: dict, sysmon_tree: list, sysmon_procs: list, is_process_martian: bool) -> list:
     log.debug("Processing behavior results.")
     events = []  # This will contain all network events
 
@@ -379,7 +380,7 @@ def _merge_process_trees(cuckoo_tree: list, sysmon_tree: list, sysmon_process_in
 
 
 # TODO: break this method up
-def process_signatures(sigs: list, al_result: Result, random_ip_range: str, target_filename: str, process_map: dict) -> bool:
+def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: str, target_filename: str, process_map: dict) -> bool:
     log.debug("Processing signature results.")
     if len(sigs) <= 0:
         return False
@@ -654,7 +655,7 @@ def contains_safelisted_value(val: str) -> bool:
 
 
 # TODO: break this up into methods
-def process_network(network: dict, al_result: Result, random_ip_range: str, process_map: dict) -> list:
+def process_network(network: dict, al_result: ResultSection, random_ip_range: str, process_map: dict) -> list:
     log.debug("Processing network results.")
     events = []  # This will contain all network events
     network_res = ResultSection(title_text="Network Activity")
@@ -918,7 +919,7 @@ def process_network(network: dict, al_result: Result, random_ip_range: str, proc
     return events
 
 
-def process_all_events(al_result: Result, network_events: list = [], process_events: list = []):
+def process_all_events(al_result: ResultSection, network_events: list = [], process_events: list = []):
     # Each item in the events table will follow the structure below:
     # {
     #   "timestamp": timestamp,
@@ -952,7 +953,7 @@ def process_all_events(al_result: Result, network_events: list = [], process_eve
     al_result.add_subsection(events_section)
 
 
-def process_curtain(curtain: dict, al_result: Result, process_map: dict):
+def process_curtain(curtain: dict, al_result: ResultSection, process_map: dict):
     log.debug("Processing curtain results.")
     curtain_body = []
     curtain_res = ResultSection(title_text="PowerShell Activity", body_format=BODY_FORMAT.TABLE)
@@ -1071,7 +1072,7 @@ def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: d
         al_result.add_subsection(hollowshunter_res)
 
 
-def process_decrypted_buffers(process_map: dict, al_result: Result):
+def process_decrypted_buffers(process_map: dict, al_result: ResultSection):
     log.debug("Processing decrypted buffers.")
     buffer_res = ResultSection(title_text="Decrypted Buffers", body_format=BODY_FORMAT.TABLE)
     buffer_body = []
