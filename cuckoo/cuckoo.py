@@ -31,9 +31,10 @@ from cuckoo.cuckooresult import generate_al_result
 from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
-HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc)$"
+HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc|dll)$"
 HOLLOWSHUNTER_EXE_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$"
 HOLLOWSHUNTER_SHC_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.shc$"
+HOLLOWSHUNTER_DLL_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.dll"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
@@ -925,6 +926,10 @@ class Cuckoo(ServiceBase):
         if custom_options is not None:
             kwargs['options'] += f",{custom_options}"
 
+        # If deep_scan, then get 100 HH files of all types
+        if self.request.deep_scan:
+            task_options.append("hollowshunter=all")
+
         return generate_report
 
     @staticmethod
@@ -1215,6 +1220,9 @@ class Cuckoo(ServiceBase):
             ), (
                 None, HOLLOWSHUNTER_SHC_REGEX,
                 "HollowsHunter Shellcode", None
+            ), (
+                None, HOLLOWSHUNTER_DLL_REGEX,
+                "HollowsHunter DLL", None
             )]
             for hh_tuple in hh_tuples:
                 section, regex, section_title, section_heur = hh_tuple
