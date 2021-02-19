@@ -87,6 +87,7 @@ def dummy_request_class(dummy_task_class):
             self.task = dummy_task_class()
             self.file_type = None
             self.sha256 = True
+            self.deep_scan = False
             self.update(some_dict)
 
         def add_supplementary(self, path, name, description):
@@ -119,6 +120,7 @@ def dummy_tar_class():
                 "hollowshunter/hh_process_123_scan_report.json",
                 "hollowshunter/hh_process_123_blah.exe",
                 "hollowshunter/hh_process_123_blah.shc",
+                "hollowshunter/hh_process_123_blah.dll",
             ]
 
         def extract(self, output, path=None):
@@ -233,11 +235,12 @@ def check_section_equality(this, that) -> bool:
 class TestModule:
     @staticmethod
     def test_hollowshunter_constants(cuckoo_class_instance):
-        from cuckoo.cuckoo import HOLLOWSHUNTER_REPORT_REGEX, HOLLOWSHUNTER_DUMP_REGEX, HOLLOWSHUNTER_EXE_REGEX, HOLLOWSHUNTER_SHC_REGEX
+        from cuckoo.cuckoo import HOLLOWSHUNTER_REPORT_REGEX, HOLLOWSHUNTER_DUMP_REGEX, HOLLOWSHUNTER_EXE_REGEX, HOLLOWSHUNTER_SHC_REGEX, HOLLOWSHUNTER_DLL_REGEX
         assert HOLLOWSHUNTER_REPORT_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
-        assert HOLLOWSHUNTER_DUMP_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc)$"
+        assert HOLLOWSHUNTER_DUMP_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc|dll)$"
         assert HOLLOWSHUNTER_EXE_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$"
         assert HOLLOWSHUNTER_SHC_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.shc$"
+        assert HOLLOWSHUNTER_DLL_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.dll$"
 
     @staticmethod
     def test_cuckoo_api_constants(cuckoo_class_instance):
@@ -1286,6 +1289,7 @@ class TestCuckoo:
     )
     def test_does_image_exist(guest_image, machines, allowed_images, correct_results, cuckoo_class_instance):
         cuckoo_class_instance.machines = {"machines": machines}
+        cuckoo_class_instance.machines = {"machines": machines}
         assert cuckoo_class_instance._does_image_exist(guest_image, machines, allowed_images) == correct_results
 
     @staticmethod
@@ -1304,7 +1308,8 @@ class TestCuckoo:
                 "force_sleepskip": False,
                 "take_screenshots": False,
                 "sysmon_enabled": False,
-                "simulate_user": False
+                "simulate_user": False,
+                "deep_scan": False
             },
             {
                 "analysis_timeout": 1,
@@ -1318,7 +1323,8 @@ class TestCuckoo:
                 "force_sleepskip": True,
                 "take_screenshots": True,
                 "sysmon_enabled": True,
-                "simulate_user": True
+                "simulate_user": True,
+                "deep_scan": True
             }
         ]
     )
@@ -1364,6 +1370,11 @@ class TestCuckoo:
             correct_task_options.append("screenshots=1")
         if simulate_user not in [True, 'True']:
             correct_task_options.append("human=0")
+
+        deep_scan = params.pop("deep_scan")
+        if deep_scan:
+            correct_task_options.append("hollowshunter=all")
+
         correct_kwargs['options'] = ','.join(correct_task_options)
         if custom_options is not None:
             correct_kwargs['options'] += f",{custom_options}"
@@ -1371,6 +1382,7 @@ class TestCuckoo:
         parent_section = ResultSection("blah")
 
         cuckoo_class_instance.request = dummy_request_class(**params)
+        cuckoo_class_instance.request.deep_scan = deep_scan
         generate_report = cuckoo_class_instance._set_task_parameters(kwargs, file_ext, parent_section)
         assert kwargs == correct_kwargs
         assert generate_report == correct_generate_report
@@ -1693,9 +1705,14 @@ class TestCuckoo:
         correct_shc_subsection_result_section.tags = {'dynamic.process.file_name': ['hollowshunter/hh_process_123_blah.shc']}
         correct_result_section.add_subsection(correct_shc_subsection_result_section)
 
+        correct_dll_subsection_result_section = ResultSection(title_text='HollowsHunter DLL')
+        correct_dll_subsection_result_section.tags = {'dynamic.process.file_name': ['hollowshunter/hh_process_123_blah.dll']}
+        correct_result_section.add_subsection(correct_dll_subsection_result_section)
+
         assert check_section_equality(parent_section.subsections[0], correct_result_section)
         assert cuckoo_class_instance.request.task.extracted[0] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.exe", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.exe', "description": 'HollowsHunter Injected Portable Executable'}
         assert cuckoo_class_instance.request.task.extracted[1] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.shc", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.shc', "description": 'HollowsHunter Shellcode'}
+        assert cuckoo_class_instance.request.task.extracted[2] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.dll", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.dll', "description": 'HollowsHunter DLL'}
         assert cuckoo_class_instance.request.task.supplementary[0] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_dump_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_dump_report.json', "description": 'HollowsHunter report (json)'}
         assert cuckoo_class_instance.request.task.supplementary[1] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_scan_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_scan_report.json', "description": 'HollowsHunter report (json)'}
 
