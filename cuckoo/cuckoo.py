@@ -34,7 +34,7 @@ HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_re
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc|dll)$"
 HOLLOWSHUNTER_EXE_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$"
 HOLLOWSHUNTER_SHC_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.shc$"
-HOLLOWSHUNTER_DLL_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.dll"
+HOLLOWSHUNTER_DLL_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.dll$"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
@@ -922,13 +922,13 @@ class Cuckoo(ServiceBase):
         if simulate_user not in [True, 'True']:  # Not sure why sometimes this specific param is a string
             task_options.append("human=0")
 
-        kwargs['options'] = ','.join(task_options)
-        if custom_options is not None:
-            kwargs['options'] += f",{custom_options}"
-
         # If deep_scan, then get 100 HH files of all types
         if self.request.deep_scan:
             task_options.append("hollowshunter=all")
+
+        kwargs['options'] = ','.join(task_options)
+        if custom_options is not None:
+            kwargs['options'] += f",{custom_options}"
 
         return generate_report
 
