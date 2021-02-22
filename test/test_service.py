@@ -3225,6 +3225,7 @@ class TestSafelist:
             'FE3': r'fe3\.delivery\.mp\.microsoft\.com$',
             'WNS': r'client\.wns\.windows\.com$',
             'Go Microsoft': r'(www\.)?go\.microsoft\.com$',
+            'Google': r'google\.com$',
             'JS': r'js\.microsoft\.com$',
             'Ajax': r'ajax\.microsoft\.com$',
             'IEOnline': r'ieonline\.microsoft\.com$',
@@ -3368,6 +3369,7 @@ class TestSafelist:
             'Verisign CRL': r'https?://crl\.verisign\.com/pca3-g5\.crl04',
             'Verisign CRL file': r'https?://csc3-2010-crl\.verisign\.com/CSC3-2010\.crl0D',
             'Verisign AIA file': r'https?://csc3-2010-aia\.verisign\.com/CSC3-2010\.cer0',
+            'Verisign General CRL': 'https?://crl\.verisign\.com/*',
             'WPAD': r'https?://wpad\.reddog\.microsoft\.com/wpad\.dat',
             'OCSP Digicert': r'https?://ocsp\.digicert\.com/*',
             'CRL Digicert': r'https?://crl[0-9]\.digicert\.com/*',
@@ -3378,6 +3380,8 @@ class TestSafelist:
             'Entrust CRL': r'https?://crl\.entrust\.net/*',
             'GlobalSign OCSP': r'https?://ocsp[0-9]?\.globalsign\.com/*',
             'GlobalSign CRL': r'https?://crl\.globalsign\.(com|net)/*',
+            'Google': 'https?://www\.google\.com',
+            'W3': 'https?://www\.w3\.org/*',
         }
 
     @staticmethod

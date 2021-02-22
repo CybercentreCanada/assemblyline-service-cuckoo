@@ -257,10 +257,13 @@ class Cuckoo(ServiceBase):
             # If specific machine, then we are "specific_machine" or bust!
             return
 
-        image_requested, relevant_images = self._handle_specific_image()
-        if image_requested and not relevant_images:
-            # If specific image, then we are "specific_image" or bust!
-            return
+        image_requested = False
+        relevant_images = []
+        if not (machine_requested and machine_exists):
+            image_requested, relevant_images = self._handle_specific_image()
+            if image_requested and not relevant_images:
+                # If specific image, then we are "specific_image" or bust!
+                return
 
         # If an image has been requested, and there is more than 1 image to send the file to, then use threads
         if image_requested and len(relevant_images) > 1:
@@ -282,7 +285,10 @@ class Cuckoo(ServiceBase):
             kwargs["tags"] = relevant_images[0]
             self._general_flow(kwargs, file_ext, parent_section)
         else:
-            parent_section = ResultSection("File submitted to the first machine available")
+            if kwargs.get("machine"):
+                parent_section = ResultSection(f"File submitted to {kwargs['machine']}")
+            else:
+                parent_section = ResultSection("File submitted to the first machine available")
             self.file_res.add_section(parent_section)
             self._general_flow(kwargs, file_ext, parent_section)
 
