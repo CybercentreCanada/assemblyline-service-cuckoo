@@ -1350,6 +1350,7 @@ class TestCuckoo:
         take_screenshots = params["take_screenshots"]
         sysmon_enabled = params["sysmon_enabled"]
         simulate_user = params["simulate_user"]
+        package = params["package"]
         if timeout:
             correct_kwargs['enforce_timeout'] = True
             correct_kwargs['timeout'] = timeout
@@ -1380,6 +1381,8 @@ class TestCuckoo:
         correct_kwargs['options'] = ','.join(correct_task_options)
         if custom_options is not None:
             correct_kwargs['options'] += f",{custom_options}"
+        if package:
+            correct_kwargs["package"] = package
 
         parent_section = ResultSection("blah")
 
