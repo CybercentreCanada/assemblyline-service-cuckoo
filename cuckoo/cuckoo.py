@@ -897,6 +897,7 @@ class Cuckoo(ServiceBase):
         take_screenshots = self.request.get_param("take_screenshots")
         sysmon_enabled = self.request.get_param("sysmon_enabled")
         simulate_user = self.request.get_param("simulate_user")
+        package = self.request.get_param("package")
 
         self._prepare_dll_submission(kwargs, task_options, file_ext, parent_section)
 
@@ -935,6 +936,9 @@ class Cuckoo(ServiceBase):
         kwargs['options'] = ','.join(task_options)
         if custom_options is not None:
             kwargs['options'] += f",{custom_options}"
+
+        if package:
+            kwargs["package"] = package
 
         return generate_report
 

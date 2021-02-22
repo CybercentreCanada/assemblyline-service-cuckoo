@@ -1309,7 +1309,8 @@ class TestCuckoo:
                 "take_screenshots": False,
                 "sysmon_enabled": False,
                 "simulate_user": False,
-                "deep_scan": False
+                "deep_scan": False,
+                "package": "",
             },
             {
                 "analysis_timeout": 1,
@@ -1324,7 +1325,8 @@ class TestCuckoo:
                 "take_screenshots": True,
                 "sysmon_enabled": True,
                 "simulate_user": True,
-                "deep_scan": True
+                "deep_scan": True,
+                "package": "doc"
             }
         ]
     )

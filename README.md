@@ -69,6 +69,7 @@ than this if the process being monitored exits.
 * **specific_image** - List of available images to send the file to (See Image Options)
 * **max_total_size_of_uploaded_files** - Limit of total files uploaded per analysis, based on [PR](https://github.com/cuckoosandbox/cuckoo/pull/3169)
 * **specific_machine** - The name of the machine that you want to run the sample on. 
+* **package** - The name of the analysis package to run the sample with, with out-of-the-box options found [here](https://cuckoo.readthedocs.io/en/latest/usage/packages/). 
 
 ### Deployment of Cuckoo Nest
 
