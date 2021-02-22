@@ -2,7 +2,7 @@ name: Cuckoo
 version: $SERVICE_TAG
 description: Provides dynamic malware analysis through sandboxing.
 
-accepts: (archive|executable/(windows|linux)|java|audiovisual|meta)/.*|document/(installer/windows|office/(excel|ole|powerpoint|rtf|unknown|word)|pdf|email)|code/(javascript|jscript|python|vbs|wsf|html|ps1|batch|hta)
+accepts: (archive|executable/(windows|linux)|java|audiovisual|meta)/.*|document/(installer/windows|office/(excel|ole|powerpoint|rtf|unknown|word|mhtml)|pdf|email)|code/(javascript|jscript|python|vbs|wsf|html|ps1|batch|hta)
 rejects: empty|metadata/.*|archive/zip
 
 stage: CORE
@@ -118,6 +118,11 @@ submission_params:
   # Used for development, when you want to send a file to a specific machine
   - default: ""
     name: specific_machine
+    type: str
+    value: ""
+
+  - default: ""
+    name: package
     type: str
     value: ""
 
