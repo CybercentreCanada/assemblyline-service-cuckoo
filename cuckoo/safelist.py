@@ -377,32 +377,32 @@ SAFELIST_URIS = {
     'Verisign CRL': r'https?://crl\.verisign\.com/pca3-g5\.crl04',
     'Verisign CRL file': r'https?://csc3-2010-crl\.verisign\.com/CSC3-2010\.crl0D',
     'Verisign AIA file': r'https?://csc3-2010-aia\.verisign\.com/CSC3-2010\.cer0',
-    'Verisign General CRL': r'https?://crl\.verisign\.com/*',
+    'Verisign General CRL': r'https?://crl\.verisign\.com/.*',
 
     # Azure
     'WPAD': r'https?://wpad\.reddog\.microsoft\.com/wpad\.dat',
 
     # Digicert
-    'OCSP Digicert': r'https?://ocsp\.digicert\.com/*',
-    'CRL Digicert': r'https?://crl[0-9]\.digicert\.com/*',
+    'OCSP Digicert': r'https?://ocsp\.digicert\.com/.*',
+    'CRL Digicert': r'https?://crl[0-9]\.digicert\.com/.*',
 
     # Symantec
-    'Symantec Certificates': r'https?://s[a-z0-9]?\.symc[bd]\.com/*',
-    'Symantec OCSP/CRL': r'https?://(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com/*',
+    'Symantec Certificates': r'https?://s[a-z0-9]?\.symc[bd]\.com/.*',
+    'Symantec OCSP/CRL': r'https?://(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com/.*',
 
     # Thawte
-    'Thawte OCSP': r'https?://ocsp\.thawte\.com/*',
+    'Thawte OCSP': r'https?://ocsp\.thawte\.com/.*',
 
     # Entrust
-    'Entrust OCSP': r'https?://ocsp\.entrust\.net/*',
-    'Entrust CRL': r'https?://crl\.entrust\.net/*',
+    'Entrust OCSP': r'https?://ocsp\.entrust\.net/.*',
+    'Entrust CRL': r'https?://crl\.entrust\.net/.*',
 
     # GlobalSign
-    'GlobalSign OCSP': r'https?://ocsp[0-9]?\.globalsign\.com/*',
-    'GlobalSign CRL': r'https?://crl\.globalsign\.(com|net)/*',
+    'GlobalSign OCSP': r'https?://ocsp[0-9]?\.globalsign\.com/.*',
+    'GlobalSign CRL': r'https?://crl\.globalsign\.(com|net)/.*',
 
     # W3
-    'W3': r'https?://www\.w3\.org/*',
+    'W3': r'https?://www\.w3\.org/.*',
 
     # Google
     'Google': r'https?://www\.google\.com',
