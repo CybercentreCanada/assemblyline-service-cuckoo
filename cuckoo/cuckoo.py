@@ -1295,10 +1295,7 @@ class Cuckoo(ServiceBase):
 
     @staticmethod
     def _does_machine_exist(specific_machine_name: str, machine_names: list) -> bool:
-        if any(specific_machine_name == machine_name for machine_name in machine_names):
-            return True
-        else:
-            return False
+        return any(specific_machine_name == machine_name for machine_name in machine_names)
 
     def _handle_specific_machine(self, kwargs) -> (bool, bool):
         machine_requested = False
