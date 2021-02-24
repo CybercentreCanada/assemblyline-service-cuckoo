@@ -55,6 +55,7 @@ x86_IMAGE_SUFFIX = "x86"
 x64_IMAGE_SUFFIX = "x64"
 RELEVANT_IMAGE_TAG = "auto"
 ALL_IMAGES_TAG = "all"
+MACHINE_NAME_REGEX = f"(?:{('|').join([LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX])})(.*)(?:{('|').join([x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX])})"
 
 LINUX_FILES = [file_type for file_type in RECOGNIZED_TYPES if "linux" in file_type]
 WINDOWS_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["windows", "32"])]
@@ -784,7 +785,6 @@ class Cuckoo(ServiceBase):
                                "which has been exceeded in this submission")
 
     def report_machine_info(self, machine_name, cuckoo_task, parent_section):
-        self.log.debug(f"Querying machine info for {machine_name} for task ID {cuckoo_task.id}")
         machine_name_exists = False
         machine = None
         for machine in self.machines['machines']:
@@ -798,10 +798,11 @@ class Cuckoo(ServiceBase):
 
         manager = cuckoo_task.report["info"]["machine"]["manager"]
         # TODO: bad code in terms of machine
+        platform = str(machine["platform"])
         body = {
-            'Name': str(machine['name']),
+            'Name': machine_name,
             'Manager': manager,
-            'Platform': str(machine['platform']),
+            'Platform': platform,
             'IP': str(machine['ip']),
             'Tags': []}
         for tag in machine.get('tags', []):
@@ -811,7 +812,23 @@ class Cuckoo(ServiceBase):
                                         body_format=BODY_FORMAT.KEY_VALUE,
                                         body=json.dumps(body))
 
+        self._add_operating_system_tags(machine_name, platform, machine_section)
         parent_section.add_subsection(machine_section)
+
+    @staticmethod
+    def _add_operating_system_tags(machine_name: str, platform: str, machine_section: ResultSection):
+        machine_section.add_tag("dynamic.operating_system.platform", platform.capitalize())
+        if any(processor_tag in machine_name for processor_tag in [x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX]):
+            if x86_IMAGE_SUFFIX in machine_name:
+                machine_section.add_tag("dynamic.operating_system.processor", x86_IMAGE_SUFFIX)
+            elif x64_IMAGE_SUFFIX in machine_name:
+                machine_section.add_tag("dynamic.operating_system.processor", x64_IMAGE_SUFFIX)
+
+        # The assumption here is that a machine's name will contain somewhere in it the pattern: <platform prefix><version><processor>
+        m = re.compile(MACHINE_NAME_REGEX).search(machine_name)
+        if m and len(m.groups()) == 1:
+            version = m.group(1)
+            machine_section.add_tag("dynamic.operating_system.version", version)
 
     def _decode_mime_encoded_file_name(self):
         # Check the filename to see if it's mime encoded
