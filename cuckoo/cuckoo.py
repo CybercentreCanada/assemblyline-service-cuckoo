@@ -185,6 +185,26 @@ class CuckooTask(dict):
         self.errors = []
 
 
+class SubmissionThread(Thread):
+    # Code sourced from https://stackoverflow.com/questions/2829329/catch-a-threads-exception-in-the-caller-thread-in-python/31614591
+    def run(self):
+        self.exc = None
+        try:
+            if hasattr(self, '_Thread__target'):
+                # Thread uses name mangling prior to Python 3.
+                self.ret = self._Thread__target(*self._Thread__args, **self._Thread__kwargs)
+            else:
+                self.ret = self._target(*self._args, **self._kwargs)
+        except BaseException as e:
+            self.exc = e
+
+    def join(self):
+        super(SubmissionThread, self).join()
+        if self.exc:
+            raise self.exc
+        return self.ret
+
+
 # noinspection PyBroadException
 # noinspection PyGlobalUndefined
 class Cuckoo(ServiceBase):
@@ -275,7 +295,7 @@ class Cuckoo(ServiceBase):
                 parent_section = ResultSection(relevant_image)
                 self.file_res.add_section(parent_section)
                 submission_specific_kwargs["tags"] = relevant_image
-                thr = Thread(target=self._general_flow, args=(submission_specific_kwargs, file_ext, parent_section))
+                thr = SubmissionThread(target=self._general_flow, args=(submission_specific_kwargs, file_ext, parent_section))
                 submission_threads.append(thr)
                 thr.start()
 
@@ -293,6 +313,11 @@ class Cuckoo(ServiceBase):
                 parent_section = ResultSection("File submitted to the first machine available")
             self.file_res.add_section(parent_section)
             self._general_flow(kwargs, file_ext, parent_section)
+
+        # Remove empty sections
+        for section in self.file_res.sections[:]:
+            if not section.subsections:
+                self.file_res.sections.remove(section)
 
     def _general_flow(self, kwargs, file_ext, parent_section):
         generate_report = self._set_task_parameters(kwargs, file_ext, parent_section)
