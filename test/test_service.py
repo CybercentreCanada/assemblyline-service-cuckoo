@@ -269,12 +269,13 @@ class TestModule:
     @staticmethod
     def test_image_tag_constants(cuckoo_class_instance):
         from cuckoo.cuckoo import LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX, x86_IMAGE_SUFFIX, x64_IMAGE_SUFFIX, \
-            RELEVANT_IMAGE_TAG
+            RELEVANT_IMAGE_TAG, ALL_IMAGES_TAG
         assert LINUX_IMAGE_PREFIX == "ub"
         assert WINDOWS_IMAGE_PREFIX == "win"
         assert x86_IMAGE_SUFFIX == "x86"
         assert x64_IMAGE_SUFFIX == "x64"
-        assert RELEVANT_IMAGE_TAG == "relevant"
+        assert RELEVANT_IMAGE_TAG == "auto"
+        assert ALL_IMAGES_TAG == "all"
 
     @staticmethod
     def test_file_constants(cuckoo_class_instance):
@@ -1799,18 +1800,20 @@ class TestCuckoo:
             assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("image_requested, image_exists, relevant_images, correct_result, correct_body",
+    @pytest.mark.parametrize("image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body",
         [
-            (False, False, [], (False, []), None),
-            (False, True, [], (False, []), None),
-            (True, False, [], (True, []), 'The requested image \'True\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-            (True, True, [], (True, [True]), None),
-            ("relevant", False, [], (True, []), 'The requested image \'relevant\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-            ("relevant", False, ["blah"], (True, []), 'The requested image \'relevant\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-            ("relevant", True, ["blah"], (True, ["blah"]), None),
+            (False, False, [], [], (False, []), None),
+            (False, True, [], [], (False, []), None),
+            (True, False, [], [], (True, []), 'The requested image \'True\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+            (True, True, [], [], (True, [True]), None),
+            ("auto", False, [], [], (True, []), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+            ("auto", False, ["blah"], [], (True, []), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+            ("auto", True, ["blah"], [], (True, ["blah"]), None),
+            ("all", True, [], ["blah"], (True, ["blah"]), None),
+            ("all", False, [], [], (True, []), 'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
         ]
     )
-    def test_handle_specific_image(image_requested, image_exists, relevant_images, correct_result, correct_body, cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
+    def test_handle_specific_image(image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body, cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
         from cuckoo.cuckoo import Cuckoo
         from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=image_requested)
@@ -1821,6 +1824,7 @@ class TestCuckoo:
         cuckoo_class_instance.request.file_type = None
         cuckoo_class_instance.file_res = dummy_result_class_instance
         cuckoo_class_instance.machines = {"machines": []}
+        cuckoo_class_instance.allowed_images = allowed_images
         assert cuckoo_class_instance._handle_specific_image() == correct_result
         if correct_body:
             correct_result_section = ResultSection(title_text='Requested Image Does Not Exist')

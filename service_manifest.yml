@@ -103,7 +103,7 @@ submission_params:
     type: bool
     value: true
 
-  # value = allowed_images + relevant
+  # value = auto + all + allowed_images
   - default: ""
     name: specific_image
     type: list

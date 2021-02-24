@@ -582,7 +582,7 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
                     if ioc and category and category == "file" and sig_name not in ["ransomware_mass_file_delete"]:
                         # Tag this ioc as file path
                         sig_res.add_tag("dynamic.process.file_name", ioc)
-                    elif category and category == "cmdline":
+                    elif category and category == "cmdline" and ioc:
                         # Tag this ioc as cmdline
                         sig_res.add_tag("dynamic.process.command_line", ioc)
 
@@ -940,7 +940,8 @@ def process_all_events(al_result: ResultSection, network_events: list = [], proc
     for event in process_events:
         event["event_type"] = "process"
         event["process_name"] = event.pop("process_name", None)  # doing this so that process name comes after event type in the UI
-        events_section.add_tag("dynamic.process.command_line", event["command_line"])
+        if event["command_line"]:
+            events_section.add_tag("dynamic.process.command_line", event["command_line"])
         events_section.add_tag("dynamic.process.file_name", event["image"])
         event["details"] = {
             "image": event.pop("image", None),
