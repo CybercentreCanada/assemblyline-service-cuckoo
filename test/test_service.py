@@ -1204,6 +1204,27 @@ class TestCuckoo:
             assert parent_section.subsections == []
 
     @staticmethod
+    @pytest.mark.parametrize("machine_name, platform, expected_tags",
+        [
+            ("", "", []),
+            ("blah", "blah", []),
+            ("vmss-udev-win10x64", "windows", [("dynamic.operating_system.platform", "Windows"), ("dynamic.operating_system.processor", "x64"), ("dynamic.operating_system.version", "10")]),
+            ("vmss-udev-win7x86", "windows", [("dynamic.operating_system.platform", "Windows"), ("dynamic.operating_system.processor", "x86"), ("dynamic.operating_system.version", "7")]),
+            ("vmss-udev-ub1804x64", "linux", [("dynamic.operating_system.platform", "Linux"), ("dynamic.operating_system.processor", "x64"), ("dynamic.operating_system.version", "1804")]),
+        ]
+    )
+    def test_add_operating_system_tags(machine_name, platform, expected_tags, cuckoo_class_instance):
+        from assemblyline_v4_service.common.result import ResultSection
+
+        expected_section = ResultSection("blah")
+        for tag_name, tag_value in expected_tags:
+            expected_section.add_tag(tag_name, tag_value)
+
+        machine_section = ResultSection("blah")
+        cuckoo_class_instance._add_operating_system_tags(machine_name, platform, machine_section)
+        assert check_section_equality(expected_section, machine_section)
+
+    @staticmethod
     @pytest.mark.parametrize(
         "test_file_name, correct_file_name",
         [
