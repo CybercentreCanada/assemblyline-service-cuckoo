@@ -53,7 +53,8 @@ LINUX_IMAGE_PREFIX = "ub"
 WINDOWS_IMAGE_PREFIX = "win"
 x86_IMAGE_SUFFIX = "x86"
 x64_IMAGE_SUFFIX = "x64"
-RELEVANT_IMAGE_TAG = "relevant"
+RELEVANT_IMAGE_TAG = "auto"
+ALL_IMAGES_TAG = "all"
 
 LINUX_FILES = [file_type for file_type in RECOGNIZED_TYPES if "linux" in file_type]
 WINDOWS_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["windows", "32"])]
@@ -443,7 +444,7 @@ class Cuckoo(ServiceBase):
             self.log.error(f"Analysis has failed for #{cuckoo_task.id} due to {task_info['errors']}.")
             return ANALYSIS_FAILED
         elif status == TASK_COMPLETED:
-            self.log.debug("Analysis has completed, waiting on report to be produced.")
+            self.log.debug(f"Analysis has completed for #{cuckoo_task.id}, waiting on report to be produced.")
         elif status == TASK_REPORTED:
             self.log.debug(f"Cuckoo report generation has completed for {cuckoo_task.id}.")
 
@@ -1330,6 +1331,10 @@ class Cuckoo(ServiceBase):
                 for relevant_image in relevant_images[:]:
                     if not self._does_image_exist(relevant_image, self.machines["machines"], self.allowed_images):
                         relevant_images.remove(relevant_image)
+            elif specific_image == ALL_IMAGES_TAG:
+                for image in self.allowed_images:
+                    if self._does_image_exist(image, self.machines["machines"], self.allowed_images):
+                        relevant_images.append(image)
             else:
                 if self._does_image_exist(specific_image, self.machines["machines"], self.allowed_images):
                     relevant_images.append(specific_image)
