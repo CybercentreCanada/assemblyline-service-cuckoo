@@ -1374,7 +1374,7 @@ class Cuckoo(ServiceBase):
                 if self._does_image_exist(specific_image, self.machines["machines"], self.allowed_images):
                     relevant_images.append(specific_image)
             if not relevant_images:
-                available_images = self._get_available_images(self.machines, self.allowed_images)
+                available_images = self._get_available_images(self.machines["machines"], self.allowed_images)
                 no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
                 no_image_sec.body = f"The requested image '{specific_image}' is currently unavailable.\n\n" \
                                     f"General Information:\nAt the moment, the current image options for this " \
