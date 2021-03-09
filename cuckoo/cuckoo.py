@@ -17,9 +17,9 @@ from threading import Thread
 from retrying import retry, RetryError
 
 from assemblyline_v4_service.common.request import ServiceRequest
-from assemblyline_v4_service.common.task import MaxExtractedExceeded
-from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT, Heuristic
+from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT
 from assemblyline_v4_service.common.base import ServiceBase
+from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
@@ -32,9 +32,6 @@ from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc|dll)$"
-HOLLOWSHUNTER_EXE_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$"
-HOLLOWSHUNTER_SHC_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.shc$"
-HOLLOWSHUNTER_DLL_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.dll$"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
@@ -189,6 +186,7 @@ class Cuckoo(ServiceBase):
         self.timeout = None
         self.max_report_size = None
         self.allowed_images = []
+        self.artefact_list = []
         self.hosts = []
 
     def start(self):
@@ -689,7 +687,7 @@ class Cuckoo(ServiceBase):
         if number_of_unavailable_hosts == number_of_hosts:
             raise CuckooHostsUnavailable(f"Failed to reach any of the hosts at {[host['ip'] + ':' + str(host['port']) for host in hosts_copy]}")
 
-    def check_dropped(self, request, cuckoo_task, parent_section):
+    def check_dropped(self, cuckoo_task, parent_section):
         dropped_tar_bytes = self.query_report(cuckoo_task, 'dropped')
         added_hashes = set()
         dropped_sec = None
@@ -708,7 +706,7 @@ class Cuckoo(ServiceBase):
                         # Check the file hash for safelisting:
                         with open(dropped_file_path, 'rb') as file_hash:
                             data = file_hash.read()
-                            if not request.task.deep_scan:
+                            if not self.request.task.deep_scan:
                                 ssdeep_hash = ssdeep.hash(data)
                                 skip_file = False
                                 for seen_hash in added_hashes:
@@ -729,13 +727,15 @@ class Cuckoo(ServiceBase):
                                 continue
                         if not (slist_check_hash(dropped_hash) or slist_check_dropped(
                                 dropped_name) or dropped_name.endswith('_info.txt')):
-                            message = "Dropped file during Cuckoo analysis."
                             # Resubmit
                             dropped_file_name = f"{cuckoo_task.id}_{dropped_name}"
-                            try:
-                                self.request.add_extracted(dropped_file_path, dropped_file_name, message)
-                            except MaxExtractedExceeded:
-                                self.log.warning(f"Cannot add extracted file {dropped_file_name} due to MaxExtractedExceeded")
+                            artefact = {
+                                "name": dropped_file_name,
+                                "path": dropped_file_path,
+                                "description": "Dropped file during Cuckoo analysis.",
+                                "to_be_extracted": True
+                            }
+                            self.artefact_list.append(artefact)
                             self.log.debug(f"Submitted dropped file for analysis for task ID {cuckoo_task.id}: {dropped_file_name}")
             except Exception as e_x:
                 self.log.error(f"Error extracting dropped files: {e_x}")
@@ -752,10 +752,14 @@ class Cuckoo(ServiceBase):
                         fh.write(item["original"] + "\n")
                 fh.close()
                 self.log.debug(f"Adding extracted file {ps1_file_name}")
-                try:
-                    self.request.add_extracted(ps1_path, ps1_file_name, "Deobfuscated PowerShell script from Cuckoo analysis")
-                except MaxExtractedExceeded:
-                    self.log.warning(f"Cannot add extracted file {ps1_path} due to MaxExtractedExceeded")
+                artefact = {
+                    "name": ps1_file_name,
+                    "path": ps1_path,
+                    "description": "Deobfuscated PowerShell script from Cuckoo analysis",
+                    "to_be_extracted": True
+                }
+                self.artefact_list.append(artefact)
+                break
 
     # TODO: This is dead service code for the Assemblyline team's Cuckoo setup, but may prove useful to others.
     def check_pcap(self, cuckoo_task, parent_section):
@@ -771,19 +775,21 @@ class Cuckoo(ServiceBase):
 
         pcap_data = self.query_pcap(cuckoo_task)
         if pcap_data:
-            pcap_file_name = "cuckoo_traffic.pcap"
+            pcap_file_name = f"{cuckoo_task.id}_cuckoo_traffic.pcap"
             pcap_path = os.path.join(self.working_directory, pcap_file_name)
             pcap_file = open(pcap_path, 'wb')
             pcap_file.write(pcap_data)
             pcap_file.close()
 
             # Resubmit analysis pcap file
-            try:
-                self.log.debug(f"Adding extracted file {pcap_file_name}")
-                self.request.add_extracted(pcap_path, pcap_file_name, "PCAP from Cuckoo analysis")
-            except MaxExtractedExceeded:
-                self.log.error("The maximum amount of files to be extracted is 501, "
-                               "which has been exceeded in this submission")
+            artefact = {
+                "name": pcap_file_name,
+                "path": pcap_path,
+                "description": "PCAP from Cuckoo analysis",
+                "to_be_extracted": True
+            }
+            self.artefact_list.append(artefact)
+            self.log.debug(f"Adding extracted file {pcap_file_name}")
 
     def report_machine_info(self, machine_name, cuckoo_task, parent_section):
         machine_name_exists = False
@@ -1062,10 +1068,12 @@ class Cuckoo(ServiceBase):
             self._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
 
         # Submit dropped files and pcap if available:
-        # TODO: passing request and cuckoo_task.id is unnecessary since they are class attributes
-        self.check_dropped(self.request, cuckoo_task, parent_section)
+        self.check_dropped(cuckoo_task, parent_section)
         self.check_powershell(cuckoo_task.id, parent_section)
-        # self.check_pcap(cuckoo_task.id)
+        # self.check_pcap(cuckoo_task)
+
+        # Adding sandbox artefacts using the SandboxOntology helper class
+        SandboxOntology.handle_artefacts(self.artefact_list, self.request)
 
     def _unpack_tar(self, tar_report, file_ext, cuckoo_task, parent_section):
         tar_file_name = f"{cuckoo_task.id}_cuckoo_report.tar.gz"
@@ -1080,12 +1088,11 @@ class Cuckoo(ServiceBase):
 
         # Check for any extra files in full report to add as extracted files
         # special 'supplementary' directory
-        # memory artifacts
         try:
             # TODO: This doesn't need to happen with the tar obj open
             self._extract_console_output(cuckoo_task.id)
-            self._extract_hollowshunter(tar_obj, cuckoo_task.id, parent_section)
-            self._extract_artifacts(tar_obj, cuckoo_task.id)
+            self._extract_hollowshunter(tar_obj, cuckoo_task.id)
+            self._extract_artefacts(tar_obj, cuckoo_task.id)
 
         except Exception as e:
             self.log.exception(f"Unable to add extra file(s) for "
@@ -1097,9 +1104,14 @@ class Cuckoo(ServiceBase):
             report_file = open(tar_report_path, 'wb')
             report_file.write(tar_report)
             report_file.close()
+            artefact = {
+                "name": tar_file_name,
+                "path": tar_report_path,
+                "description": "Cuckoo Sandbox analysis report archive (tar.gz)",
+                "to_be_extracted": False
+            }
+            self.artefact_list.append(artefact)
             self.log.debug(f"Adding supplementary file {tar_file_name} for {cuckoo_task.id}")
-            self.request.add_supplementary(tar_report_path, tar_file_name,
-                                           "Cuckoo Sandbox analysis report archive (tar.gz)")
         except Exception as e:
             self.log.exception(f"Unable to add tar of complete report for "
                                f"task {cuckoo_task.id} due to {e}")
@@ -1116,12 +1128,14 @@ class Cuckoo(ServiceBase):
                 report_name = f"{cuckoo_task.id}_report.json"
 
                 tar_obj.extract(member_name, path=task_dir)
+                artefact = {
+                    "name": report_name,
+                    "path": report_json_path,
+                    "description": "Cuckoo Sandbox report (json)",
+                    "to_be_extracted": False
+                }
+                self.artefact_list.append(artefact)
                 self.log.debug(f"Adding supplementary file {report_name} for task ID {cuckoo_task.id}")
-                self.request.add_supplementary(
-                    report_json_path,
-                    report_name,
-                    "Cuckoo Sandbox report (json)"
-                )
         except Exception as e:
             self.log.exception(f"Unable to add report.json for task {cuckoo_task.id}. Exception: {e}")
         return report_json_path
@@ -1152,11 +1166,7 @@ class Cuckoo(ServiceBase):
             else:
                 self.report_machine_info(machine_name, cuckoo_task, parent_section)
             self.log.debug(f"Generating AL Result from Cuckoo results for task ID: {cuckoo_task.id}..")
-            # TODO: why do we need process_map?
-            process_map = generate_al_result(cuckoo_task.report,
-                                             parent_section,
-                                             file_ext,
-                                             self.config.get("random_ip_range"))
+            generate_al_result(cuckoo_task.report, parent_section, file_ext, self.config.get("random_ip_range"))
         except RecoverableError as e:
             self.log.error(f"Recoverable error. Error message: {repr(e)}")
             if cuckoo_task and cuckoo_task.id is not None:
@@ -1179,9 +1189,15 @@ class Cuckoo(ServiceBase):
         console_output_file_name = f"{task_id}_console_output.txt"
         console_output_file_path = os.path.join("/tmp", console_output_file_name)
         if os.path.exists(console_output_file_path):
-            self.request.add_supplementary(console_output_file_path, console_output_file_name, "Console Output Observed")
+            artefact = {
+                "name": console_output_file_name,
+                "path": console_output_file_path,
+                "description": "Console Output Observed",
+                "to_be_extracted": False
+            }
+            self.artefact_list.append(artefact)
 
-    def _extract_artifacts(self, tar_obj, task_id):
+    def _extract_artefacts(self, tar_obj, task_id):
         # Extract buffers, screenshots and anything else
         tarball_file_map = {
             "buffer": "Extracted buffer",
@@ -1205,82 +1221,47 @@ class Cuckoo(ServiceBase):
                 destination_file_path = os.path.join(task_dir, f)
                 tar_obj.extract(f, path=task_dir)
                 file_name = f"{task_id}_{f}"
+                to_be_extracted = False
                 if key == "sysmon/sysmon.evtx":
                     destination_file_path, f = self._encode_sysmon_file(destination_file_path, f)
-                    self.log.debug(f"Adding Sysmon log file for task ID {task_id}: {file_name}")
-                    try:
-                        self.request.add_extracted(destination_file_path, file_name, value)
-                    except MaxExtractedExceeded:
-                        self.log.warning(
-                            f"Cannot add extracted file {destination_file_path} due to MaxExtractedExceeded")
-                elif key == "supplementary":
-                    self.log.debug(f"Adding supplementary file for task ID {task_id}: {file_name}")
-                    self.request.add_supplementary(destination_file_path, file_name, value)
-                else:
-                    self.log.debug(f"Adding extracted file for task ID {task_id}: {file_name}")
-                    try:
-                        self.request.add_extracted(destination_file_path, file_name, value)
-                    except MaxExtractedExceeded:
-                        self.log.warning(
-                            f"Cannot add extracted file {destination_file_path} due to MaxExtractedExceeded")
+                    to_be_extracted = True
+                elif key not in ["supplementary", "shots"]:
+                    to_be_extracted = True
 
-    def _extract_hollowshunter(self, tar_obj, task_id, parent_section):
-        # HollowsHunter section
-        hollowshunter_sec = ResultSection(title_text='HollowsHunter')
+                artefact = {
+                    "name": file_name,
+                    "path": destination_file_path,
+                    "description": value,
+                    "to_be_extracted": to_be_extracted
+                }
+                self.artefact_list.append(artefact)
+                self.log.debug(f"Adding extracted file for task ID {task_id}: {file_name}")
+
+    def _extract_hollowshunter(self, tar_obj, task_id):
         task_dir = os.path.join(self.working_directory, f"{task_id}")
-        # Only if there is a 1 or more exe, shc dumps
-        if any(re.match(HOLLOWSHUNTER_DUMP_REGEX, f) for f in tar_obj.getnames()):
-            # Add HollowsHunter report files as supplementary
-            report_pattern = re.compile(HOLLOWSHUNTER_REPORT_REGEX)
-            report_list = list(filter(report_pattern.match, tar_obj.getnames()))
-            for report_path in report_list:
-                report_json_path = os.path.join(task_dir, report_path)
-                report_name = f"{task_id}_{report_path}"
-                tar_obj.extract(report_path, path=task_dir)
-                self.log.debug(f"Adding HollowsHunter report {report_name} as supplementary file for task ID {task_id}")
-                self.request.add_supplementary(
-                    report_json_path,
-                    report_name,
-                    "HollowsHunter report (json)"
-                )
+        report_pattern = re.compile(HOLLOWSHUNTER_REPORT_REGEX)
+        dump_pattern = re.compile(HOLLOWSHUNTER_DUMP_REGEX)
+        report_list = list(filter(report_pattern.match, tar_obj.getnames()))
+        dump_list = list(filter(dump_pattern.match, tar_obj.getnames()))
 
-            hh_tuples = [(
-                None, HOLLOWSHUNTER_EXE_REGEX,
-                'HollowsHunter Injected Portable Executable', 17
-            ), (
-                None, HOLLOWSHUNTER_SHC_REGEX,
-                "HollowsHunter Shellcode", None
-            ), (
-                None, HOLLOWSHUNTER_DLL_REGEX,
-                "HollowsHunter DLL", None
-            )]
-            for hh_tuple in hh_tuples:
-                section, regex, section_title, section_heur = hh_tuple
-                pattern = re.compile(regex)
-                dump_list = list(filter(pattern.match, tar_obj.getnames()))
-                if dump_list:
-                    section = ResultSection(title_text=section_title)
-                    if section_heur:
-                        heur = Heuristic(section_heur)
-                        heur.add_signature_id("hollowshunter_pe")
-                        section.heuristic = heur
-
-                for dump_path in dump_list:
-                    section.add_tag("dynamic.process.file_name", dump_path)
-                    dump_file_path = os.path.join(task_dir, dump_path)
-                    tar_obj.extract(dump_path, path=task_dir)
-                    # Resubmit
-                    try:
-                        dump_file_name = f"{task_id}_{dump_path}"
-                        self.request.add_extracted(dump_file_path, dump_file_name, section_title)
-                        self.log.debug(f"Submitted HollowsHunter dump for analysis: {dump_file_name}")
-                    except MaxExtractedExceeded:
-                        self.log.warning(
-                            f"Cannot add extracted file {dump_file_name} due to MaxExtractedExceeded")
-                if section and len(section.tags) > 0:
-                    hollowshunter_sec.add_subsection(section)
-        if len(hollowshunter_sec.subsections) > 0:
-            parent_section.add_subsection(hollowshunter_sec)
+        hh_tuples = [
+            (report_list, "HollowsHunter report (json)", False),
+            (dump_list, "HollowsHunter Dump", True),
+        ]
+        for hh_tuple in hh_tuples:
+            paths, desc, to_be_extracted = hh_tuple
+            for path in paths:
+                full_path = os.path.join(task_dir, path)
+                file_name = f"{task_id}_{path}"
+                tar_obj.extract(path, path=task_dir)
+                artefact = {
+                    "name": file_name,
+                    "path": full_path,
+                    "description": desc,
+                    "to_be_extracted": to_be_extracted
+                }
+                self.artefact_list.append(artefact)
+                self.log.debug(f"Adding HollowsHunter file {file_name} for task ID {task_id}")
 
     @staticmethod
     def _encode_sysmon_file(destination_file_path, f):

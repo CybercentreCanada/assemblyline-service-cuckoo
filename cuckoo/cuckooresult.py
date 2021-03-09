@@ -3,12 +3,13 @@ import logging
 import re
 import os
 import json
-import copy
 from ipaddress import ip_address, ip_network
 from urllib.parse import urlparse
+from typing import List
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, MD5_REGEX, URI_PATH
+from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, NetworkEvent, ProcessEvent
 from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Heuristic
 from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped, slist_check_app, slist_check_cmd
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
@@ -20,6 +21,7 @@ UNIQUE_IP_LIMIT = 100
 
 
 # noinspection PyBroadException
+# TODO: break this into smaller methods
 def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     log.debug("Generating AL Result.")
     info = api_report.get('info')
@@ -60,20 +62,21 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         process_debug(debug, al_result)
 
     process_map = get_process_map(behaviour.get("processes", {}))
-    network_events = []
-    process_events = []
+
+    # These events will be made up of process and network events and will be sent to the SandboxOntology helper class
+    events = []
+    # This will contain a list of dictionaries representing a signature, to be sent to the SandboxOntology helper class
+    signatures = []
 
     is_process_martian = False
     if sigs:
         target = api_report.get("target", {})
         target_file = target.get("file", {})
         target_filename = target_file.get("name")
-        is_process_martian = process_signatures(sigs, al_result, random_ip_range, target_filename, process_map)
+        is_process_martian = process_signatures(sigs, al_result, random_ip_range, target_filename, process_map, info["id"], signatures)
 
-    sysmon_tree = []
-    sysmon_procs = []
     if sysmon:
-        sysmon_tree, sysmon_procs = process_sysmon(sysmon, al_result, process_map)
+        convert_sysmon_processes(sysmon, events)
 
     if behaviour:
         sample_executed = [len(behaviour.get("processtree", [])),
@@ -87,12 +90,16 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
             al_result.add_subsection(noexec_res)
         else:
             # Otherwise, moving on!
-            process_events = process_behaviour(behaviour, al_result, process_map, sysmon_tree, sysmon_procs, is_process_martian)
-    if network:
-        network_events = process_network(network, al_result, random_ip_range, process_map)
+            process_behaviour(behaviour, al_result, events)
 
-    if len(network_events) > 0 or len(process_events) > 0:
-        process_all_events(al_result, network_events, process_events)
+    if events:
+        build_process_tree(events, al_result, is_process_martian, signatures)
+
+    if network:
+        process_network(network, al_result, random_ip_range, process_map, events)
+
+    if len(events) > 0:
+        process_all_events(al_result, events)
 
     if curtain:
         process_curtain(curtain, al_result, process_map)
@@ -104,7 +111,6 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
         process_decrypted_buffers(process_map, al_result)
 
     log.debug("AL result generation completed!")
-    return process_map
 
 
 def process_debug(debug, al_result):
@@ -136,67 +142,28 @@ def process_debug(debug, al_result):
         al_result.add_subsection(error_res)
 
 
-# TODO: this method needs to be split up
-def process_behaviour(behaviour: dict, al_result: ResultSection, process_map: dict, sysmon_tree: list, sysmon_procs: list, is_process_martian: bool) -> list:
-    log.debug("Processing behavior results.")
-    events = []  # This will contain all network events
-
-    # Make a Process Tree Section
-    process_tree = behaviour["processtree"]
-    copy_of_process_tree = process_tree[:]
-    # Removing skipped processes
-    for process in copy_of_process_tree:
-        if slist_check_app(process["process_name"]) and process["children"] == [] and process in process_tree:
-            process_tree.remove(process)
-    # Cleaning keys, value pairs
-    for process in process_tree:
-        process = remove_process_keys(process, process_map)
-
-    if sysmon_tree:
-        process_tree = _merge_process_trees(process_tree, sysmon_tree, False)
-    if len(process_tree) > 0:
-        process_tree_section = ResultSection(title_text="Spawned Process Tree")
-        process_tree_section.body = json.dumps(process_tree)
-        process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
-        if is_process_martian:
-            sig_name = "process_martian"
-            heur_id = get_category_id(sig_name)
-            process_martian_heur = Heuristic(heur_id)
-            # Let's keep this heuristic as informational
-            process_martian_heur.add_signature_id(sig_name, score=10)
-            process_tree_section.heuristic = process_martian_heur
-        al_result.add_subsection(process_tree_section)
-
+def process_behaviour(behaviour: dict, parent_result_section: ResultSection, events: List[dict] = None):
+    if events is None:
+        events = []
     # Gathering apistats to determine if calls have been limited
-    apistats = behaviour.get("apistats", [])
-    # Get the total number of api calls per pid
+    apistats = behaviour.get("apistats", {})
     api_sums = {}
-    for pid in apistats:
-        api_sums[pid] = 0
-        process_apistats = apistats[pid]
-        for api_call in process_apistats:
-            api_sums[pid] += process_apistats[api_call]
+    if apistats:
+        api_sums = get_process_api_sums(apistats)
 
-    # Get information about processes to return as events
+    # Preparing Cuckoo processes to match the SandboxOntology format
     processes = behaviour["processes"]
-    if sysmon_procs:
-        cuckoo_pids = []
-        for item in processes:
-            cuckoo_pids.append(item["pid"])
-        sysmon_pids = []
-        for item in sysmon_procs:
-            if not item.get("process_pid"):
-                continue
-            sysmon_pids.append(item["process_pid"])
-            item["process_path"] = item.pop("process_name")
-            item["process_name"] = item["process_path"]
-            item["pid"] = item.pop("process_pid")
-            item["calls"] = []
-            item["first_seen"] = datetime.datetime.strptime(item.pop("timestamp"), "%Y-%m-%d %H:%M:%S.%f").timestamp()
-        pids_from_sysmon_we_need = list(set(sysmon_pids) - set(cuckoo_pids))
-        processes = processes + [i for i in sysmon_procs if i["pid"] in pids_from_sysmon_we_need]
+    if processes:
+        convert_cuckoo_processes(events, processes)
 
-    limited_calls_section = ResultSection(title_text="Limited Process API Calls")
+    if api_sums:
+        # If calls have been limited, add a subsection detailing this
+        build_limited_calls_section(parent_result_section, processes, api_sums)
+
+
+def build_limited_calls_section(parent_result_section: ResultSection, processes: List[dict] = None, api_sums: dict = {}):
+    if processes is None:
+        processes = []
     limited_calls_table = []
     for process in processes:
         pid = str(process["pid"])
@@ -213,18 +180,8 @@ def process_behaviour(behaviour: dict, al_result: ResultSection, process_map: di
                     "api_calls_included_in_report": num_process_calls
                 })
 
-        if slist_check_app(process["process_name"]) and process["calls"] == []:
-            continue  # on to the next one
-        process_struct = {
-            "timestamp": datetime.datetime.fromtimestamp(process["first_seen"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-            "process_name": process["process_name"] + " (" + pid + ")",
-            "image": process["process_path"] if process.get("process_path") else process["process_name"],
-            "command_line": process["command_line"]
-        }
-
-        # add process to events list
-        events.append(process_struct)
     if len(limited_calls_table) > 0:
+        limited_calls_section = ResultSection(title_text="Limited Process API Calls")
         limited_calls_section.body = json.dumps(limited_calls_table)
         limited_calls_section.body_format = BODY_FORMAT.TABLE
         descr = f"For the sake of service processing, the number of the following " \
@@ -232,37 +189,62 @@ def process_behaviour(behaviour: dict, al_result: ResultSection, process_map: di
                 f"most likely related to the anti-sandbox technique known as API Hammering. For more information, look " \
                 f"to the api_hammering signature."
         limited_calls_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
-        al_result.add_subsection(limited_calls_section)
-
-    log.debug("Behavior processing completed.")
-    return events
+        parent_result_section.add_subsection(limited_calls_section)
 
 
-def remove_process_keys(process: dict, process_map: dict) -> dict:
-    """
-    There are several keys that we do not want in the final form of a process
-    dict. This method removes those keys
-    :param process: dict
-    :return: dict
-    """
-    list_of_keys_to_be_popped = ["track", "first_seen", "ppid"]
-    for key in list_of_keys_to_be_popped:
-        process.pop(key)
-    # Rename pid to process_id
-    process["process_pid"] = process.pop("pid", None)
-    # Flatten signatures set into a dict
-    signatures = {}
-    sigs = process_map.get(process["process_pid"], {}).get("signatures", [])
-    for sig in sigs:
-        sig_json = json.loads(sig)
-        key = next(iter(sig_json))
-        signatures[key] = sig_json[key]
-    process["signatures"] = signatures
-    children = process.get("children", [])
-    if len(children) > 0:
-        for child in children:
-            child = remove_process_keys(child, process_map)
-    return process
+def get_process_api_sums(apistats: dict) -> dict:
+    # Get the total number of api calls per pid
+    api_sums = {}
+    for pid in apistats:
+        api_sums[pid] = 0
+        process_apistats = apistats[pid]
+        for api_call in process_apistats:
+            api_sums[pid] += process_apistats[api_call]
+    return api_sums
+
+
+def convert_cuckoo_processes(events: List[dict] = None, cuckoo_processes: List[dict] = None):
+    if events is None:
+        events = []
+    if cuckoo_processes is None:
+        cuckoo_processes = []
+
+    existing_pids = [proc["pid"] for proc in events]
+    for item in cuckoo_processes:
+        # If process pid doesn't match any processes that Sysmon already picked up
+        if item["pid"] not in existing_pids:
+            if slist_check_app(item["process_path"]) or slist_check_cmd(item["command_line"]):
+                continue
+            ontology_process = {
+                "pid": item["pid"],
+                "ppid": item["ppid"],
+                "image": item["process_path"],
+                "command_line": item["command_line"],
+                "timestamp": item["first_seen"],
+                "guid": "placeholder" if not item.get("guid") else item["guid"],  # TODO: Somehow get the GUID
+            }
+            events.append(ontology_process)
+
+
+def build_process_tree(events: List[dict] = None, al_result: ResultSection = None, is_process_martian: bool = False, signatures: List[dict] = None):
+    if events is None:
+        events = []
+    if signatures is None:
+        signatures = []
+    if len(events) > 0:
+        so = SandboxOntology(events=events)
+        process_tree = so.get_process_tree_with_signatures(signatures)
+        process_tree_section = ResultSection(title_text="Spawned Process Tree")
+        process_tree_section.body = json.dumps(process_tree)
+        process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
+        if is_process_martian:
+            sig_name = "process_martian"
+            heur_id = get_category_id(sig_name)
+            process_martian_heur = Heuristic(heur_id)
+            # Let's keep this heuristic as informational
+            process_martian_heur.add_signature_id(sig_name, score=10)
+            process_tree_section.heuristic = process_martian_heur
+        al_result.add_subsection(process_tree_section)
 
 
 def _get_trimming_index(sysmon: list) -> int:
@@ -286,99 +268,10 @@ def _get_trimming_index(sysmon: list) -> int:
     return index
 
 
-def _insert_child(parent: dict, potential_child: dict) -> bool:
-    """
-    Insert a child, if the parent exists
-    :param parent: dict
-    :param potential_child: str
-    :return: bool
-    """
-    children = parent.get("children", [])
-    if parent.get("process_pid") and parent["process_pid"] == potential_child.get("process_pid") and "children" in parent:
-        parent["children"].extend(potential_child["children"])
-        return True
-    if len(children) > 0:
-        for potential_twin in children:
-            if potential_twin.get("process_pid") and potential_twin["process_pid"] == potential_child.get("process_pid"):
-                potential_twin["children"].extend(potential_child.get("children", []))
-                return True
-            else:
-                if _insert_child(potential_twin, potential_child):
-                    return True
-    return False
-
-
-def _flatten_process_tree(process: dict, processes: list) -> list:
-    """
-    Flatten a multi dimensional array
-    :param process: dict
-    :param processes: list
-    :return: list
-    """
-    children = process.get("children", [])
-    if len(children) > 0:
-        for child in children:
-            l = _flatten_process_tree(child, processes)
-            if not l and child in children:
-                children.remove(child)
-    else:
-        if "children" in process:
-            children = process.pop("children")
-            processes.append(process)
-            return children
-
-    if "children" in process:
-        process.pop("children")
-    processes.append(process)
-    return processes
-
-
-def _merge_process_trees(cuckoo_tree: list, sysmon_tree: list, sysmon_process_in_cuckoo_tree: bool) -> list:
-    """
-    Merge two process trees
-    :param cuckoo_tree: list
-    :param sysmon_tree: list
-    :param sysmon_process_in_cuckoo_tree: bool
-    :return: list
-    """
-    if not cuckoo_tree:
-        return sysmon_tree
-
-    for process in cuckoo_tree:
-        # Change each name so it is apparent where the process came from
-        if "(Sysmon)" not in process["process_name"] and not sysmon_process_in_cuckoo_tree:
-            process["process_name"] += " (Cuckoo)"
-            sysmon_process_in_cuckoo_tree = False
-        elif "(Sysmon)" not in process["process_name"] and sysmon_process_in_cuckoo_tree:
-            process["process_name"] += " (Sysmon)"
-
-        for sysmon_proc in sysmon_tree:
-            sysmon_proc_pid = sysmon_proc.get("process_pid")
-            # Check if sysmon process is in cuckoo tree
-            if sysmon_proc_pid not in [item.get("process_pid") for item in cuckoo_tree]:
-                # Add to cuckoo tree
-                sysmon_proc["process_name"] += " (Sysmon)"
-                cuckoo_tree.append(sysmon_proc)
-
-        cuckoo_proc_pid = process.get("process_pid")
-        cuckoo_children = process.get("children", [])
-        sysmon_procs_with_same_pid = [item for item in sysmon_tree if item.get("process_pid") == cuckoo_proc_pid]
-        if len(sysmon_procs_with_same_pid) > 0:
-            sysmon_proc_with_same_pid = sysmon_procs_with_same_pid[0]
-        else:
-            sysmon_proc_with_same_pid = {}
-        sysmon_children = sysmon_proc_with_same_pid.get("children", [])
-        if "(Sysmon)" in process["process_name"]:
-            sysmon_process_in_cuckoo_tree = True
-
-        _merge_process_trees(cuckoo_children, sysmon_children, sysmon_process_in_cuckoo_tree)
-
-    return cuckoo_tree
-
-
 # TODO: break this method up
-def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: str, target_filename: str, process_map: dict) -> bool:
-    log.debug("Processing signature results.")
+def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: str, target_filename: str, process_map: dict, task_id: int, signatures: List = None) -> bool:
+    if signatures is None:
+        signatures = []
     if len(sigs) <= 0:
         return False
 
@@ -480,7 +373,7 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
 
          # We want to write a temporary file for the console output
         if sig_name == "console_output":
-            console_output_file_path = os.path.join("/tmp", "console_output.txt")
+            console_output_file_path = os.path.join("/tmp", f"{task_id}_console_output.txt")
             with open(console_output_file_path, "ab") as f:
                 for mark in sig["marks"]:
                     buffer = mark["call"].get("arguments", {}).get("buffer") + "\n\n"
@@ -498,9 +391,10 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
             for mark in sig_marks:
                 mark_type = mark["type"]
                 pid = mark.get("pid")
-                # Adding to the list of signatures for a specific process
-                if process_map.get(pid):
-                    process_map[pid]["signatures"].add(json.dumps({sig_name: translated_score}))
+                if pid:
+                    sig_to_add = {"pid": pid, "name": sig_name, "score": translated_score}
+                    if sig_to_add not in signatures:
+                        signatures.append(sig_to_add)
                 # Mapping the process name to the process id
                 process_map.get(pid, {})
                 process_name = process_map.get(pid, {}).get("name")
@@ -654,9 +548,8 @@ def contains_safelisted_value(val: str) -> bool:
 
 
 # TODO: break this up into methods
-def process_network(network: dict, al_result: ResultSection, random_ip_range: str, process_map: dict) -> list:
+def process_network(network: dict, al_result: ResultSection, random_ip_range: str, process_map: dict, events: List[dict]):
     log.debug("Processing network results.")
-    events = []  # This will contain all network events
     network_res = ResultSection(title_text="Network Activity")
 
     # List containing paths that are noise, or to be ignored
@@ -915,43 +808,46 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
     if len(network_res.subsections) > 0:
         al_result.add_subsection(network_res)
 
-    log.debug("Network processing complete.")
-    return events
 
-
-def process_all_events(al_result: ResultSection, network_events: list = [], process_events: list = []):
+def process_all_events(parent_result_section: ResultSection, events: List[dict] = None):
+    if events is None:
+        events = []
     # Each item in the events table will follow the structure below:
     # {
     #   "timestamp": timestamp,
-    #   "event_type": event_type,
     #   "process_name": process_name,
     #   "details": {}
     # }
+    so = SandboxOntology(events=events)
     events_section = ResultSection(title_text="Events")
-    for event in network_events:
-        event["event_type"] = "network"
-        event["process_name"] = event.pop("process_name", None)  # doing this so that process name comes after event type in the UI
-        event["details"] = {
-            "protocol": event.pop("protocol", None),
-            "dom": event.pop("dom", None),
-            "dest_ip": event.pop("dest_ip", None),
-            "dest_port": event.pop("dest_port", None),
-        }
-    for event in process_events:
-        event["event_type"] = "process"
-        event["process_name"] = event.pop("process_name", None)  # doing this so that process name comes after event type in the UI
-        if event["command_line"]:
-            events_section.add_tag("dynamic.process.command_line", event["command_line"])
-        events_section.add_tag("dynamic.process.file_name", event["image"])
-        event["details"] = {
-            "image": event.pop("image", None),
-            "command_line": event.pop("command_line", None),
-        }
-    all_events = network_events + process_events
-    sorted_events = sorted(all_events, key=lambda k: k["timestamp"])
-    events_section.body = json.dumps(sorted_events)
+    event_table = []
+    for event in so.sorted_events:
+        if isinstance(event, NetworkEvent):
+            event_table.append({
+                "timestamp": event.timestamp,
+                "process_name": event.image,
+                "details": {
+                    "protocol": event.protocol,
+                    "domain": event.domain,
+                    "dest_ip": event.dest_ip,
+                    "dest_port": event.dest_port,
+                }
+            })
+        elif isinstance(event, ProcessEvent):
+            events_section.add_tag("dynamic.process.command_line", event.command_line)
+            events_section.add_tag("dynamic.process.file_name", event.image)
+            event_table.append({
+                "timestamp": event.timestamp,
+                "process_name": event.image,
+                "details": {
+                    "command_line": event.command_line,
+                }
+            })
+        else:
+            raise ValueError(f"{event.convert_event_to_dict()} is not of type NetworkEvent or ProcessEvent.")
+    events_section.body = json.dumps(event_table)
     events_section.body_format = BODY_FORMAT.TABLE
-    al_result.add_subsection(events_section)
+    parent_result_section.add_subsection(events_section)
 
 
 def process_curtain(curtain: dict, al_result: ResultSection, process_map: dict):
@@ -978,89 +874,51 @@ def process_curtain(curtain: dict, al_result: ResultSection, process_map: dict):
         al_result.add_subsection(curtain_res)
 
 
-def process_sysmon(sysmon: list, al_result: Result, process_map: dict) -> (list, list):
-    # TODO: obviously a huge work in progress
-    log.debug("Processing sysmon results.")
-    sysmon_body = []
-    sysmon_res = ResultSection(title_text="Sysmon Signatures", body_format=BODY_FORMAT.TABLE)
-    if len(sysmon_body) > 0:
-        sysmon_res.body = json.dumps(sysmon_body)
-        al_result.add_subsection(sysmon_res)
+def convert_sysmon_processes(sysmon: List[dict] = None, events: List[dict] = None):
+    if sysmon is None:
+        sysmon = []
 
-    # Cut it out!
+    if events is None:
+        events = []
+
+    existing_pids = [proc["pid"] for proc in events]
+
     index = _get_trimming_index(sysmon)
     trimmed_sysmon = sysmon[index:]
-    process_tree = []
     for event in trimmed_sysmon:
+        ontology_process = {
+            "pid": None,
+            "ppid": None,
+            "image": None,
+            "command_line": None,
+            "timestamp": None,
+        }
         event_data = event["EventData"]
-        process = {"signatures": {}}
-        child_process = process.copy()
-        safelisted = False
-        timestamp = None
         for data in event_data["Data"]:
             name = data["@Name"]
             text = data.get("#text")
 
-            # Current Process
-            if name == "OriginalFileName":
-                child_process["process_name"] = text
-            elif name == "CommandLine":
-                if slist_check_cmd(text):
-                    safelisted = True
-                child_process["command_line"] = text
-            elif name == "ProcessId":
-                child_process["process_pid"] = int(text)
-
-            # Parent Process
-            elif name == "ParentImage":
-                if slist_check_app(text):
-                    safelisted = True
-                process["process_name"] = text
+            if name == "ProcessId":
+                ontology_process["pid"] = int(text)
             elif name == "ParentProcessId":
-                process["process_pid"] = int(text)
-            elif name == "ParentCommandLine":
-                if slist_check_cmd(text):
-                    safelisted = True
-                process["command_line"] = text
-
-            # Timestamp
+                ontology_process["ppid"] = int(text)
+            elif name == "Image":
+                if not slist_check_app(text):
+                    ontology_process["image"] = text
+            elif name == "CommandLine":
+                if not slist_check_cmd(text):
+                    ontology_process["command_line"] = text
             elif name == "UtcTime":
-                timestamp = text
+                ontology_process["timestamp"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+            elif name == "ProcessGuid":
+                ontology_process["guid"] = text
 
-        if process.get("process_pid") and child_process.get("process_pid") and not safelisted:
-            process["timestamp"] = child_process["timestamp"] = timestamp
-            child_process["children"] = []
-            process["children"] = [child_process]
-            process_tree.append(process)
-        elif process.get("process_pid") and child_process.get("process_pid") and safelisted:
-            # Check if rundll32.exe is being run
-            if process.get("command_line") and \
-                    "bin\\inject-x86.exe --app C:\\windows\System32\\rundll32.exe" in \
-                    process["command_line"]:
-                process["timestamp"] = child_process["timestamp"] = timestamp
-                child_process["children"] = []
-                process_tree.append(child_process)
-            # When this command is used by Cuckoo, we want the child process added to the tree
-            elif process.get("command_line") and 'bin\\inject-x86.exe' in process["command_line"]:
-                child_process["timestamp"] = timestamp
-                child_process["children"] = []
-                process_tree.append(child_process)
-
-    copy_process_tree = process_tree.copy()
-    for process in process_tree:
-        for other_process in copy_process_tree:
-            if process == other_process:
-                continue
-            child_exists = _insert_child(process, other_process)
-            if child_exists and other_process in process_tree:
-                process_tree.remove(other_process)
-
-    processes = []
-    process_tree_copy = copy.deepcopy(process_tree)
-    for process in process_tree_copy:
-        _flatten_process_tree(process, processes)
-
-    return process_tree, processes
+        if any(ontology_process[key] is None for key in ["pid", "ppid", "image", "command_line", "timestamp", "guid"]):
+            continue
+        elif ontology_process["pid"] in existing_pids:
+            continue
+        else:
+            events.append(ontology_process)
 
 
 def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: dict):
@@ -1201,7 +1059,6 @@ def get_process_map(processes: dict = None) -> dict:
         process_map[pid] = {
             "name": process["process_name"],
             "network_calls": network_calls,
-            "signatures": set(),
             "decrypted_buffers": decrypted_buffers
         }
     return process_map

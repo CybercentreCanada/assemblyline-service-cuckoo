@@ -234,12 +234,9 @@ def check_section_equality(this, that) -> bool:
 class TestModule:
     @staticmethod
     def test_hollowshunter_constants(cuckoo_class_instance):
-        from cuckoo.cuckoo import HOLLOWSHUNTER_REPORT_REGEX, HOLLOWSHUNTER_DUMP_REGEX, HOLLOWSHUNTER_EXE_REGEX, HOLLOWSHUNTER_SHC_REGEX, HOLLOWSHUNTER_DLL_REGEX
+        from cuckoo.cuckoo import HOLLOWSHUNTER_REPORT_REGEX, HOLLOWSHUNTER_DUMP_REGEX
         assert HOLLOWSHUNTER_REPORT_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
         assert HOLLOWSHUNTER_DUMP_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc|dll)$"
-        assert HOLLOWSHUNTER_EXE_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.exe$"
-        assert HOLLOWSHUNTER_SHC_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.shc$"
-        assert HOLLOWSHUNTER_DLL_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.dll$"
 
     @staticmethod
     def test_cuckoo_api_constants(cuckoo_class_instance):
@@ -1054,27 +1051,16 @@ class TestCuckoo:
         tar.close()
 
         mocker.patch.object(Cuckoo, "query_report", return_value=s.getvalue())
-        cuckoo_class_instance.check_dropped(cuckoo_class_instance.request, cuckoo_task, parent_section)
-        assert task.extracted[0]["name"] == f"1_{sample['filename']}"
-        assert task.extracted[0]["description"] == 'Dropped file during Cuckoo analysis.'
-
-        # Resetting the extracted list so that it will be easy to verify that no file was extracted if exception is raised
-        task.extracted = []
-        with mocker.patch.object(ServiceRequest, "add_extracted", side_effect=MaxExtractedExceeded):
-            cuckoo_class_instance.check_dropped(cuckoo_class_instance.request, cuckoo_task, parent_section)
-            assert task.extracted == []
-
-        # Resetting the extracted list so that it will be easy to verify that no file was extracted if exception is raised
-        task.extracted = []
-        with mocker.patch.object(ServiceRequest, "add_extracted", side_effect=Exception):
-            cuckoo_class_instance.check_dropped(cuckoo_class_instance.request, cuckoo_task, parent_section)
-            assert task.extracted == []
+        cuckoo_class_instance.check_dropped(cuckoo_task, parent_section)
+        assert cuckoo_class_instance.artefact_list[0]["name"] == f"1_{sample['filename']}"
+        assert cuckoo_class_instance.artefact_list[0]["description"] == 'Dropped file during Cuckoo analysis.'
+        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == True
 
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_check_powershell(sample, cuckoo_class_instance, mocker):
         from assemblyline_v4_service.common.result import ResultSection
-        from assemblyline_v4_service.common.task import Task, MaxExtractedExceeded
+        from assemblyline_v4_service.common.task import Task
         from assemblyline.odm.messages.task import Task as ServiceTask
         from assemblyline_v4_service.common.request import ServiceRequest
 
@@ -1091,26 +1077,22 @@ class TestCuckoo:
         cuckoo_class_instance.request = ServiceRequest(task)
 
         cuckoo_class_instance.check_powershell(task_id, parent_section)
-        assert task.extracted[0]["name"] == "1_powershell_logging.ps1"
-        assert task.extracted[0]["description"] == 'Deobfuscated PowerShell script from Cuckoo analysis'
-
-        # Resetting the extracted list so that it will be easy to verify that no file was extracted if exception is raised
-        task.extracted = []
-        with mocker.patch.object(ServiceRequest, "add_extracted", side_effect=MaxExtractedExceeded):
-            cuckoo_class_instance.check_powershell(task_id, parent_section)
-            assert task.extracted == []
+        assert cuckoo_class_instance.artefact_list[0]["name"] == "1_powershell_logging.ps1"
+        assert cuckoo_class_instance.artefact_list[0]["description"] == 'Deobfuscated PowerShell script from Cuckoo analysis'
+        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == True
 
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_check_pcap(sample, cuckoo_class_instance, mocker):
         from assemblyline_v4_service.common.result import ResultSection
-        from assemblyline_v4_service.common.task import Task, MaxExtractedExceeded
+        from assemblyline_v4_service.common.task import Task
         from assemblyline.odm.messages.task import Task as ServiceTask
         from assemblyline_v4_service.common.request import ServiceRequest
         from cuckoo.cuckoo import Cuckoo, CuckooTask
 
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
+        cuckoo_task.id = 1
 
         # Creating the required objects for execution
         service_task = ServiceTask(sample)
@@ -1122,7 +1104,7 @@ class TestCuckoo:
         correct_subsection = ResultSection("blah")
         parent_section.add_subsection(correct_subsection)
         cuckoo_class_instance.check_pcap(cuckoo_task, parent_section)
-        assert cuckoo_class_instance.request.task.extracted == []
+        assert cuckoo_class_instance.artefact_list == []
 
         parent_section = ResultSection("blah")
         correct_subsection = ResultSection("Network Activity")
@@ -1130,13 +1112,9 @@ class TestCuckoo:
 
         with mocker.patch.object(Cuckoo, "query_pcap", return_value=b"blah"):
             cuckoo_class_instance.check_pcap(cuckoo_task, parent_section)
-            assert task.extracted[0]["name"] == "cuckoo_traffic.pcap"
-            assert task.extracted[0]["description"] == 'PCAP from Cuckoo analysis'
-
-            cuckoo_class_instance.request.task.extracted = []
-            with mocker.patch.object(ServiceRequest, "add_extracted", side_effect=MaxExtractedExceeded):
-                cuckoo_class_instance.check_pcap(cuckoo_task, parent_section)
-                assert cuckoo_class_instance.request.task.extracted == []
+            assert cuckoo_class_instance.artefact_list[0]["name"] == f"{cuckoo_task.id}_cuckoo_traffic.pcap"
+            assert cuckoo_class_instance.artefact_list[0]["description"] == 'PCAP from Cuckoo analysis'
+            assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == True
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1508,13 +1486,13 @@ class TestCuckoo:
         mocker.patch.object(Cuckoo, "_build_report")
         mocker.patch.object(Cuckoo, "_extract_console_output")
         mocker.patch.object(Cuckoo, "_extract_hollowshunter")
-        mocker.patch.object(Cuckoo, "_extract_artifacts")
+        mocker.patch.object(Cuckoo, "_extract_artefacts")
         mocker.patch("cuckoo.cuckoo.tarfile.open", return_value=dummy_tar_class())
 
         cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
         assert True
 
-        # Exception test for _extract_console_output or _extract_hollowshunter or _extract_artifacts
+        # Exception test for _extract_console_output or _extract_hollowshunter or _extract_artefacts
         mocker.patch.object(Cuckoo, "_extract_console_output", side_effect=Exception)
         cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
         assert True
@@ -1530,9 +1508,10 @@ class TestCuckoo:
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
         cuckoo_class_instance._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
-        assert cuckoo_class_instance.request.task.supplementary[0]["path"] == tar_report_path
-        assert cuckoo_class_instance.request.task.supplementary[0]["name"] == tar_file_name
-        assert cuckoo_class_instance.request.task.supplementary[0]["description"] == "Cuckoo Sandbox analysis report archive (tar.gz)"
+        assert cuckoo_class_instance.artefact_list[0]["path"] == tar_report_path
+        assert cuckoo_class_instance.artefact_list[0]["name"] == tar_file_name
+        assert cuckoo_class_instance.artefact_list[0]["description"] == "Cuckoo Sandbox analysis report archive (tar.gz)"
+        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == False
 
         cuckoo_class_instance.request.task.supplementary = []
 
@@ -1554,16 +1533,17 @@ class TestCuckoo:
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
         report_json_path = cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
-        assert cuckoo_class_instance.request.task.supplementary[0]["path"] == json_report_path
-        assert cuckoo_class_instance.request.task.supplementary[0]["name"] == f"1_{json_file_name}"
-        assert cuckoo_class_instance.request.task.supplementary[0]["description"] == "Cuckoo Sandbox report (json)"
+        assert cuckoo_class_instance.artefact_list[0]["path"] == json_report_path
+        assert cuckoo_class_instance.artefact_list[0]["name"] == f"1_{json_file_name}"
+        assert cuckoo_class_instance.artefact_list[0]["description"] == "Cuckoo Sandbox report (json)"
+        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == False
         assert report_json_path == json_report_path
 
-        cuckoo_class_instance.request.task.supplementary = []
+        cuckoo_class_instance.artefact_list = []
 
         mocker.patch.object(dummy_tar_class, 'getnames', side_effect=Exception())
         report_json_path = cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
-        assert cuckoo_class_instance.request.task.supplementary == []
+        assert cuckoo_class_instance.artefact_list == []
         assert report_json_path == ""
 
     @staticmethod
@@ -1625,17 +1605,17 @@ class TestCuckoo:
         cuckoo_class_instance.request = dummy_request_class()
         task_id = 1
         cuckoo_class_instance._extract_console_output(task_id)
-        assert cuckoo_class_instance.request.task.supplementary[0]["path"] == "/tmp/1_console_output.txt"
-        assert cuckoo_class_instance.request.task.supplementary[0]["name"] == "1_console_output.txt"
-        assert cuckoo_class_instance.request.task.supplementary[0]["description"] == "Console Output Observed"
+        assert cuckoo_class_instance.artefact_list[0]["path"] == "/tmp/1_console_output.txt"
+        assert cuckoo_class_instance.artefact_list[0]["name"] == "1_console_output.txt"
+        assert cuckoo_class_instance.artefact_list[0]["description"] == "Console Output Observed"
+        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == False
 
     @staticmethod
-    def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class, mocker):
+    def test_extract_artefacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class, mocker):
         from cuckoo.cuckoo import Cuckoo
-        from assemblyline_v4_service.common.task import MaxExtractedExceeded
 
         sysmon_path = "blah"
-        sysmon_name = "sysmon"
+        sysmon_name = "sysmon/sysmon.evtx"
         mocker.patch.object(Cuckoo, '_encode_sysmon_file', return_value=(sysmon_path, sysmon_name))
 
         tarball_file_map = {
@@ -1643,86 +1623,52 @@ class TestCuckoo:
             "extracted": "Cuckoo extracted file",
             "shots": "Screenshots from Cuckoo analysis",
             "sum": "All traffic from TCPDUMP and PolarProxy",
-            "sysmon": "Sysmon Logging Captured",
+            "sysmon/sysmon.evtx": "Sysmon Logging Captured",
             "supplementary": "Supplementary File"
         }
-        correct_extracted = []
-        correct_supplementary = []
+        correct_artefact_list = []
         tar_obj = dummy_tar_class()
         task_id = 1
         for key, val in tarball_file_map.items():
             correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{key}"
             dummy_tar_member = dummy_tar_member_class(key, 1)
             tar_obj.members.append(dummy_tar_member)
-            if key == "sysmon":
-                correct_extracted.append({"path": sysmon_path, "name": f"{task_id}_{sysmon_name}", "description": val})
-            elif key == "supplementary":
-                correct_supplementary.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val})
+            if key == "sysmon/sysmon.evtx":
+                correct_artefact_list.append({"path": sysmon_path, "name": f"{task_id}_{sysmon_name}", "description": val, "to_be_extracted": True})
+            elif key in ["supplementary", "shots"]:
+                correct_artefact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": False})
             else:
-                correct_extracted.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val})
+                correct_artefact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": True})
 
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_class_instance._extract_artifacts(tar_obj, task_id)
+        cuckoo_class_instance._extract_artefacts(tar_obj, task_id)
 
         all_extracted = True
-        for extracted in cuckoo_class_instance.request.task.extracted:
-            if extracted not in correct_extracted:
+        for extracted in cuckoo_class_instance.artefact_list:
+            if extracted not in correct_artefact_list:
                 all_extracted = False
                 break
         assert all_extracted
 
         all_supplementary = True
-        for supplementary in cuckoo_class_instance.request.task.supplementary:
-            if supplementary not in correct_supplementary:
+        for supplementary in cuckoo_class_instance.artefact_list:
+            if supplementary not in correct_artefact_list:
                 all_supplementary = False
                 break
         assert all_supplementary
 
-        # Exception tests for add_extracted
-        cuckoo_class_instance.request.task.extracted = []
-        with mocker.patch.object(dummy_request_class, "add_extracted", side_effect=MaxExtractedExceeded):
-            cuckoo_class_instance._extract_artifacts(tar_obj, task_id)
-            assert cuckoo_class_instance.request.task.extracted == []
-
     @staticmethod
-    def test_extract_hollowshunter(cuckoo_class_instance, dummy_request_class, dummy_tar_class, mocker):
-        from assemblyline_v4_service.common.result import ResultSection, Heuristic
-        from assemblyline_v4_service.common.task import MaxExtractedExceeded
-
+    def test_extract_hollowshunter(cuckoo_class_instance, dummy_request_class, dummy_tar_class):
         cuckoo_class_instance.request = dummy_request_class()
         tar_obj = dummy_tar_class()
         task_id = 1
-        parent_section = ResultSection("blah")
-        cuckoo_class_instance._extract_hollowshunter(tar_obj, task_id, parent_section)
-        correct_result_section = ResultSection(title_text='HollowsHunter')
+        cuckoo_class_instance._extract_hollowshunter(tar_obj, task_id)
 
-        correct_pe_subsection_result_section = ResultSection(title_text='HollowsHunter Injected Portable Executable')
-        correct_pe_subsection_result_section.tags = {"dynamic.process.file.name": ["hollowshunter/hh_process_123_blah.exe"]}
-        correct_pe_heur = Heuristic(17)
-        correct_pe_heur.add_signature_id("hollowshunter_pe")
-        correct_pe_subsection_result_section.heuristic = correct_pe_heur
-        correct_result_section.add_subsection(correct_pe_subsection_result_section)
-
-        correct_shc_subsection_result_section = ResultSection(title_text='HollowsHunter Shellcode')
-        correct_shc_subsection_result_section.tags = {'dynamic.process.file_name': ['hollowshunter/hh_process_123_blah.shc']}
-        correct_result_section.add_subsection(correct_shc_subsection_result_section)
-
-        correct_dll_subsection_result_section = ResultSection(title_text='HollowsHunter DLL')
-        correct_dll_subsection_result_section.tags = {'dynamic.process.file_name': ['hollowshunter/hh_process_123_blah.dll']}
-        correct_result_section.add_subsection(correct_dll_subsection_result_section)
-
-        assert check_section_equality(parent_section.subsections[0], correct_result_section)
-        assert cuckoo_class_instance.request.task.extracted[0] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.exe", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.exe', "description": 'HollowsHunter Injected Portable Executable'}
-        assert cuckoo_class_instance.request.task.extracted[1] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.shc", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.shc', "description": 'HollowsHunter Shellcode'}
-        assert cuckoo_class_instance.request.task.extracted[2] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.dll", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.dll', "description": 'HollowsHunter DLL'}
-        assert cuckoo_class_instance.request.task.supplementary[0] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_dump_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_dump_report.json', "description": 'HollowsHunter report (json)'}
-        assert cuckoo_class_instance.request.task.supplementary[1] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_scan_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_scan_report.json', "description": 'HollowsHunter report (json)'}
-
-        # Exception tests for add_extracted
-        cuckoo_class_instance.request.task.extracted = []
-        mocker.patch.object(dummy_request_class, "add_extracted", side_effect=MaxExtractedExceeded)
-        cuckoo_class_instance._extract_hollowshunter(tar_obj, task_id, parent_section)
-        assert cuckoo_class_instance.request.task.extracted == []
+        assert cuckoo_class_instance.artefact_list[0] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_dump_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_dump_report.json', "description": 'HollowsHunter report (json)', "to_be_extracted": False}
+        assert cuckoo_class_instance.artefact_list[1] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_scan_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_scan_report.json', "description": 'HollowsHunter report (json)', "to_be_extracted": False}
+        assert cuckoo_class_instance.artefact_list[2] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.exe", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.exe', "description": 'HollowsHunter Dump', "to_be_extracted": True}
+        assert cuckoo_class_instance.artefact_list[3] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.shc", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.shc', "description": 'HollowsHunter Dump', "to_be_extracted": True}
+        assert cuckoo_class_instance.artefact_list[4] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.dll", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.dll', "description": 'HollowsHunter Dump', "to_be_extracted": True}
 
     @staticmethod
     @pytest.mark.parametrize("param_exists, param, correct_value",
@@ -1887,7 +1833,7 @@ class TestCuckooResult:
                     '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
             ),
             (
-                    {"debug": "blah", "signatures": "blah", "network": "blah", "behavior": {"blah": "blah"}, "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
+                    {"info": {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"}, "debug": "blah", "signatures": "blah", "network": "blah", "behavior": {"blah": "blah"}, "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
                     None, None, None
             ),
             (
@@ -1915,7 +1861,7 @@ class TestCuckooResult:
         mocker.patch("cuckoo.cuckooresult.process_debug")
         mocker.patch("cuckoo.cuckooresult.get_process_map", return_value=correct_process_map)
         mocker.patch("cuckoo.cuckooresult.process_signatures", return_value=False)
-        mocker.patch("cuckoo.cuckooresult.process_sysmon", return_value=({}, []))
+        mocker.patch("cuckoo.cuckooresult.convert_sysmon_processes", return_value=({}, []))
         mocker.patch("cuckoo.cuckooresult.process_behaviour", return_value=["blah"])
         mocker.patch("cuckoo.cuckooresult.process_network", return_value=["blah"])
         mocker.patch("cuckoo.cuckooresult.process_all_events")
@@ -1923,13 +1869,13 @@ class TestCuckooResult:
         mocker.patch("cuckoo.cuckooresult.process_hollowshunter")
         mocker.patch("cuckoo.cuckooresult.process_decrypted_buffers")
         al_result = ResultSection("blah")
-        assert generate_al_result(api_report, al_result, file_ext, random_ip_range) == correct_process_map
+        generate_al_result(api_report, al_result, file_ext, random_ip_range)
 
         if api_report == {}:
             assert al_result.subsections == []
         elif api_report.get("behavior") == {"blah": "blah"}:
             correct_result_section = ResultSection(title_text='Notes', body=f'No program available to execute a file with the following extension: {file_ext}')
-            assert check_section_equality(al_result.subsections[0], correct_result_section)
+            assert check_section_equality(al_result.subsections[1], correct_result_section)
         else:
             correct_result_section = ResultSection(title_text='Analysis Information', body_format=BODY_FORMAT.KEY_VALUE, body=correct_body)
             assert check_section_equality(al_result.subsections[0], correct_result_section)
@@ -1963,58 +1909,100 @@ class TestCuckooResult:
             assert check_section_equality(al_result.subsections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("behaviour, process_map, sysmon_tree, sysmon_procs, is_process_martian, api_limiting, correct_body, correct_events",
+    @pytest.mark.parametrize("behaviour, events",
         [
-            ({"processtree": [], "processes": []}, {}, [], [], False, False, [], []),
-            ({"processtree": [{"process_name": "lsass.exe", "children": []}], "processes": []}, {}, [], [], False, False, [], []),
-            ({"processtree": [{"process_name": "blah", "children": []}], "processes": []}, {}, ["blah"], [], False, False, '[{"process_name": "blah", "children": []}]', []),
-            ({"processtree": [{"process_name": "blah", "children": []}], "processes": []}, {}, ["blah"], [], True, False, '[{"process_name": "blah", "children": []}]', []),
-            ({"processtree": [], "processes": [{"pid": 0, "process_name": "blah", "calls": ["blah"], "first_seen": 1, "command_line": "blah"}], "apistats": {"0": {"blah": 2}}}, {}, [], [], False, True, '[{"name": "blah", "api_calls_made_during_detonation": 2, "api_calls_included_in_report": 1}]', [{'timestamp': '1970-01-01 00:00:01.000', 'process_name': 'blah (0)', 'image': 'blah', 'command_line': 'blah'}]),
-            ({"processtree": [], "processes": [{"pid": 0, "process_name": "blah", "calls": ["blah"], "first_seen": 1, "process_path": "blah_path", "command_line": "blah"}], "apistats": {"0": {"blah": 2}}}, {}, [], [], False, True, '[{"name": "blah", "api_calls_made_during_detonation": 2, "api_calls_included_in_report": 1}]', [{'command_line': 'blah', 'image': 'blah_path', 'process_name': 'blah (0)', 'timestamp': '1970-01-01 00:00:01.000'}]),
-            ({"processtree": [], "processes": [{"pid": 0, "process_name": "lsass.exe", "calls": []}], "apistats": {"0": {"blah": 2}}}, {}, [], [], False, False, [], []),
-            ({"processtree": [], "processes": [{"pid": 0, "process_name": "blah", "calls": [], "first_seen": 1, "command_line": "blah"}]}, {}, [], [{"pid": None}, {"process_pid": 1, "process_name": "blah", "process_path": "blah_path", "timestamp": "1111-11-11 11:11:11.11", "command_line": "blah"}], False, False, [], [{'timestamp': '1970-01-01 00:00:01.000', 'process_name': 'blah (0)', 'image': 'blah', 'command_line': 'blah'}, {'timestamp': '1111-11-11 11:11:11.110', 'process_name': 'blah (1)', 'image': 'blah', 'command_line': 'blah'}]),
+            ({"processes": []}, None),
+            ({"processes": ["blah"], "apistats": {"blah": "blah"}}, None)
         ]
     )
-    def test_process_behaviour(behaviour, process_map, sysmon_tree, sysmon_procs, is_process_martian, api_limiting, correct_body, correct_events, mocker):
+    def test_process_behaviour(behaviour, events, mocker):
         from cuckoo.cuckooresult import process_behaviour
-        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT, Heuristic
-        mocker.patch("cuckoo.cuckooresult.remove_process_keys")
-        mocker.patch("cuckoo.cuckooresult._merge_process_trees", return_value=behaviour["processtree"])
-        al_result = ResultSection("blah")
-
-        assert process_behaviour(behaviour, al_result, process_map, sysmon_tree, sysmon_procs, is_process_martian) == correct_events
-
-        if sysmon_tree:
-            correct_result_section = ResultSection(title_text="Spawned Process Tree", body_format=BODY_FORMAT.PROCESS_TREE)
-            correct_result_section.body = correct_body
-            if is_process_martian:
-                correct_result_section.heuristic = Heuristic(19, score_map={"process_martian": 10}, signatures={"process_martian": 1})
-                correct_result_section.heuristic.frequency = 1
-            assert check_section_equality(al_result.subsections[0], correct_result_section)
-        else:
-            if api_limiting:
-                correct_result_section = ResultSection(title_text="Limited Process API Calls", body_format=BODY_FORMAT.TABLE)
-                correct_result_section.body = correct_body
-                descr = f"For the sake of service processing, the number of the following " \
-                        f"API calls has been reduced in the report.json. The cause of large volumes of specific API calls is " \
-                        f"most likely related to the anti-sandbox technique known as API Hammering. For more information, look " \
-                        f"to the api_hammering signature."
-                correct_result_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
-                assert check_section_equality(al_result.subsections[0], correct_result_section)
-            else:
-                assert al_result.subsections == []
+        from assemblyline_v4_service.common.result import ResultSection
+        mocker.patch("cuckoo.cuckooresult.get_process_api_sums", return_value={"blah": "blah"})
+        mocker.patch("cuckoo.cuckooresult.convert_cuckoo_processes")
+        mocker.patch("cuckoo.cuckooresult.build_limited_calls_section")
+        process_behaviour(behaviour, ResultSection("blah"), events)
+        # Code coverage!
+        assert True
 
     @staticmethod
-    @pytest.mark.parametrize("process, process_map, correct_process",
+    @pytest.mark.parametrize("processes, api_sums, correct_body, api_limiting",
         [
-            ({"track": None, "first_seen": None, "ppid": None}, {}, {"process_pid": None, "signatures": {}}),
-            ({"track": None, "first_seen": None, "ppid": None, "pid": 1}, {1: {"signatures": ["{\"blah\":0}"]}}, {"process_pid": 1, "signatures": {"blah": 0}}),
-            ({"track": None, "first_seen": None, "ppid": None, "pid": 1, "children": [{"track": None, "first_seen": None, "ppid": None, "pid": 2}]}, {2: {"signatures": ["{\"blah\":0}"]}}, {"process_pid": 1, "signatures": {}, "children": [{"process_pid": 2, "signatures": {"blah": 0}}]}),
+            (None, {}, '', False),
+            ([], {}, '', False),
+            ([{"pid": 1, "calls": []}], {}, '', False),
+            ([{"pid": 1, "calls": ["blah"]}], {}, '', False),
+            ([{"pid": 1, "calls": ["blah"], "process_name": "blah"}], {"1": 2}, '[{"name": "blah", "api_calls_made_during_detonation": 2, "api_calls_included_in_report": 1}]', True),
         ]
     )
-    def test_remove_process_keys(process, process_map, correct_process):
-        from cuckoo.cuckooresult import remove_process_keys
-        assert remove_process_keys(process, process_map) == correct_process
+    def test_build_limited_calls_section(processes, api_sums, correct_body, api_limiting):
+        from cuckoo.cuckooresult import build_limited_calls_section
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+        actual_result_section = ResultSection("blah")
+        build_limited_calls_section(actual_result_section, processes, api_sums)
+        if api_limiting:
+            correct_result_section = ResultSection(title_text="Limited Process API Calls",
+                                                   body_format=BODY_FORMAT.TABLE)
+            correct_result_section.body = correct_body
+            descr = f"For the sake of service processing, the number of the following " \
+                    f"API calls has been reduced in the report.json. The cause of large volumes of specific API calls is " \
+                    f"most likely related to the anti-sandbox technique known as API Hammering. For more information, look " \
+                    f"to the api_hammering signature."
+            correct_result_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
+            assert check_section_equality(actual_result_section.subsections[0], correct_result_section)
+        else:
+            assert actual_result_section.subsections == []
+
+    @staticmethod
+    @pytest.mark.parametrize("apistats, correct_api_sums",
+        [
+            ({}, {}),
+            ({"0": {"blah": 2}}, {"0": 2}),
+        ]
+    )
+    def test_get_process_api_sums(apistats, correct_api_sums):
+        from cuckoo.cuckooresult import get_process_api_sums
+        assert get_process_api_sums(apistats) == correct_api_sums
+
+    @staticmethod
+    @pytest.mark.parametrize("processes, correct_events",
+        [
+            ([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}], [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah"}]),
+            ([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}], [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah"}]),
+            ([], []),
+        ]
+    )
+    def test_convert_cuckoo_processes(processes, correct_events):
+        from cuckoo.cuckooresult import convert_cuckoo_processes
+        actual_events = []
+        convert_cuckoo_processes(actual_events, processes)
+        assert actual_events == correct_events
+
+    @staticmethod
+    @pytest.mark.parametrize("events, is_process_martian, correct_body",
+        [
+            ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], False, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "children": []}]'),
+            ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], True, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "children": []}]'),
+            ([], False, None),
+        ]
+    )
+    def test_build_process_tree(events, is_process_martian, correct_body):
+        from cuckoo.cuckooresult import build_process_tree
+        from assemblyline_v4_service.common.result import ResultSection, Heuristic, BODY_FORMAT
+        correct_res_sec = ResultSection(title_text="Spawned Process Tree")
+        actual_res_sec = ResultSection("blah")
+        if correct_body:
+            correct_res_sec.body = correct_body
+            correct_res_sec.body_format = BODY_FORMAT.PROCESS_TREE
+            if is_process_martian:
+                heuristic = Heuristic(19)
+                heuristic.add_signature_id("process_martian", score=10)
+                correct_res_sec.heuristic = heuristic
+            build_process_tree(events, actual_res_sec, is_process_martian)
+            assert check_section_equality(actual_res_sec.subsections[0], correct_res_sec)
+        else:
+            build_process_tree(events, actual_res_sec, is_process_martian)
+            assert actual_res_sec.subsections == []
 
     @staticmethod
     @pytest.mark.parametrize("sysmon, correct_index",
@@ -2031,47 +2019,6 @@ class TestCuckooResult:
     def test_get_trimming_index(sysmon, correct_index):
         from cuckoo.cuckooresult import _get_trimming_index
         assert _get_trimming_index(sysmon) == correct_index
-
-    @staticmethod
-    @pytest.mark.parametrize("parent, potential_child, expected_return_value",
-        [
-            ({}, {}, False),
-            ({"process_pid": "1", "children": []}, {"process_pid": "1", "children": []}, True),
-            ({"children": [{"process_pid": "1", "children": []}]}, {"process_pid": "1", "children": []}, True),
-            ({"children": [{"process_pid": "1", "children": [{"process_pid": "2", "children": []}]}]}, {"process_pid": "2"}, True),
-            ({"children": [{"process_pid": "1", "children": [{"process_pid": "3", "children": []}]}]}, {"process_pid": "2"}, False),
-        ]
-    )
-    def test_insert_child(parent, potential_child, expected_return_value):
-        from cuckoo.cuckooresult import _insert_child
-        assert _insert_child(parent, potential_child) == expected_return_value
-
-    @staticmethod
-    @pytest.mark.parametrize("process, processes, expected_processes",
-        [
-            ({}, [], [{}]),
-            ({"children": []}, [], []),
-            ({"children": [{"children": []}]}, [], [{}, {}]),
-        ]
-    )
-    def test_flatten_process_tree(process, processes, expected_processes):
-        from cuckoo.cuckooresult import _flatten_process_tree
-        assert _flatten_process_tree(process, processes) == expected_processes
-
-    @staticmethod
-    @pytest.mark.parametrize("cuckoo_tree, sysmon_tree, sysmon_process_in_cuckoo_tree, correct_cuckoo_tree",
-        [
-            ([], [], False, []),
-            ([{"process_name": "blah"}], [], False, [{'process_name': 'blah (Cuckoo)'}]),
-            ([{"process_name": "blah"}], [{"process_name": "blah"}], False, [{'process_name': 'blah (Cuckoo)'}]),
-            ([{"process_name": "blah"}], [{"process_name": "blah"}], True, [{'process_name': 'blah (Sysmon)'}]),
-            ([{"process_name": "blah"}], [{"process_name": "blah", "process_pid": 1}], False, [{'process_name': 'blah (Cuckoo)'}, {'process_name': 'blah (Sysmon)', 'process_pid': 1}]),
-            ([{"process_name": "blah", "process_pid": 1}], [{"process_name": "blah", "process_pid": 1}], False, [{'process_name': 'blah (Cuckoo)', "process_pid": 1}]),
-        ]
-    )
-    def test_merge_process_trees(cuckoo_tree, sysmon_tree, sysmon_process_in_cuckoo_tree, correct_cuckoo_tree):
-        from cuckoo.cuckooresult import _merge_process_trees
-        assert _merge_process_trees(cuckoo_tree, sysmon_tree, sysmon_process_in_cuckoo_tree) == correct_cuckoo_tree
 
     # TODO: complete tests for signatures
     @staticmethod
@@ -2090,7 +2037,6 @@ class TestCuckooResult:
             ("skipped_families", [{"name": "skipped_families", "severity": 1, "markcount": 1, "marks": [], "families": ["generic"]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
             ("families", [{"name": "families", "severity": 1, "markcount": 1, "marks": [], "families": ["blah"]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tFamilies: blah', False),
             ("console_output", [{"name": "console_output", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"buffer": "blah"}}, "type": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
-            ("process_map", [{"name": "process_map", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "blah"}]}], "192.0.2.0/24", "", {1: {"signatures": set()}}, 'No description for signature.', False),
             ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tIOC: 1', False),
             ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "domain": "blah.adobe.com"}]}], "192.0.2.0/24", "", {}, None, False),
             ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "description": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tIOC: 1\n\tFun fact: blah', False),
@@ -2106,7 +2052,8 @@ class TestCuckooResult:
         from cuckoo.cuckooresult import process_signatures
         from assemblyline_v4_service.common.result import ResultSection, Heuristic
         al_result = ResultSection("blah")
-        assert process_signatures(sigs, al_result, random_ip_range, target_filename, process_map) == correct_is_process_martian
+        task_id = 1
+        assert process_signatures(sigs, al_result, random_ip_range, target_filename, process_map, task_id) == correct_is_process_martian
         if correct_body is None:
             assert al_result.subsections == []
         else:
@@ -2123,13 +2070,7 @@ class TestCuckooResult:
                 correct_subsection.heuristic.frequency = 1
                 correct_subsection.heuristic.attack_ids = ['T1003', 'T1005']
                 correct_result_section.add_subsection(correct_subsection)
-                os.remove("/tmp/console_output.txt")
-            elif sig_name == "process_map":
-                correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
-                correct_subsection.heuristic = Heuristic(9999, signatures={sig_name: 1}, score_map={sig_name: 10})
-                correct_subsection.heuristic.frequency = 1
-                correct_result_section.add_subsection(correct_subsection)
-                assert process_map == {1: {"signatures": {'{"process_map": 10}'}}}
+                os.remove(f"/tmp/{task_id}_console_output.txt")
             elif sig_name in ["network_cnc_http", "nolookup_communication"]:
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
                 correct_subsection.heuristic = Heuristic(22, signatures={sig_name: 1}, score_map={sig_name: 10})
@@ -2171,39 +2112,19 @@ class TestCuckooResult:
     def test_process_all_events():
         from cuckoo.cuckooresult import process_all_events
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
-        from copy import deepcopy
 
         al_result = ResultSection("blah")
-        network_events = [{"timestamp": 1}]
-        process_events = [{"command_line": "blah", "image": "blah", "timestamp": 1}]
-        test_network_events = deepcopy(network_events)
-        test_process_events = deepcopy(process_events)
+        events = [{"timestamp": 1, "image": "blah", 'pid': 1, 'src_port': 1, 'dest_ip': "blah", 'src_ip': "blah", 'dest_port': 1, 'guid': "blah", 'protocol': "blah", 'domain': "blah"}, {"pid": 1, "ppid": 1, "guid": "blah", "command_line": "blah", "image": "blah", "timestamp": 2}]
 
         correct_result_section = ResultSection(title_text="Events")
-        for event in network_events:
-            event["event_type"] = "network"
-            event["process_name"] = event.pop("process_name", None)
-            event["details"] = {
-                "protocol": event.pop("protocol", None),
-                "dom": event.pop("dom", None),
-                "dest_ip": event.pop("dest_ip", None),
-                "dest_port": event.pop("dest_port", None),
-            }
-        for event in process_events:
-            event["event_type"] = "process"
-            event["process_name"] = event.pop("process_name", None)
-            correct_result_section.add_tag("dynamic.process.command_line", event["command_line"])
-            correct_result_section.add_tag("dynamic.process.file_name", event["image"])
-            event["details"] = {
-                "image": event.pop("image", None),
-                "command_line": event.pop("command_line", None),
-            }
-        all_events = network_events + process_events
-        sorted_events = sorted(all_events, key=lambda k: k["timestamp"])
-        correct_result_section.body = json.dumps(sorted_events)
+
+        correct_result_section.add_tag("dynamic.process.command_line", "blah")
+        correct_result_section.add_tag("dynamic.process.file_name", "blah")
+
+        correct_result_section.body = '[{"timestamp": 1, "process_name": "blah", "details": {"protocol": "blah", "domain": "blah", "dest_ip": "blah", "dest_port": 1}}, {"timestamp": 2, "process_name": "blah", "details": {"command_line": "blah"}}]'
         correct_result_section.body_format = BODY_FORMAT.TABLE
 
-        process_all_events(al_result, test_network_events, test_process_events)
+        process_all_events(al_result, events)
         assert check_section_equality(al_result.subsections[0], correct_result_section)
 
     @staticmethod
@@ -2246,100 +2167,30 @@ class TestCuckooResult:
             assert al_result.subsections == []
 
     @staticmethod
-    @pytest.mark.parametrize("sysmon, process_map, correct_body, correct_process_tree, correct_processes",
+    @pytest.mark.parametrize("sysmon, correct_processes",
         [
-            ([], {}, None, [], []),
-            (
-                    [{"EventData": {"Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"}]}}],
-                    {},
-                    None,
-                    [{'signatures': {}, 'process_pid': 2, 'timestamp': None, 'children': [{'signatures': {}, 'process_pid': 1, 'timestamp': None, 'children': []}]}],
-                    [{'signatures': {}, 'process_pid': 1, 'timestamp': None}, {'signatures': {}, 'process_pid': 2, 'timestamp': None}]
-            ),
+            (None, []),
+            ([], []),
             (
                     [{"EventData": {
-                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
-                                 {"@Name": "OriginalFileName", "#text": "blah"},
-                                 {"@Name": "CommandLine", "#text": "blah"}, {"@Name": "ParentImage", "#text": "blah"},
-                                 {"@Name": "ParentCommandLine", "#text": "blah"},
-                                 {"@Name": "UtcTime", "#text": "blah"}]}}],
-                    {}, None,
-                    [{'signatures': {}, 'process_pid': 2, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': []}]}],
-                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}, {'signatures': {}, 'process_pid': 2, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}]
+                        "Data": [{"@Name": "ParentProcessId", "#text": "2"},
+                                 {"@Name": "Image", "#text": "blah.exe"}, {"@Name": "CommandLine", "#text": "./blah"},
+                                 {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
+                                 {"@Name": "ProcessGuid", "#text": "blah"}]}}],
+                    []
             ),
             (
-                    [{"EventData": {
-                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
-                                 {"@Name": "OriginalFileName", "#text": "blah"},
-                                 {"@Name": "CommandLine", "#text": "C:\\windows\\system32\\lsass.exe"},
-                                 {"@Name": "ParentImage", "#text": "lsass.exe"},
-                                 {"@Name": "ParentCommandLine", "#text": 'C:\\windows\\system32\\lsass.exe'},
-                                 {"@Name": "UtcTime", "#text": "blah"}]}}],
-                    {}, None, [], []
+                    [{"EventData": {"Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"}, {"@Name": "Image", "#text": "blah.exe"}, {"@Name": "CommandLine", "#text": "./blah"}, {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"}, {"@Name": "ProcessGuid", "#text": "blah"}]}}],
+                    [{'pid': 1, 'ppid': 2, 'timestamp': 43932.12, "command_line": "./blah", "image": "blah.exe", "guid": "blah"}]
             ),
-            (
-                    [{"EventData": {
-                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
-                                 {"@Name": "OriginalFileName", "#text": "blah"},
-                                 {"@Name": "CommandLine", "#text": "blah"},
-                                 {"@Name": "ParentImage", "#text": "lsass.exe"},
-                                 {"@Name": "ParentCommandLine", "#text": "bin\\inject-x86.exe --app C:\\windows\System32\\rundll32.exe"},
-                                 {"@Name": "UtcTime", "#text": "blah"}]}}],
-                    {}, None,
-                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': []}],
-                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}]
-            ),
-            (
-                    [{"EventData": {
-                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
-                                 {"@Name": "OriginalFileName", "#text": "blah"},
-                                 {"@Name": "CommandLine", "#text": "blah"},
-                                 {"@Name": "ParentImage", "#text": "lsass.exe"},
-                                 {"@Name": "ParentCommandLine", "#text": "bin\\inject-x86.exe"},
-                                 {"@Name": "UtcTime", "#text": "blah"}]}}],
-                    {}, None,
-                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': []}],
-                    [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}]
-            ),
-            (
-                [{"EventData": {
-                        "Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"},
-                                 {"@Name": "OriginalFileName", "#text": "blah"},
-                                 {"@Name": "CommandLine", "#text": "blah"},
-                                 {"@Name": "ParentImage", "#text": "lsass.exe"},
-                                 {"@Name": "ParentCommandLine", "#text": "bin\\inject-x86.exe"},
-                                 {"@Name": "UtcTime", "#text": "blah"}]}},
-                {"EventData": {
-                    "Data": [{"@Name": "ProcessId", "#text": "3"}, {"@Name": "ParentProcessId", "#text": "1"},
-                             {"@Name": "OriginalFileName", "#text": "blah"},
-                             {"@Name": "CommandLine", "#text": "blah"},
-                             {"@Name": "ParentImage", "#text": "lsass.exe"},
-                             {"@Name": "ParentCommandLine", "#text": "bin\\inject-x86.exe"},
-                             {"@Name": "UtcTime", "#text": "blah"}]}}
-                ],
-                {}, None,
-                [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah', 'children': []}],
-                [{'signatures': {}, 'process_pid': 1, 'process_name': 'blah', 'command_line': 'blah', 'timestamp': 'blah'}]
-            )
         ]
     )
-    def test_process_sysmon(sysmon, process_map, correct_body, correct_process_tree, correct_processes, dummy_result_class_instance, mocker):
-        from cuckoo.cuckooresult import process_sysmon
-        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
-
+    def test_convert_sysmon_processes(sysmon, correct_processes, dummy_result_class_instance, mocker):
+        from cuckoo.cuckooresult import convert_sysmon_processes
+        actual_events = []
         mocker.patch("cuckoo.cuckooresult._get_trimming_index", return_value=0)
-        mocker.patch("cuckoo.cuckooresult._insert_child", return_value=True)
-        # mocker.patch("cuckoo.cuckooresult._flatten_process_tree")
-
-        al_result = dummy_result_class_instance
-
-        assert process_sysmon(sysmon, al_result, process_map) == (correct_process_tree, correct_processes)
-
-        if correct_body is None:
-            assert al_result.sections == []
-        else:
-            correct_result_section = ResultSection(title_text="Sysmon Signatures", body_format=BODY_FORMAT.TABLE)
-            assert check_section_equality(al_result.sections[0], correct_result_section)
+        convert_sysmon_processes(sysmon, actual_events)
+        assert actual_events == correct_processes
 
     # TODO: method is in the works
     # @staticmethod
@@ -2421,18 +2272,18 @@ class TestCuckooResult:
     @pytest.mark.parametrize("processes, correct_process_map",
         [
             (None, {}),
-            ([{"process_name": "lsass.exe"}], {}),
-            ([{"process_name": "blah.exe", "calls": [], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"api": "blah"}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "getaddrinfo", "arguments": {"hostname": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"getaddrinfo": {"hostname": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "GetAddrInfoW", "arguments": {"hostname": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"GetAddrInfoW": {"hostname": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "connect", "arguments": {"ip_address": "blah", "port": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"connect": {"ip_address": "blah", "port": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectW", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"InternetConnectW": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectA", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"InternetConnectA": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "send", "arguments": {"buffer": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"send": {"buffer": "blah"}}], 'signatures': set(), 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "crypto", "api": "CryptDecrypt", "arguments": {"buffer": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': [{"CryptDecrypt": {"buffer": "blah"}}]}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "cfg:blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'signatures': set(), 'decrypted_buffers': [{"OutputDebugStringA": {"string": "cfg:blah"}}]}}),
+            ([{"process_name": "C:\\windows\\System32\\lsass.exe", "calls": [], "pid": 1}], {}),
+            ([{"process_name": "blah.exe", "calls": [], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"api": "blah"}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "getaddrinfo", "arguments": {"hostname": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"getaddrinfo": {"hostname": "blah"}}], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "GetAddrInfoW", "arguments": {"hostname": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"GetAddrInfoW": {"hostname": "blah"}}], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "connect", "arguments": {"ip_address": "blah", "port": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"connect": {"ip_address": "blah", "port": "blah"}}], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectW", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"InternetConnectW": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectA", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"InternetConnectA": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "send", "arguments": {"buffer": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"send": {"buffer": "blah"}}], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "crypto", "api": "CryptDecrypt", "arguments": {"buffer": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': [{"CryptDecrypt": {"buffer": "blah"}}]}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "cfg:blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': [{"OutputDebugStringA": {"string": "cfg:blah"}}]}}),
         ]
     )
     def test_get_process_map(processes, correct_process_map):
@@ -3210,7 +3061,7 @@ class TestSafelist:
             'Azure2': 'C:\\\\WindowsAzure\\\\GuestAgent.*\\\\GuestAgent\\\\WindowsAzureGuestAgent\.exe',
             'Sysmon1': 'C:\\\\Windows\\\\System32\\\\csrss\.exe',
             'Sysmon2': 'dllhost.exe',
-            'Cuckoo2': 'lsass\.exe',
+            'Cuckoo2': 'C:\\\\Windows\\\\System32\\\\lsass\\.exe',
             'Sysmon3': 'C:\\\\Windows\\\\System32\\\\SearchIndexer\.exe'
         }
         assert SAFELIST_COMMANDS == {
@@ -3223,6 +3074,7 @@ class TestSafelist:
             'Azure2': '"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MOMPerfSnapshotHelper.exe\\" -Embedding',
             'Sysmon3': 'C:\\\\windows\\\\system32\\\\svchost\.exe -k DcomLaunch',
             'Sysmon4': 'C:\\\\windows\\\\system32\\\\SearchIndexer\.exe \/Embedding',
+            'Sysmon5': 'C:\\\\Windows\\\\System32\\\\wevtutil.exe query-events microsoft-windows-powershell/operational /rd:true /e:root /format:xml /uni:true'
         }
         assert SAFELIST_DOMAINS == {
             'Adobe': r'.*\.adobe\.com$',
@@ -3433,7 +3285,7 @@ class TestSafelist:
     @staticmethod
     @pytest.mark.parametrize("application, correct_result",
         [
-            ("lsass.exe", "Cuckoo2"),
+            ("C:\\Windows\\System32\\lsass.exe", "Cuckoo2"),
             ("blah", None),
         ]
     )

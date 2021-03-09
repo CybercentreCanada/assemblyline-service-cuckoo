@@ -8,8 +8,8 @@ SAFELIST_APPLICATIONS = {
     'Azure2': 'C:\\\\WindowsAzure\\\\GuestAgent.*\\\\GuestAgent\\\\WindowsAzureGuestAgent\.exe',
     'Sysmon1': 'C:\\\\Windows\\\\System32\\\\csrss\.exe',
     'Sysmon2': 'dllhost.exe',
-    'Cuckoo2': 'lsass\.exe',
-    'Sysmon3': 'C:\\\\Windows\\\\System32\\\\SearchIndexer\.exe'
+    'Cuckoo2': 'C:\\\\Windows\\\\System32\\\\lsass\.exe',
+    'Sysmon3': 'C:\\\\Windows\\\\System32\\\\SearchIndexer\.exe',
 }
 
 SAFELIST_COMMANDS = {
@@ -22,6 +22,7 @@ SAFELIST_COMMANDS = {
     'Azure2': '"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MOMPerfSnapshotHelper.exe\\" -Embedding',
     'Sysmon3': 'C:\\\\windows\\\\system32\\\\svchost\.exe -k DcomLaunch',
     'Sysmon4': 'C:\\\\windows\\\\system32\\\\SearchIndexer\.exe \/Embedding',
+    'Sysmon5': 'C:\\\\Windows\\\\System32\\\\wevtutil.exe query-events microsoft-windows-powershell/operational /rd:true /e:root /format:xml /uni:true',
 }
 
 # These domains may be present due to benign activity on the host
@@ -420,7 +421,7 @@ SAFELIST_URIS = {
 
 def match(data, sigs):
     for name, sig in sigs.items():
-        if re.match(sig, data):
+        if re.match(sig.lower(), data.lower()):
             return name
     return None
 
