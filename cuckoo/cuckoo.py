@@ -446,7 +446,7 @@ class Cuckoo(ServiceBase):
     # TODO: Its value should be x such that x / CUCKOO_POLL_DELAY = 5(?) minutes or 300 seconds
     # TODO: do we need retry_on_exception?
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
-           stop_max_attempt_number=(REPORT_GENERATION_TIMEOUT/CUCKOO_POLL_DELAY),
+           stop_max_attempt_number=((GUEST_VM_START_TIMEOUT + REPORT_GENERATION_TIMEOUT)/CUCKOO_POLL_DELAY),
            retry_on_result=_retry_on_none,
            retry_on_exception=_exclude_chain_ex)
     def poll_report(self, cuckoo_task, parent_section):
