@@ -67,7 +67,7 @@ SAFELIST_DOMAINS = {
     'ISATAP': r'isatap\..*\.microsoft\.com$',
     'Tile Service': r'tile-service\.weather\.microsoft\.com$',
     'Geover': r'.*\.prod\.do\.dsp\.mp\.microsoft\.com$',
-    'Live': r'login\.live\.com$',
+    'Live': r'(login|g)\.live\.com$',
     'Office Apps': r'nexus\.officeapps\.live\.com$',
     'Events': r'.*\.events\.data\.microsoft\.com$',
     'WDCP': r'wdcp\.microsoft\.com$',
@@ -116,6 +116,7 @@ SAFELIST_DOMAINS = {
     'Reddog': r'.*reddog\.microsoft\.com$',
     'Agent Service Api': r'agentserviceapi\.azure-automation\.net$',
     'Guest Configuration Api': r'agentserviceapi\.guestconfiguration\.azure\.com$',
+    'Blob Storage': r'.*\.blob\.storage\.azure\.net$',
 
     # Office
     'Office Network Requests': r'config\.edge\.skype\.com',
@@ -359,9 +360,10 @@ SAFELIST_URIS = {
 
     # Microsoft
     'Schemas': r'https?://schemas\.microsoft\.com(?:$|/.*)',
+    'Go Microsoft': r'(www\.)?go\.microsoft\.com*',
 
     # Windows
-    'Update': r'https?: // ctldl\.windowsupdate\.com /.*',
+    'Update': r'https?://ctldl\.windowsupdate\.com/.*',
 
     # Office
     '2010 Word': r'https?://schemas\.microsoft\.com/office/word/2010/(wordml|wordprocessingCanvas|wordprocessingInk|wordprocessingGroup|wordprocessingDrawing)',
@@ -380,7 +382,7 @@ SAFELIST_URIS = {
     'Verisign General CRL': r'https?://crl\.verisign\.com/.*',
 
     # Azure
-    'WPAD': r'https?://wpad\.reddog\.microsoft\.com/wpad\.dat',
+    'WPAD': r'https?://wpad\..*/wpad\.dat',
 
     # Digicert
     'OCSP Digicert': r'https?://ocsp\.digicert\.com/.*',
