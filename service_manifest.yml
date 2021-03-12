@@ -107,7 +107,8 @@ submission_params:
   - default: ""
     name: specific_image
     type: list
-    value: []
+    value: ""
+    list: []
 
   # The maximum total size of all files uploaded per analysis
   - default: 134217728
