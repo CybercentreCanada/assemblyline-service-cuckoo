@@ -287,7 +287,10 @@ class TestModule:
     @staticmethod
     def test_supported_extensions_constant(cuckoo_class_instance):
         from cuckoo.cuckoo import SUPPORTED_EXTENSIONS
-        assert SUPPORTED_EXTENSIONS == ["cpl", "dll", "exe", "pdf", "doc", "docm", "docx", "dotm", "rtf", "mht", "xls", "xlsm", "xlsx", "ppt", "pptx", "pps", "ppsx", "pptm", "potm", "potx", "ppsm", "htm", "html", "jar", "rar", "swf", "py", "pyc", "vbs", "msi", "ps1", "msg", "eml", "js", "wsf", "elf", "bin", "hta", "lnk", "hwp", "pub"]
+        assert SUPPORTED_EXTENSIONS == ['bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe',
+                                        'hta', 'htm', 'html', 'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf',
+                                        'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt', 'pptm', 'pptx', 'ps1', 'pub',
+                                        'py', 'pyc', 'rar', 'rtf', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx']
 
     @staticmethod
     def test_illegal_filename_chars_constant(cuckoo_class_instance):

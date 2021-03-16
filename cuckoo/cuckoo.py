@@ -60,50 +60,10 @@ MACHINE_NAME_REGEX = f"(?:{('|').join([LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX]
 LINUX_FILES = [file_type for file_type in RECOGNIZED_TYPES if "linux" in file_type]
 WINDOWS_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["windows", "32"])]
 
-# TODO: is this necessary?
 SUPPORTED_EXTENSIONS = [
-    "cpl",
-    "dll",
-    "exe",
-    "pdf",
-    "doc",
-    "docm",
-    "docx",
-    "dotm",
-    "rtf",
-    "mht",
-    "xls",
-    "xlsm",
-    "xlsx",
-    "ppt",
-    "pptx",
-    "pps",
-    "ppsx",
-    "pptm",
-    "potm",
-    "potx",
-    "ppsm",
-    "htm",
-    "html",
-    "jar",
-    "rar",
-    "swf",
-    "py",
-    "pyc",
-    "vbs",
-    "msi",
-    "ps1",
-    "msg",
-    "eml",
-    "js",
-    "wsf",
-    "elf",
-    "bin",
-    "hta",
-    # "zip", # Currently Cuckoo cannot handle the submission of .zip files
-    "lnk",
-    "hwp",
-    "pub",
+    'bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe', 'hta', 'htm', 'html',
+    'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt',
+    'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
 ]
 
 ILLEGAL_FILENAME_CHARS = set('<>:"/\|?*')
@@ -323,7 +283,7 @@ class Cuckoo(ServiceBase):
         try:
             self.submit(self.request.file_contents, cuckoo_task, parent_section)
 
-            if generate_report is True:
+            if cuckoo_task.id and generate_report is True:
                 self._generate_report(file_ext, cuckoo_task, parent_section)
 
         except RecoverableError:
@@ -531,7 +491,6 @@ class Cuckoo(ServiceBase):
         else:
             resp_dict = dict(resp.json())
             task_id = resp_dict["task_id"]
-            # TODO: does this ever happen?
             if not task_id:
                 # Spender case?
                 task_id = resp_dict.get("task_ids", [])
