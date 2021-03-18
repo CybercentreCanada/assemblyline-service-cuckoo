@@ -17,10 +17,12 @@ is_external: false
 licence_count: 0
 
 config:
-  # Cuckoo host specifications. A list of JSONs that each follow the format {"remote_host_ip": "<ip>", "remote_host_port": <integer port>, "api_key": "<api_key>"}
-  remote_host_details: [
-    {"remote_host_ip": "127.0.0.1", "remote_host_port": 8090, "api_key": "sample_api_token"},
-  ]
+  # Cuckoo host specifications.
+  remote_host_details:
+    hosts:
+      - ip: "127.0.0.1"
+        port: 8090
+        api_key: "sample_api_token"
 
   # Strings representing images for specific submission to a VM pool of a certain image. See README.
   allowed_images: []
