@@ -79,7 +79,6 @@ def dummy_task_class():
 
 @pytest.fixture
 def dummy_request_class(dummy_task_class):
-    from assemblyline_v4_service.common.task import MaxExtractedExceeded
 
     class DummyRequest(dict):
         def __init__(self, **some_dict):
@@ -343,13 +342,25 @@ class TestCuckooTask:
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_init(sample, cuckoo_task_class):
+        from cuckoo.cuckoo import CUCKOO_API_SUBMIT, CUCKOO_API_QUERY_TASK, CUCKOO_API_DELETE_TASK, \
+            CUCKOO_API_QUERY_REPORT, CUCKOO_API_QUERY_PCAP, CUCKOO_API_QUERY_MACHINES, CUCKOO_API_QUERY_MACHINE_INFO
+
         kwargs = {"blah": "blah"}
-        cuckoo_task_class_instance = cuckoo_task_class(sample["filename"], **kwargs)
+        host_details = {"remote_host_ip": "blah", "remote_host_port": "blah", "auth_header": "blah"}
+        cuckoo_task_class_instance = cuckoo_task_class(sample["filename"], host_details, **kwargs)
         assert cuckoo_task_class_instance.file == sample["filename"]
         assert cuckoo_task_class_instance.id is None
         assert cuckoo_task_class_instance.report is None
         assert cuckoo_task_class_instance.errors == []
         assert cuckoo_task_class_instance == {"blah": "blah"}
+        assert cuckoo_task_class_instance.base_url == f"http://{host_details['remote_host_ip']}:{host_details['remote_host_port']}"
+        assert cuckoo_task_class_instance.submit_url == f"{cuckoo_task_class_instance.base_url}/{CUCKOO_API_SUBMIT}"
+        assert cuckoo_task_class_instance.query_task_url == f"{cuckoo_task_class_instance.base_url}/{CUCKOO_API_QUERY_TASK}"
+        assert cuckoo_task_class_instance.delete_task_url == f"{cuckoo_task_class_instance.base_url}/{CUCKOO_API_DELETE_TASK}"
+        assert cuckoo_task_class_instance.query_report_url == f"{cuckoo_task_class_instance.base_url}/{CUCKOO_API_QUERY_REPORT}"
+        assert cuckoo_task_class_instance.query_pcap_url == f"{cuckoo_task_class_instance.base_url}/{CUCKOO_API_QUERY_PCAP}"
+        assert cuckoo_task_class_instance.query_machines_url == f"{cuckoo_task_class_instance.base_url}/{CUCKOO_API_QUERY_MACHINES}"
+        assert cuckoo_task_class_instance.query_machine_info_url == f"{cuckoo_task_class_instance.base_url}/{CUCKOO_API_QUERY_MACHINE_INFO}"
 
 
 class TestCuckoo:
@@ -372,41 +383,16 @@ class TestCuckoo:
     @staticmethod
     def test_init(cuckoo_class_instance):
         assert cuckoo_class_instance.file_name is None
-        assert cuckoo_class_instance.base_url is None
-        assert cuckoo_class_instance.submit_url is None
-        assert cuckoo_class_instance.query_task_url is None
-        assert cuckoo_class_instance.delete_task_url is None
-        assert cuckoo_class_instance.query_report_url is None
-        assert cuckoo_class_instance.query_pcap_url is None
-        assert cuckoo_class_instance.query_machines_url is None
-        assert cuckoo_class_instance.query_machine_info_url is None
         assert cuckoo_class_instance.file_res is None
         assert cuckoo_class_instance.request is None
         assert cuckoo_class_instance.session is None
         assert cuckoo_class_instance.ssdeep_match_pct is None
-        assert cuckoo_class_instance.machines is None
-        assert cuckoo_class_instance.auth_header is None
         assert cuckoo_class_instance.timeout is None
         assert cuckoo_class_instance.max_report_size is None
 
     @staticmethod
-    def test_set_urls(cuckoo_class_instance):
-        from cuckoo.cuckoo import CUCKOO_API_SUBMIT, CUCKOO_API_QUERY_TASK, CUCKOO_API_DELETE_TASK, \
-            CUCKOO_API_QUERY_REPORT, CUCKOO_API_QUERY_PCAP, CUCKOO_API_QUERY_MACHINES, CUCKOO_API_QUERY_MACHINE_INFO
-        cuckoo_class_instance.set_urls()
-        assert cuckoo_class_instance.base_url == f"http://{cuckoo_class_instance.config['remote_host_ip']}:{cuckoo_class_instance.config['remote_host_port']}"
-        assert cuckoo_class_instance.submit_url == f"{cuckoo_class_instance.base_url}/{CUCKOO_API_SUBMIT}"
-        assert cuckoo_class_instance.query_task_url == f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_TASK}"
-        assert cuckoo_class_instance.delete_task_url == f"{cuckoo_class_instance.base_url}/{CUCKOO_API_DELETE_TASK}"
-        assert cuckoo_class_instance.query_report_url == f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_REPORT}"
-        assert cuckoo_class_instance.query_pcap_url == f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_PCAP}"
-        assert cuckoo_class_instance.query_machines_url == f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_MACHINES}"
-        assert cuckoo_class_instance.query_machine_info_url == f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_MACHINE_INFO}"
-
-    @staticmethod
     def test_start(cuckoo_class_instance):
         cuckoo_class_instance.start()
-        assert cuckoo_class_instance.auth_header == {'Authorization': cuckoo_class_instance.config['auth_header_value']}
         assert cuckoo_class_instance.ssdeep_match_pct == int(cuckoo_class_instance.config.get('dedup_similar_percent', 40))
         assert cuckoo_class_instance.timeout == 120
         assert cuckoo_class_instance.max_report_size == cuckoo_class_instance.config.get('max_report_size', 275000000)
@@ -424,7 +410,7 @@ class TestCuckoo:
         mocker.patch.object(Cuckoo, "_remove_illegal_characters_from_file_name", return_value=None)
         mocker.patch.object(Cuckoo, "query_machines", return_value={})
         mocker.patch.object(Cuckoo, "_handle_specific_machine", return_value=(False, True))
-        mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(False, True))
+        mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(False, {}))
         mocker.patch.object(Cuckoo, "_general_flow")
 
         service_task = ServiceTask(sample)
@@ -473,15 +459,15 @@ class TestCuckoo:
             cuckoo_class_instance.execute(service_request)
 
         with mocker.patch.object(Cuckoo, "_handle_specific_machine", return_value=(False, False)):
-            with mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(True, False)):
+            with mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(True, {})):
                 # Cover that code!
                 cuckoo_class_instance.execute(service_request)
 
-        with mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(True, ["blah"])):
+        with mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(True, {"blah": ["blah"]})):
             # Cover that code!
             cuckoo_class_instance.execute(service_request)
 
-        with mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(True, ["blah", "blah"])):
+        with mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(True, {"blah": ["blah"], "blahblah": ["blah"]})):
             # Cover that code!
             cuckoo_class_instance.execute(service_request)
 
@@ -491,32 +477,31 @@ class TestCuckoo:
         from assemblyline.common.exceptions import RecoverableError
         from cuckoo.cuckoo import Cuckoo
 
+        hosts = []
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
         mocker.patch.object(Cuckoo, "submit")
         mocker.patch.object(Cuckoo, "_generate_report")
         mocker.patch.object(Cuckoo, "delete_task")
+        mocker.patch.object(Cuckoo, "_determine_host_to_use", return_value=host_to_use)
+        mocker.patch.object(Cuckoo, "_set_task_parameters")
 
         cuckoo_class_instance.file_name = "blah"
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance.request.file_contents = "blah"
 
-        for generate_report in [True, False]:
-            mocker.patch.object(Cuckoo, "_set_task_parameters", return_value=generate_report)
-
-            kwargs = dict()
-            file_ext = "blah"
-            parent_section = ResultSection("blah")
-            # Purely for code coverage
-            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section)
-
-        mocker.patch.object(Cuckoo, "_set_task_parameters", return_value=False)
+        kwargs = dict()
+        file_ext = "blah"
+        parent_section = ResultSection("blah")
+        # Purely for code coverage
+        cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=Exception("blah")):
             with pytest.raises(Exception):
-                cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section)
+                cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=RecoverableError("blah")):
             with pytest.raises(RecoverableError):
-                cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section)
+                cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -552,7 +537,8 @@ class TestCuckoo:
         all_statuses = [TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG,
                         SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED]
         file_content = "blah"
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         parent_section = ResultSection("blah")
 
         mocker.patch.object(Cuckoo, "submit_file", return_value=task_id)
@@ -612,7 +598,8 @@ class TestCuckoo:
         from retrying import RetryError
         from cuckoo.cuckoo import TASK_MISSING, TASK_STARTED, TASK_STARTING
 
-        cuckoo_task = CuckooTask("blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
 
         # Mocking the time.sleep method that Retry uses, since decorators are loaded and immutable following module import
@@ -660,7 +647,8 @@ class TestCuckoo:
         from assemblyline_v4_service.common.result import ResultSection
         from retrying import RetryError
 
-        cuckoo_task = CuckooTask("blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
         parent_section = ResultSection("blah")
 
@@ -728,24 +716,22 @@ class TestCuckoo:
 
     @staticmethod
     @pytest.mark.parametrize(
-        "status_code,task_id, task_ids",
+        "status_code, task_id, task_ids",
         [(200, 1, None), (200, None, None), (200, None, [1]), (404, 1, None), (500, 1, None), (None, None, None)]
     )
     def test_submit_file(status_code, task_id, task_ids, cuckoo_class_instance, mocker):
         mocker.patch('cuckoo.cuckoo.generate_random_words', return_value="blah")
 
         from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo import CUCKOO_API_SUBMIT, CuckooTimeoutException, Cuckoo, CuckooTask
+        from cuckoo.cuckoo import CuckooTimeoutException, Cuckoo, CuckooTask
         from assemblyline.common.exceptions import RecoverableError
 
         # Prerequisites before we can mock query_machines response
-        cuckoo_class_instance.auth_header = {'Authorization': cuckoo_class_instance.config['auth_header_value']}
-        cuckoo_class_instance.base_url = f"http://{cuckoo_class_instance.config['remote_host_ip']}:{cuckoo_class_instance.config['remote_host_port']}"
-        cuckoo_class_instance.submit_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_SUBMIT}"
         cuckoo_class_instance.session = Session()
 
         file_content = "submit me!"
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": {"blah": "blah"}, "remote_host_ip": "1.1.1.1", "remote_host_port": 8000}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = task_id
 
         correct_rest_response = {"task_id": task_id}
@@ -754,16 +740,16 @@ class TestCuckoo:
         with requests_mock.Mocker() as m:
             if status_code is None and task_id is None and task_ids is None:
                 with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
-                    m.post(cuckoo_class_instance.submit_url, exc=exceptions.Timeout)
+                    m.post(cuckoo_task.submit_url, exc=exceptions.Timeout)
                     with pytest.raises(CuckooTimeoutException):
                         cuckoo_task.id = 1
                         cuckoo_class_instance.submit_file(file_content, cuckoo_task)
-                    m.post(cuckoo_class_instance.submit_url, exc=ConnectionError)
+                    m.post(cuckoo_task.submit_url, exc=ConnectionError)
                     with pytest.raises(Exception):
                         cuckoo_task.id = 1
                         cuckoo_class_instance.submit_file(file_content, cuckoo_task)
             else:
-                m.post(cuckoo_class_instance.submit_url, json=correct_rest_response, status_code=status_code)
+                m.post(cuckoo_task.submit_url, json=correct_rest_response, status_code=status_code)
                 # IF the status code is 200, then we expect a dictionary
                 if status_code == 200:
                     test_result = cuckoo_class_instance.submit_file(file_content, cuckoo_task)
@@ -796,31 +782,29 @@ class TestCuckoo:
         ]
     )
     def test_query_report(task_id, fmt, params, status_code, headers, report_data, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo import Cuckoo, CUCKOO_API_QUERY_REPORT, ReportSizeExceeded, MissingCuckooReportException, \
+        from cuckoo.cuckoo import Cuckoo, ReportSizeExceeded, MissingCuckooReportException, \
             CuckooTimeoutException, CuckooTask
         from requests import Session, exceptions, ConnectionError
 
         # Prerequisites before we can mock query_report response
-        cuckoo_class_instance.auth_header = {'Authorization': cuckoo_class_instance.config['auth_header_value']}
-        cuckoo_class_instance.base_url = f"http://{cuckoo_class_instance.config['remote_host_ip']}:{cuckoo_class_instance.config['remote_host_port']}"
-        cuckoo_class_instance.query_report_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_REPORT}"
         cuckoo_class_instance.session = Session()
         cuckoo_class_instance.max_report_size = cuckoo_class_instance.config["max_report_size"]
 
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": {"blah": "blah"}, "remote_host_ip": "1.1.1.1", "remote_host_port": 8000}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = task_id
 
         with requests_mock.Mocker() as m:
             with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
                 if task_id is None and fmt is None and params is None and status_code is None and headers is None and report_data is None:
-                    m.get(cuckoo_class_instance.query_report_url % task_id + '/json', exc=exceptions.Timeout)
+                    m.get(cuckoo_task.query_report_url % task_id + '/json', exc=exceptions.Timeout)
                     with pytest.raises(CuckooTimeoutException):
                         cuckoo_class_instance.query_report(cuckoo_task, "json", params)
-                    m.get(cuckoo_class_instance.query_report_url % task_id + '/json', exc=ConnectionError)
+                    m.get(cuckoo_task.query_report_url % task_id + '/json', exc=ConnectionError)
                     with pytest.raises(Exception):
                         cuckoo_class_instance.query_report(cuckoo_task, "json", params)
                 else:
-                    m.get(cuckoo_class_instance.query_report_url % task_id + '/' + fmt, headers=headers,
+                    m.get(cuckoo_task.query_report_url % task_id + '/' + fmt, headers=headers,
                           json=report_data, status_code=status_code)
                     if int(headers["Content-Length"]) > cuckoo_class_instance.max_report_size:
                         with pytest.raises(ReportSizeExceeded):
@@ -851,28 +835,26 @@ class TestCuckoo:
     )
     def test_query_pcap(status_code, resp, cuckoo_class_instance, mocker):
         from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo import CUCKOO_API_QUERY_PCAP, CuckooTimeoutException, Cuckoo, CuckooTask
+        from cuckoo.cuckoo import CuckooTimeoutException, Cuckoo, CuckooTask
 
         # Prerequisites before we can mock query_pcap response
         task_id = 1
-        cuckoo_class_instance.auth_header = {'Authorization': cuckoo_class_instance.config['auth_header_value']}
-        cuckoo_class_instance.base_url = f"http://{cuckoo_class_instance.config['remote_host_ip']}:{cuckoo_class_instance.config['remote_host_port']}"
-        cuckoo_class_instance.query_pcap_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_PCAP}"
         cuckoo_class_instance.session = Session()
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": {"blah": "blah"}, "remote_host_ip": "1.1.1.1", "remote_host_port": 8000}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = task_id
 
         with requests_mock.Mocker() as m:
             if status_code is None and resp is None:
-                m.get(cuckoo_class_instance.query_pcap_url % task_id, exc=exceptions.Timeout)
+                m.get(cuckoo_task.query_pcap_url % task_id, exc=exceptions.Timeout)
                 with pytest.raises(CuckooTimeoutException):
                     with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
                         cuckoo_class_instance.query_pcap(cuckoo_task)
-                m.get(cuckoo_class_instance.query_pcap_url % task_id, exc=ConnectionError)
+                m.get(cuckoo_task.query_pcap_url % task_id, exc=ConnectionError)
                 with pytest.raises(Exception):
                     cuckoo_class_instance.query_pcap(cuckoo_task)
             else:
-                m.get(cuckoo_class_instance.query_pcap_url % task_id, content=resp, status_code=status_code)
+                m.get(cuckoo_task.query_pcap_url % task_id, content=resp, status_code=status_code)
                 test_result = cuckoo_class_instance.query_pcap(cuckoo_task)
                 if status_code == 200:
                     assert test_result == resp
@@ -889,29 +871,27 @@ class TestCuckoo:
     )
     def test_query_task(status_code, task_dict, cuckoo_class_instance, mocker):
         from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo import CUCKOO_API_QUERY_TASK, CuckooTimeoutException, Cuckoo, TASK_MISSING, CuckooTask
+        from cuckoo.cuckoo import CuckooTimeoutException, Cuckoo, TASK_MISSING, CuckooTask
 
         # Prerequisites before we can mock query_machines response
         task_id = 1
-        cuckoo_class_instance.auth_header = {'Authorization': cuckoo_class_instance.config['auth_header_value']}
-        cuckoo_class_instance.base_url = f"http://{cuckoo_class_instance.config['remote_host_ip']}:{cuckoo_class_instance.config['remote_host_port']}"
-        cuckoo_class_instance.query_task_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_TASK}"
         cuckoo_class_instance.session = Session()
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": {"blah": "blah"}, "remote_host_ip": "1.1.1.1", "remote_host_port": 8000}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = task_id
         correct_rest_response = {"task": task_dict}
 
         with requests_mock.Mocker() as m:
             if status_code is None and task_dict is None:
-                m.get(cuckoo_class_instance.query_task_url % task_id, exc=exceptions.Timeout)
+                m.get(cuckoo_task.query_task_url % task_id, exc=exceptions.Timeout)
                 with pytest.raises(CuckooTimeoutException):
                     with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
                         cuckoo_class_instance.query_task(cuckoo_task)
-                m.get(cuckoo_class_instance.query_task_url % task_id, exc=ConnectionError)
+                m.get(cuckoo_task.query_task_url % task_id, exc=ConnectionError)
                 with pytest.raises(Exception):
                     cuckoo_class_instance.query_task(cuckoo_task)
             else:
-                m.get(cuckoo_class_instance.query_task_url % task_id, json=correct_rest_response,
+                m.get(cuckoo_task.query_task_url % task_id, json=correct_rest_response,
                       status_code=status_code)
                 test_result = cuckoo_class_instance.query_task(cuckoo_task)
                 if status_code == 200:
@@ -935,30 +915,28 @@ class TestCuckoo:
         ]
     )
     def test_query_machine_info(status_code, resp, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo import CUCKOO_API_QUERY_MACHINE_INFO, CuckooTimeoutException, Cuckoo, CuckooTask
+        from cuckoo.cuckoo import CuckooTimeoutException, Cuckoo, CuckooTask
         from requests import Session, exceptions, ConnectionError
 
         # Prerequisites before we can mock query_report response
-        cuckoo_class_instance.auth_header = {'Authorization': cuckoo_class_instance.config['auth_header_value']}
-        cuckoo_class_instance.base_url = f"http://{cuckoo_class_instance.config['remote_host_ip']}:{cuckoo_class_instance.config['remote_host_port']}"
-        cuckoo_class_instance.query_machine_info_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_MACHINE_INFO}"
         cuckoo_class_instance.session = Session()
 
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": {"blah": "blah"}, "remote_host_ip": "1.1.1.1", "remote_host_port": 8000}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = 1
         machine_name = "blah"
 
         with requests_mock.Mocker() as m:
             if status_code is None and resp is None:
-                m.get(cuckoo_class_instance.query_machine_info_url % machine_name, exc=exceptions.Timeout)
+                m.get(cuckoo_task.query_machine_info_url % machine_name, exc=exceptions.Timeout)
                 with pytest.raises(CuckooTimeoutException):
                     with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
                         cuckoo_class_instance.query_machine_info(machine_name, cuckoo_task)
-                m.get(cuckoo_class_instance.query_machine_info_url % machine_name, exc=ConnectionError)
+                m.get(cuckoo_task.query_machine_info_url % machine_name, exc=ConnectionError)
                 with pytest.raises(Exception):
                     cuckoo_class_instance.query_machine_info(machine_name, cuckoo_task)
             else:
-                m.get(cuckoo_class_instance.query_machine_info_url % machine_name, status_code=status_code, json=resp)
+                m.get(cuckoo_task.query_machine_info_url % machine_name, status_code=status_code, json=resp)
                 test_result = cuckoo_class_instance.query_machine_info(machine_name, cuckoo_task)
                 if status_code == 200:
                     assert test_result == resp["machine"]
@@ -972,17 +950,15 @@ class TestCuckoo:
          (404, ""), (None, None)]
     )
     def test_delete_task(status_code, text, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo import CUCKOO_API_DELETE_TASK, CuckooTimeoutException, CuckooTask
+        from cuckoo.cuckoo import CuckooTimeoutException, CuckooTask
         from requests import Session, exceptions, ConnectionError
 
         # Prerequisites before we can mock query_report response
-        cuckoo_class_instance.auth_header = {'Authorization': cuckoo_class_instance.config['auth_header_value']}
-        cuckoo_class_instance.base_url = f"http://{cuckoo_class_instance.config['remote_host_ip']}:{cuckoo_class_instance.config['remote_host_port']}"
-        cuckoo_class_instance.delete_task_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_DELETE_TASK}"
         cuckoo_class_instance.session = Session()
 
         task_id = 1
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": {"blah": "blah"}, "remote_host_ip": "1.1.1.1", "remote_host_port": 8000}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = task_id
 
         # Mocking the time.sleep method that Retry uses, since decorators are loaded and immutable following module import
@@ -990,15 +966,15 @@ class TestCuckoo:
             with requests_mock.Mocker() as m:
                 if status_code is None and text is None:
                     # Confirm that the exceptions are raised and handled correctly
-                    m.get(cuckoo_class_instance.delete_task_url % task_id, exc=exceptions.Timeout)
+                    m.get(cuckoo_task.delete_task_url % task_id, exc=exceptions.Timeout)
                     with pytest.raises(CuckooTimeoutException):
                         cuckoo_class_instance.delete_task(cuckoo_task)
                     # Confirm that the exceptions are raised and handled correctly
-                    m.get(cuckoo_class_instance.delete_task_url % task_id, exc=ConnectionError)
+                    m.get(cuckoo_task.delete_task_url % task_id, exc=ConnectionError)
                     with pytest.raises(Exception):
                         cuckoo_class_instance.delete_task(cuckoo_task)
                 else:
-                    m.get(cuckoo_class_instance.delete_task_url % task_id, text=text, status_code=status_code)
+                    m.get(cuckoo_task.delete_task_url % task_id, text=text, status_code=status_code)
                     if status_code == 500 and json.loads(text).get(
                             "message") == "The task is currently being processed, cannot delete":
                         with pytest.raises(Exception):
@@ -1017,31 +993,28 @@ class TestCuckoo:
     @pytest.mark.parametrize("status_code", [200, 500, None])
     def test_query_machines(status_code, cuckoo_class_instance):
         from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo import CuckooVMBusyException, CuckooTimeoutException
-        from cuckoo.cuckoo import CUCKOO_API_QUERY_MACHINES
+        from cuckoo.cuckoo import CuckooVMBusyException, CuckooTimeoutException, CUCKOO_API_QUERY_MACHINES
 
         # Prerequisites before we can mock query_machines response
-        cuckoo_class_instance.auth_header = {'Authorization': cuckoo_class_instance.config['auth_header_value']}
-        cuckoo_class_instance.base_url = f"http://{cuckoo_class_instance.config['remote_host_ip']}:{cuckoo_class_instance.config['remote_host_port']}"
-        cuckoo_class_instance.query_machines_url = f"{cuckoo_class_instance.base_url}/{CUCKOO_API_QUERY_MACHINES}"
+        cuckoo_class_instance.hosts = [{"remote_host_ip": "1.1.1.1", "remote_host_port": 8000, "auth_header": {"blah": "blah"}}]
+        query_machines_url = f"http://{cuckoo_class_instance.hosts[0]['remote_host_ip']}:{cuckoo_class_instance.hosts[0]['remote_host_port']}/{CUCKOO_API_QUERY_MACHINES}"
         cuckoo_class_instance.session = Session()
 
-        correct_rest_response = {}
+        correct_rest_response = {"machines": ["blah"]}
         with requests_mock.Mocker() as m:
             if status_code is None:
-                m.get(cuckoo_class_instance.query_machines_url, exc=exceptions.Timeout)
+                m.get(query_machines_url, exc=exceptions.Timeout)
                 with pytest.raises(CuckooTimeoutException):
                     cuckoo_class_instance.query_machines()
-                m.get(cuckoo_class_instance.query_machines_url, exc=ConnectionError)
+                m.get(query_machines_url, exc=ConnectionError)
                 with pytest.raises(Exception):
                     cuckoo_class_instance.query_machines()
             else:
-                m.get(cuckoo_class_instance.query_machines_url, json=correct_rest_response, status_code=status_code)
+                m.get(query_machines_url, json=correct_rest_response, status_code=status_code)
                 # IF the status code is 200, then we expect a dictionary
                 if status_code == 200:
-                    correct_result = {}
-                    test_result = cuckoo_class_instance.query_machines()
-                    assert correct_result == test_result
+                    cuckoo_class_instance.query_machines()
+                    assert cuckoo_class_instance.hosts[0]["machines"] == ["blah"]
 
                 # If the status code is not 200, then we expect an error
                 elif status_code != 200:
@@ -1068,7 +1041,8 @@ class TestCuckoo:
         cuckoo_class_instance.request = ServiceRequest(task)
         parent_section = ResultSection("blah")
 
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = 1
         tar = tarfile.open(fileobj=s, mode="w:bz2", dereference=True)
         for file_path in yield_sample_file_paths():
@@ -1102,7 +1076,6 @@ class TestCuckoo:
         from assemblyline_v4_service.common.task import Task, MaxExtractedExceeded
         from assemblyline.odm.messages.task import Task as ServiceTask
         from assemblyline_v4_service.common.request import ServiceRequest
-        from cuckoo.cuckoo import CuckooTask
 
         task_id = 1
         parent_section = ResultSection("blah")
@@ -1135,7 +1108,8 @@ class TestCuckoo:
         from assemblyline_v4_service.common.request import ServiceRequest
         from cuckoo.cuckoo import Cuckoo, CuckooTask
 
-        cuckoo_task = CuckooTask("blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use)
 
         # Creating the required objects for execution
         service_task = ServiceTask(sample)
@@ -1167,9 +1141,9 @@ class TestCuckoo:
     @pytest.mark.parametrize(
         "machines",
         [
-            {"machines": []},
-            {"machines": [{"name": "blah", "platform": "blah", "ip": "blah"}]},
-            {"machines": [{"name": "blah", "platform": "blah", "ip": "blah", "tags": ["blah", "blah"]}]},
+            [],
+            [{"name": "blah", "platform": "blah", "ip": "blah"}],
+            [{"name": "blah", "platform": "blah", "ip": "blah", "tags": ["blah", "blah"]}],
         ]
     )
     def test_report_machine_info(machines, cuckoo_class_instance):
@@ -1177,14 +1151,15 @@ class TestCuckoo:
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
         from assemblyline.common.str_utils import safe_str
         machine_name = "blah"
-        cuckoo_class_instance.machines = machines
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah", "machines": machines}
+        cuckoo_class_instance.hosts = [host_to_use]
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.report = {"info": {"machine": {"manager": "blah"}}}
         parent_section = ResultSection("blah")
 
         machine_name_exists = False
         machine = None
-        for machine in machines['machines']:
+        for machine in machines:
             if machine['name'] == machine_name:
                 machine_name_exists = True
                 break
@@ -1324,7 +1299,6 @@ class TestCuckoo:
         [
             {
                 "analysis_timeout": 0,
-                "generate_report": False,
                 "dll_function": "",
                 "arguments": "",
                 "no_monitor": False,
@@ -1340,7 +1314,6 @@ class TestCuckoo:
             },
             {
                 "analysis_timeout": 1,
-                "generate_report": True,
                 "dll_function": "",
                 "arguments": "blah",
                 "no_monitor": True,
@@ -1366,7 +1339,6 @@ class TestCuckoo:
         file_ext = ""
 
         timeout = params["analysis_timeout"]
-        correct_generate_report = params["generate_report"]
         arguments = params["arguments"]
         no_monitor = params["no_monitor"]
         custom_options = params["custom_options"]
@@ -1414,9 +1386,8 @@ class TestCuckoo:
 
         cuckoo_class_instance.request = dummy_request_class(**params)
         cuckoo_class_instance.request.deep_scan = deep_scan
-        generate_report = cuckoo_class_instance._set_task_parameters(kwargs, file_ext, parent_section)
+        cuckoo_class_instance._set_task_parameters(kwargs, file_ext, parent_section)
         assert kwargs == correct_kwargs
-        assert generate_report == correct_generate_report
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1511,12 +1482,13 @@ class TestCuckoo:
         mocker.patch.object(Cuckoo, 'check_powershell', return_value=None)
         mocker.patch.object(Cuckoo, '_unpack_tar', return_value=None)
 
-        cuckoo_task = CuckooTask("blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use)
         file_ext = "blah"
         parent_section = ResultSection("blah")
 
         cuckoo_class_instance._generate_report(file_ext, cuckoo_task, parent_section)
-        # Get that coverage boi!
+        # Get that coverage!
         assert True
 
     @staticmethod
@@ -1526,7 +1498,8 @@ class TestCuckoo:
 
         tar_report = "blah"
         file_ext = "blah"
-        cuckoo_task = CuckooTask("blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use)
         parent_section = ResultSection("blah")
 
         mocker.patch.object(Cuckoo, "_add_tar_ball_as_supplementary_file")
@@ -1536,9 +1509,6 @@ class TestCuckoo:
         mocker.patch.object(Cuckoo, "_extract_hollowshunter")
         mocker.patch.object(Cuckoo, "_extract_artifacts")
         mocker.patch("cuckoo.cuckoo.tarfile.open", return_value=dummy_tar_class())
-
-        cuckoo_class_instance.cuckoo_task = cuckoo_task_class("blah")
-        cuckoo_class_instance.cuckoo_task.id = 1
 
         cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
         assert True
@@ -1555,7 +1525,9 @@ class TestCuckoo:
         tar_report_path = f"/tmp/{tar_file_name}"
         tar_report = b"blah"
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_task = CuckooTask("blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use)
+        cuckoo_task.id = 1
         cuckoo_class_instance._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
         assert cuckoo_class_instance.request.task.supplementary[0]["path"] == tar_report_path
         assert cuckoo_class_instance.request.task.supplementary[0]["name"] == tar_file_name
@@ -1564,8 +1536,6 @@ class TestCuckoo:
         cuckoo_class_instance.request.task.supplementary = []
 
         mocker.patch('builtins.open', side_effect=Exception())
-        cuckoo_class_instance.cuckoo_task = CuckooTask("blah")
-        cuckoo_class_instance.cuckoo_task.id = 1
         cuckoo_class_instance._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
 
         # Cleanup
@@ -1579,7 +1549,8 @@ class TestCuckoo:
         json_report_path = f"{cuckoo_class_instance.working_directory}/1/reports/{json_file_name}"
         tar_obj = dummy_tar_class()
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_task = CuckooTask("blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
         report_json_path = cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
         assert cuckoo_class_instance.request.task.supplementary[0]["path"] == json_report_path
@@ -1590,8 +1561,6 @@ class TestCuckoo:
         cuckoo_class_instance.request.task.supplementary = []
 
         mocker.patch.object(dummy_tar_class, 'getnames', side_effect=Exception())
-        cuckoo_task = CuckooTask("blah")
-        cuckoo_task.id = 1
         report_json_path = cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
         assert cuckoo_class_instance.request.task.supplementary == []
         assert report_json_path == ""
@@ -1615,7 +1584,8 @@ class TestCuckoo:
         mocker.patch("cuckoo.cuckoo.generate_al_result")
         mocker.patch.object(Cuckoo, "delete_task")
 
-        cuckoo_task = CuckooTask("blah", blah="blah")
+        host_to_use = {"auth_header": "blah", "remote_host_ip": "blah", "remote_host_port": "blah"}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = 1
 
         cuckoo_class_instance.query_report_url = "%s"
@@ -1802,21 +1772,23 @@ class TestCuckoo:
         assert cuckoo_class_instance._get_available_images(machines, allowed_images) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("machine_requested, machine_exists, correct_result, correct_body",
+    @pytest.mark.parametrize("machine_requested, machine_exists, hosts, correct_result, correct_body",
         [
-            (False, False, (False, False), None),
-            (False, True, (False, False), None),
-            (True, False, (True, False), 'The requested machine \'True\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current machine options for this Cuckoo deployment include [].'),
-            (True, True, (True, True), None),
+            ("", False, [{"machines": []}], (False, False), None),
+            ("", True, [{"machines": []}], (False, False), None),
+            ("True", False, [{"machines": []}], (True, False), 'The requested machine \'True\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current machine options for this Cuckoo deployment include [].'),
+            ("True", True, [{"machines": []}], (True, True), None),
+            ("True:True", True, [{"machines": []}], (True, True), None),
+            ("True:True", True, [{"remote_host_ip": "True", "machines": []}, {"remote_host_ip": "True", "machines": []}], (True, True), None),
         ]
     )
-    def test_handle_specific_machine(machine_requested, machine_exists, correct_result, correct_body, cuckoo_class_instance, dummy_result_class_instance, mocker):
+    def test_handle_specific_machine(machine_requested, machine_exists, hosts, correct_result, correct_body, cuckoo_class_instance, dummy_result_class_instance, mocker):
         from cuckoo.cuckoo import Cuckoo
         from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=machine_requested)
         mocker.patch.object(Cuckoo, "_does_machine_exist", return_value=machine_exists)
         kwargs = dict()
-        cuckoo_class_instance.machines = {"machines": []}
+        cuckoo_class_instance.hosts = hosts
         cuckoo_class_instance.file_res = dummy_result_class_instance
         assert cuckoo_class_instance._handle_specific_machine(kwargs) == correct_result
         if correct_body:
@@ -1827,15 +1799,15 @@ class TestCuckoo:
     @staticmethod
     @pytest.mark.parametrize("image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body",
         [
-            (False, False, [], [], (False, []), None),
-            (False, True, [], [], (False, []), None),
-            (True, False, [], [], (True, []), 'The requested image \'True\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-            (True, True, [], [], (True, [True]), None),
-            ("auto", False, [], [], (True, []), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-            ("auto", False, ["blah"], [], (True, []), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-            ("auto", True, ["blah"], [], (True, ["blah"]), None),
-            ("all", True, [], ["blah"], (True, ["blah"]), None),
-            ("all", False, [], [], (True, []), 'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+            (False, False, [], [], (False, {}), None),
+            (False, True, [], [], (False, {}), None),
+            ("blah", False, [], [], (True, {}), 'The requested image \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+            ("blah", True, [], [], (True, {"blah": ["blah"]}), None),
+            ("auto", False, [], [], (True, {}), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+            ("auto", False, ["blah"], [], (True, {}), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+            ("auto", True, ["blah"], [], (True, {"blah": ["blah"]}), None),
+            ("all", True, [], ["blah"], (True, {"blah": ["blah"]}), None),
+            ("all", False, [], [], (True, {}), 'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
         ]
     )
     def test_handle_specific_image(image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body, cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
@@ -1848,13 +1820,35 @@ class TestCuckoo:
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance.request.file_type = None
         cuckoo_class_instance.file_res = dummy_result_class_instance
-        cuckoo_class_instance.machines = {"machines": []}
+        cuckoo_class_instance.hosts = [{"machines": [], "remote_host_ip": "blah"}]
         cuckoo_class_instance.allowed_images = allowed_images
         assert cuckoo_class_instance._handle_specific_image() == correct_result
         if correct_body:
             correct_result_section = ResultSection(title_text='Requested Image Does Not Exist')
             correct_result_section.body = correct_body
             assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
+
+    @staticmethod
+    def test_determine_host_to_use(cuckoo_class_instance):
+        from cuckoo.cuckoo import CUCKOO_API_QUERY_HOST, CuckooTimeoutException, CuckooVMBusyException
+        from requests import Session, exceptions, ConnectionError
+        cuckoo_class_instance.session = Session()
+        hosts = [{"remote_host_ip": "1.1.1.1", "remote_host_port": 1111, "auth_header": {"blah": "blah"}}]
+        with requests_mock.Mocker() as m:
+            for host in hosts:
+                host_status_url = f"http://{host['remote_host_ip']}:{host['remote_host_port']}/{CUCKOO_API_QUERY_HOST}"
+                m.get(host_status_url, json={"tasks": {"pending": 1}})
+            test_result = cuckoo_class_instance._determine_host_to_use(hosts)
+            assert hosts[0] == test_result
+            m.get(host_status_url, exc=exceptions.Timeout)
+            with pytest.raises(CuckooTimeoutException):
+                cuckoo_class_instance._determine_host_to_use(hosts)
+            m.get(host_status_url, exc=ConnectionError)
+            with pytest.raises(Exception):
+                cuckoo_class_instance._determine_host_to_use(hosts)
+            m.get(host_status_url, status_code=404)
+            with pytest.raises(CuckooVMBusyException):
+                cuckoo_class_instance._determine_host_to_use(hosts)
 
 
 class TestCuckooResult:
