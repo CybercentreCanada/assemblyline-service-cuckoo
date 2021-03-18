@@ -1358,7 +1358,7 @@ class Cuckoo(ServiceBase):
         # This method will be used to determine the host to use for a submission
         # Key aspect that we are using to make a decision is the # of pending tasks, aka the queue size
         host_details = []
-        max_queue_size = 0
+        min_queue_size = 9999999999
         for host in hosts:
             host_status_url = f"http://{host['remote_host_ip']}:{host['remote_host_port']}/{CUCKOO_API_QUERY_HOST}"
             try:
@@ -1373,12 +1373,12 @@ class Cuckoo(ServiceBase):
                 resp_dict = resp.json()
                 queue_size = resp_dict["tasks"]["pending"]
                 host_details.append((host, queue_size))
-                if queue_size > max_queue_size:
-                    max_queue_size = queue_size
+                if queue_size < min_queue_size:
+                    min_queue_size = queue_size
 
         for host_detail in host_details:
             host, queue_size = host_detail
-            if queue_size == max_queue_size:
+            if queue_size == min_queue_size:
                 return host
 
         raise CuckooVMBusyException(f"No host available for submission between {[host['remote_host_ip'] for host in hosts]}")
