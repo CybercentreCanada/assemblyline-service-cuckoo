@@ -289,7 +289,7 @@ class TestModule:
         assert SUPPORTED_EXTENSIONS == ['bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe',
                                         'hta', 'htm', 'html', 'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf',
                                         'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt', 'pptm', 'pptx', 'ps1', 'pub',
-                                        'py', 'pyc', 'rar', 'rtf', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx']
+                                        'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx']
 
     @staticmethod
     def test_illegal_filename_chars_constant(cuckoo_class_instance):
@@ -493,7 +493,8 @@ class TestCuckoo:
         file_ext = "blah"
         parent_section = ResultSection("blah")
         # Purely for code coverage
-        cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
+        with pytest.raises(Exception):
+            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=Exception("blah")):
             with pytest.raises(Exception):
@@ -1865,10 +1866,11 @@ class TestCuckooResult:
         from re import compile
         from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex, FULL_URI as base_uri_regex, MD5_REGEX as base_md5_regex
         from cuckoo.cuckooresult import DOMAIN_REGEX, IP_REGEX, URL_REGEX, MD5_REGEX, UNIQUE_IP_LIMIT
-        assert DOMAIN_REGEX == compile(base_domain_regex)
-        assert IP_REGEX == compile(base_ip_regex)
+        assert DOMAIN_REGEX == base_domain_regex
+        assert IP_REGEX == base_ip_regex
         assert URL_REGEX == compile(base_uri_regex.lstrip("^").rstrip("$"))
-        assert MD5_REGEX == compile(base_md5_regex)
+        assert MD5_REGEX == base_md5_regex
+        assert UNIQUE_IP_LIMIT == 100
 
     @staticmethod
     @pytest.mark.parametrize("api_report, file_ext, random_ip_range, correct_body",
@@ -3297,12 +3299,10 @@ class TestSafelist:
             'Verisign OCSP': 'ocsp\.verisign\.com$',
             'Verisign Logo': 'logo\.verisign\.com$',
             'Verisign General CRL': 'crl\.verisign\.com$',
-            'Ubuntu Update': r'changelogs\.ubuntu\.com$',
-            'Ubuntu Netmon': r'daisy\.ubuntu\.com$',
-            'Ubuntu NTP': r'ntp\.ubuntu\.com$',
-            'Ubuntu DDebs': r'ddebs\.ubuntu\.com$',
-            'Azure Ubuntu': r'azure\.archive\.ubuntu\.com$',
-            'Security Ubuntu': r'security\.ubuntu\.com$',
+            'Ubuntu Update': '(changelogs|daisy|ntp|ddebs|security)\.ubuntu\.com$',
+            'Archive Ubuntu': '(azure|ca)\.archive\.ubuntu\.com$',
+            'Microsoft Store': 'displaycatalog\.md\.mp\.microsoft\.com$',
+            'Office Client': 'officeclient\.microsoft\.com$',
             'TCP Local': r'.*\.local$',
             'Unix Local': r'local$',
             'Localhost': r'localhost$',
@@ -3318,15 +3318,17 @@ class TestSafelist:
             'Thawte OCSP': r'ocsp\.thawte\.com$',
             'GlobalSign OCSP': r'ocsp[0-9]?\.globalsign\.com$',
             'GlobalSign CRL': r'crl\.globalsign\.(com|net)$',
+            'WPAD': '^wpad\..*$',
         }
         assert SAFELIST_IPS == {
             'Public DNS': r'(^1\.1\.1\.1$)|(^8\.8\.8\.8$)',
             'Local': r'(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*',
-            'Honeynet': r'169.169.169.169',
-            'Windows SSDP': r'239.255.255.250',
-            'Azure VM Version': r'169.254.169.254',
-            'Azure Telemetry': r'168.63.129.16',
+            'Honeynet': r'169\.169\.169\.169',
+            'Windows SSDP': r'239\.255\.255\.250',
+            'Azure VM Version': r'169\.254\.169\.254',
+            'Azure Telemetry': r'168\.63\.129\.16',
             'Windows IGMP': r'224\..*',
+            'Local DHCP': '255\.255\.255\.255',
         }
         assert SAFELIST_DROPPED == [
             "SharedDataEvents", "SharedDataEvents-journal", "AcroFnt09.lst", "AdobeSysFnt09.lst", "AdobeCMapFnt09.lst",
@@ -3409,9 +3411,12 @@ class TestSafelist:
             'Entrust CRL': r'https?://crl\.entrust\.net/.*',
             'GlobalSign OCSP': r'https?://ocsp[0-9]?\.globalsign\.com/.*',
             'GlobalSign CRL': r'https?://crl\.globalsign\.(com|net)/.*',
-            'Go Microsoft': '(www\.)?go\.microsoft\.com*',
+            'Go Microsoft': 'https?://(www\.)?go\.microsoft\.com*',
             'Google': f'https?://www\.google\.com',
             'W3': f'https?://www\.w3\.org/.*',
+            'Archive': 'https?://ca\.archive\.ubuntu\.com/.*',
+            'Microsoft Store': 'https?://displaycatalog\.md\.mp\.microsoft\.com*',
+            'Office Client': 'https?://officeclient\.microsoft\.com*',
         }
 
     @staticmethod
