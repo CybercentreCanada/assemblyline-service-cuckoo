@@ -8,17 +8,14 @@ from ipaddress import ip_address, ip_network
 from urllib.parse import urlparse
 
 from assemblyline.common.str_utils import safe_str
-from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, MD5_REGEX
-from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Classification, Heuristic
+from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, MD5_REGEX, URI_PATH
+from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Heuristic
 from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped, slist_check_app, slist_check_cmd
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 
 log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
-DOMAIN_REGEX = re.compile(DOMAIN_REGEX)
-IP_REGEX = re.compile(IP_REGEX)
 # Remove the part of the regex that looks to match the entire line
 URL_REGEX = re.compile(FULL_URI.lstrip("^").rstrip("$"))
-MD5_REGEX = re.compile(MD5_REGEX)
 UNIQUE_IP_LIMIT = 100
 
 
@@ -553,9 +550,11 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
                             if sig_name in ["network_http", "network_http_post"]:
                                 http_string = ioc.split()
                                 url_pieces = urlparse(http_string[1])
-                                if url_pieces.path not in skipped_paths:
+                                if url_pieces.path not in skipped_paths and re.match(FULL_URI, http_string[1]):
                                     sig_res.add_tag("network.dynamic.uri", safe_str(http_string[1]))
-                                sig_res.add_line('\tIOC: %s' % ioc)
+                                    sig_res.add_line('\tIOC: %s' % ioc)
+                                else:
+                                    fp_count += 1
                             elif sig_name == "persistence_autorun":
                                 sig_res.add_tag("dynamic.autorun_location", ioc)
                             elif sig_name in silent_iocs:
@@ -887,9 +886,10 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
             else:
                 if path not in skipped_paths:
                     http_sec.add_tag("network.dynamic.domain", host)
-                    http_sec.add_tag("network.dynamic.uri", http_call["uri"])
+                    if re.match(FULL_URI, http_call["uri"]):
+                        http_sec.add_tag("network.dynamic.uri", http_call["uri"])
             http_sec.add_tag("network.port", http_call["port"])
-            if path not in skipped_paths:
+            if path not in skipped_paths and re.match(URI_PATH, path):
                 http_sec.add_tag("network.dynamic.uri_path", path)
                 # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
                 if http_call["method"] == "GET":
