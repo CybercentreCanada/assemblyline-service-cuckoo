@@ -187,10 +187,14 @@ class Cuckoo(ServiceBase):
         self.hosts = []
 
     def start(self):
-        for host in self.config["remote_host_details"]:
+        if isinstance(self.config["remote_host_details"], str):
+            remote_host_details = json.loads(self.config["remote_host_details"])
+        else:
+            remote_host_details = self.config["remote_host_details"]
+        for host in remote_host_details:
             host["auth_header"] = {'Authorization': f"Bearer {host['api_key']}"}
             del host["api_key"]
-        self.hosts = self.config["remote_host_details"]
+        self.hosts = remote_host_details
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
         self.timeout = 120  # arbitrary number, not too big, not too small
         self.max_report_size = self.config.get('max_report_size', 275000000)
