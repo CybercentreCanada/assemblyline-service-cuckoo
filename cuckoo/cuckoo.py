@@ -64,7 +64,7 @@ WINDOWS_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in f
 SUPPORTED_EXTENSIONS = [
     'bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe', 'hta', 'htm', 'html',
     'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt',
-    'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
+    'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
 ]
 
 ILLEGAL_FILENAME_CHARS = set('<>:"/\|?*')
@@ -239,7 +239,8 @@ class Cuckoo(ServiceBase):
         relevant_images_keys = list(relevant_images.keys())
         if image_requested and len(relevant_images_keys) > 1:
             submission_threads = []
-            for relevant_image, hosts in relevant_images.items():
+            for relevant_image, host_list in relevant_images.items():
+                hosts = [host for host in self.hosts if host["remote_host_ip"] in host_list]
                 submission_specific_kwargs = kwargs.copy()
                 parent_section = ResultSection(relevant_image)
                 self.file_res.add_section(parent_section)
@@ -287,6 +288,8 @@ class Cuckoo(ServiceBase):
 
             if cuckoo_task.id:
                 self._generate_report(file_ext, cuckoo_task, parent_section)
+            else:
+                raise Exception(f"Task ID is None. File failed to be submitted to the Cuckoo nest at {host_to_use['remote_host_ip']}.")
 
         except RecoverableError:
             if cuckoo_task and cuckoo_task.id is not None:
@@ -515,7 +518,7 @@ class Cuckoo(ServiceBase):
                 elif fmt == "json" and resp.status_code == 200:
                     # We just want to confirm that the report.json has been created. We will extract it later
                     # when we call for the tar ball
-                    pass
+                    resp.close()
                 # TODO: if fmt is acceptable and resp.status_code is 200, then we should write. not if else. if else, then raise?
                 else:
                     for chunk in resp.iter_content(chunk_size=8192):

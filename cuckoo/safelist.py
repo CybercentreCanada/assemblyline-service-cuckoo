@@ -55,6 +55,9 @@ SAFELIST_DOMAINS = {
     # Omniroot
     'Omniroot': r'ocsp\.omniroot\.com$',
 
+    # WPAD
+    'WPAD': r'^wpad\..*$',
+
     # Microsoft
     'Schemas': r'schemas\.microsoft\.com$',
     'Microsoft IPv4To6': r'.*\.?teredo\.ipv6\.microsoft\.com$',
@@ -85,6 +88,8 @@ SAFELIST_DOMAINS = {
     'Internet Explorer': r'iecvlist\.microsoft\.com$',
     'Internet Explorer Too': r'r20swj13mr\.microsoft\.com$',
     'Microsoft Edge': r'(([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\.msedge\.net$',
+    'Microsoft Store': r'displaycatalog\.md\.mp\.microsoft\.com$',
+    'Office Client': r'officeclient\.microsoft\.com$',
 
     # Windows
     'Windows Settings': r'settings-win\.data\.microsoft\.com$',
@@ -131,12 +136,8 @@ SAFELIST_DOMAINS = {
     'Verisign General CRL': 'crl\.verisign\.com$',
 
     # Ubuntu
-    'Ubuntu Update': r'changelogs\.ubuntu\.com$',
-    'Ubuntu Netmon': r'daisy\.ubuntu\.com$',
-    'Ubuntu NTP': r'ntp\.ubuntu\.com$',
-    'Ubuntu DDebs': r'ddebs\.ubuntu\.com$',
-    'Azure Ubuntu': r'azure\.archive\.ubuntu\.com$',
-    'Security Ubuntu': r'security\.ubuntu\.com$',
+    'Ubuntu Update': r'(changelogs|daisy|ntp|ddebs|security)\.ubuntu\.com$',
+    'Archive Ubuntu': r'(azure|ca)\.archive\.ubuntu\.com$',
 
     # Local
     'TCP Local': r'.*\.local$',
@@ -178,11 +179,12 @@ SAFELIST_DOMAINS = {
 SAFELIST_IPS = {
     'Public DNS': r'(^1\.1\.1\.1$)|(^8\.8\.8\.8$)',
     'Local': r'(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*',
-    'Honeynet': r'169.169.169.169',
-    'Windows SSDP': r'239.255.255.250',
-    'Azure VM Version': r'169.254.169.254',
-    'Azure Telemetry': r'168.63.129.16',
+    'Honeynet': r'169\.169\.169\.169',
+    'Windows SSDP': r'239\.255\.255\.250',
+    'Azure VM Version': r'169\.254\.169\.254',
+    'Azure Telemetry': r'168\.63\.129\.16',
     'Windows IGMP': r'224\..*',
+    'Local DHCP': r'255\.255\.255\.255',
 }
 
 SAFELIST_DROPPED = [
@@ -360,10 +362,15 @@ SAFELIST_URIS = {
 
     # Microsoft
     'Schemas': r'https?://schemas\.microsoft\.com(?:$|/.*)',
-    'Go Microsoft': r'(www\.)?go\.microsoft\.com*',
+    'Go Microsoft': r'https?://(www\.)?go\.microsoft\.com*',
+    'Microsoft Store': r'https?://displaycatalog\.md\.mp\.microsoft\.com*',
+    'Office Client': r'https?://officeclient\.microsoft\.com*',
 
     # Windows
     'Update': r'https?://ctldl\.windowsupdate\.com/.*',
+
+    # Ubuntu
+    'Archive': r'https?://ca\.archive\.ubuntu\.com/.*',
 
     # Office
     '2010 Word': r'https?://schemas\.microsoft\.com/office/word/2010/(wordml|wordprocessingCanvas|wordprocessingInk|wordprocessingGroup|wordprocessingDrawing)',
