@@ -17,10 +17,10 @@ is_external: false
 licence_count: 0
 
 config:
-  # Cuckoo host specifications
-  remote_host_ip: 127.0.0.1
-  remote_host_port: 8090
-  auth_header_value: Bearer sample_api_token
+  # Cuckoo host specifications. A list of JSONs that each follow the format {"remote_host_ip": "<ip>", "remote_host_port": <integer port>, "api_key": "<api_key>"}
+  remote_host_details: [
+    {"remote_host_ip": "127.0.0.1", "remote_host_port": 8090, "api_key": "sample_api_token"},
+  ]
 
   # Strings representing images for specific submission to a VM pool of a certain image. See README.
   allowed_images: []
@@ -45,11 +45,6 @@ submission_params:
     name: analysis_timeout
     type: int
     value: 0
-
-  - default: true
-    name: generate_report
-    type: bool
-    value: true
 
   - default: ""
     name: dll_function
@@ -116,7 +111,8 @@ submission_params:
     type: int
     value: 134217728
 
-  # Used for development, when you want to send a file to a specific machine
+  # Used for development, when you want to send a file to a specific machine on a specific host. String format is
+  # "<host-ip>:<machine-name>" if more than one host exists. If only one host exists, then format can be either "<host-ip>:<machine-name>" or "<machine-name>"
   - default: ""
     name: specific_machine
     type: str

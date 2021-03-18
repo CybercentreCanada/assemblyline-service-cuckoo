@@ -43,6 +43,7 @@ CUCKOO_API_QUERY_REPORT = "tasks/report/%s"
 CUCKOO_API_QUERY_PCAP = "pcap/get/%s"
 CUCKOO_API_QUERY_MACHINES = "machines/list"
 CUCKOO_API_QUERY_MACHINE_INFO = "machines/view/%s"
+CUCKOO_API_QUERY_HOST = "cuckoo/status"
 
 CUCKOO_POLL_DELAY = 5
 GUEST_VM_START_TIMEOUT = 360  # Give the VM at least 6 minutes to start up
@@ -136,13 +137,22 @@ def _retry_on_none(result):
 
 
 class CuckooTask(dict):
-    def __init__(self, sample, **kwargs):
+    def __init__(self, sample, host_details, **kwargs):
         super(CuckooTask, self).__init__()
         self.file = sample
         self.update(kwargs)
         self.id = None
         self.report = None
         self.errors = []
+        self.auth_header = host_details["auth_header"]
+        self.base_url = f"http://{host_details['remote_host_ip']}:{host_details['remote_host_port']}"
+        self.submit_url = f"{self.base_url}/{CUCKOO_API_SUBMIT}"
+        self.query_task_url = f"{self.base_url}/{CUCKOO_API_QUERY_TASK}"
+        self.delete_task_url = f"{self.base_url}/{CUCKOO_API_DELETE_TASK}"
+        self.query_report_url = f"{self.base_url}/{CUCKOO_API_QUERY_REPORT}"
+        self.query_pcap_url = f"{self.base_url}/{CUCKOO_API_QUERY_PCAP}"
+        self.query_machines_url = f"{self.base_url}/{CUCKOO_API_QUERY_MACHINES}"
+        self.query_machine_info_url = f"{self.base_url}/{CUCKOO_API_QUERY_MACHINE_INFO}"
 
 
 class SubmissionThread(Thread):
@@ -167,37 +177,20 @@ class Cuckoo(ServiceBase):
     def __init__(self, config=None):
         super(Cuckoo, self).__init__(config)
         self.file_name = None
-        self.base_url = None
-        self.submit_url = None
-        self.query_task_url = None
-        self.delete_task_url = None
-        self.query_report_url = None
-        self.query_pcap_url = None
-        self.query_machines_url = None
-        self.query_machine_info_url = None
         self.file_res = None
         self.request = None
         self.session = None
         self.ssdeep_match_pct = None
-        self.machines = None
-        self.auth_header = None
         self.timeout = None
         self.max_report_size = None
         self.allowed_images = []
-
-    # TODO: this should be after the execute() method, and these urls should be stored (or not stored at all) in a different way
-    def set_urls(self):
-        self.base_url = f"http://{self.config['remote_host_ip']}:{self.config['remote_host_port']}"
-        self.submit_url = f"{self.base_url}/{CUCKOO_API_SUBMIT}"
-        self.query_task_url = f"{self.base_url}/{CUCKOO_API_QUERY_TASK}"
-        self.delete_task_url = f"{self.base_url}/{CUCKOO_API_DELETE_TASK}"
-        self.query_report_url = f"{self.base_url}/{CUCKOO_API_QUERY_REPORT}"
-        self.query_pcap_url = f"{self.base_url}/{CUCKOO_API_QUERY_PCAP}"
-        self.query_machines_url = f"{self.base_url}/{CUCKOO_API_QUERY_MACHINES}"
-        self.query_machine_info_url = f"{self.base_url}/{CUCKOO_API_QUERY_MACHINE_INFO}"
+        self.hosts = []
 
     def start(self):
-        self.auth_header = {'Authorization': self.config['auth_header_value']}
+        for host in self.config["remote_host_details"]:
+            host["auth_header"] = {'Authorization': f"Bearer {host['api_key']}"}
+            del host["api_key"]
+        self.hosts = self.config["remote_host_details"]
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
         self.timeout = 120  # arbitrary number, not too big, not too small
         self.max_report_size = self.config.get('max_report_size', 275000000)
@@ -208,7 +201,6 @@ class Cuckoo(ServiceBase):
     def execute(self, request: ServiceRequest):
         self.request = request
         self.session = requests.Session()
-        self.set_urls()
         request.result = Result()
 
         # Setting working directory for request
@@ -228,7 +220,7 @@ class Cuckoo(ServiceBase):
             # File extension or bust!
             return
 
-        self.machines = self.query_machines()
+        self.query_machines()
 
         machine_requested, machine_exists = self._handle_specific_machine(kwargs)
         if machine_requested and not machine_exists:
@@ -244,46 +236,56 @@ class Cuckoo(ServiceBase):
                 return
 
         # If an image has been requested, and there is more than 1 image to send the file to, then use threads
-        if image_requested and len(relevant_images) > 1:
+        relevant_images_keys = list(relevant_images.keys())
+        if image_requested and len(relevant_images_keys) > 1:
             submission_threads = []
-            for relevant_image in relevant_images:
+            for relevant_image, hosts in relevant_images.items():
                 submission_specific_kwargs = kwargs.copy()
                 parent_section = ResultSection(relevant_image)
                 self.file_res.add_section(parent_section)
                 submission_specific_kwargs["tags"] = relevant_image
-                thr = SubmissionThread(target=self._general_flow, args=(submission_specific_kwargs, file_ext, parent_section))
+                thr = SubmissionThread(target=self._general_flow, args=(submission_specific_kwargs, file_ext, parent_section, hosts))
                 submission_threads.append(thr)
                 thr.start()
 
             for thread in submission_threads:
                 thread.join()
-        elif image_requested and len(relevant_images) == 1:
-            parent_section = ResultSection(relevant_images[0])
+        elif image_requested and len(relevant_images_keys) == 1:
+            parent_section = ResultSection(relevant_images_keys[0])
             self.file_res.add_section(parent_section)
-            kwargs["tags"] = relevant_images[0]
-            self._general_flow(kwargs, file_ext, parent_section)
+            kwargs["tags"] = relevant_images_keys[0]
+            hosts = [host for host in self.hosts if host["remote_host_ip"] in relevant_images[relevant_images_keys[0]]]
+            self._general_flow(kwargs, file_ext, parent_section, hosts)
         else:
             if kwargs.get("machine"):
+                specific_machine = self._safely_get_param("specific_machine")
+                if ":" in specific_machine:
+                    host_ip, _ = specific_machine.split(":")
+                    hosts = [host for host in self.hosts if host["remote_host_ip"] == host_ip]
+                else:
+                    hosts = self.hosts
                 parent_section = ResultSection(f"File submitted to {kwargs['machine']}")
             else:
                 parent_section = ResultSection("File submitted to the first machine available")
+                hosts = self.hosts
             self.file_res.add_section(parent_section)
-            self._general_flow(kwargs, file_ext, parent_section)
+            self._general_flow(kwargs, file_ext, parent_section, hosts)
 
         # Remove empty sections
         for section in self.file_res.sections[:]:
             if not section.subsections:
                 self.file_res.sections.remove(section)
 
-    def _general_flow(self, kwargs, file_ext, parent_section):
-        generate_report = self._set_task_parameters(kwargs, file_ext, parent_section)
+    def _general_flow(self, kwargs: dict, file_ext: str, parent_section: ResultSection, hosts: list):
+        self._set_task_parameters(kwargs, file_ext, parent_section)
 
-        cuckoo_task = CuckooTask(self.file_name, **kwargs)
+        host_to_use = self._determine_host_to_use(hosts)
+        cuckoo_task = CuckooTask(self.file_name, host_to_use, **kwargs)
 
         try:
             self.submit(self.request.file_contents, cuckoo_task, parent_section)
 
-            if cuckoo_task.id and generate_report is True:
+            if cuckoo_task.id:
                 self._generate_report(file_ext, cuckoo_task, parent_section)
 
         except RecoverableError:
@@ -463,14 +465,14 @@ class Cuckoo(ServiceBase):
         return None
 
     def submit_file(self, file_content, cuckoo_task):
-        self.log.debug(f"Submitting file: {cuckoo_task.file} to server {self.submit_url}")
+        self.log.debug(f"Submitting file: {cuckoo_task.file} to server {cuckoo_task.submit_url}")
         files = {"file": (cuckoo_task.file, file_content)}
         try:
-            resp = self.session.post(self.submit_url, files=files, data=cuckoo_task, headers=self.auth_header, timeout=self.timeout)
+            resp = self.session.post(cuckoo_task.submit_url, files=files, data=cuckoo_task, headers=cuckoo_task.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
-            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while "
+            raise CuckooTimeoutException(f"Cuckoo ({cuckoo_task.base_url}) timed out after {self.timeout}s while "
                                          f"trying to submit a file {cuckoo_task.file}")
         except requests.ConnectionError:
             if cuckoo_task and cuckoo_task.id is not None:
@@ -505,8 +507,8 @@ class Cuckoo(ServiceBase):
         try:
             # There are edge cases that require us to stream the report to disk
             temp_report = tempfile.SpooledTemporaryFile()
-            with self.session.get(self.query_report_url % cuckoo_task.id + '/' + fmt, params=params or {},
-                                  headers=self.auth_header, timeout=self.timeout, stream=True) as resp:
+            with self.session.get(cuckoo_task.query_report_url % cuckoo_task.id + '/' + fmt, params=params or {},
+                                  headers=cuckoo_task.auth_header, timeout=self.timeout, stream=True) as resp:
                 if int(resp.headers["Content-Length"]) > self.max_report_size:
                     # BAIL, TOO BIG and there is a strong chance it will crash the Docker container
                     resp.status_code = 413  # Request Entity Too Large
@@ -521,7 +523,7 @@ class Cuckoo(ServiceBase):
         except requests.exceptions.Timeout:
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
-            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to "
+            raise CuckooTimeoutException(f"Cuckoo ({cuckoo_task.base_url}) timed out after {self.timeout}s while trying to "
                                          f"query the report for task {cuckoo_task.id}")
         except requests.ConnectionError:
             raise Exception(f"Unable to reach the Cuckoo nest while trying to query the report for task {cuckoo_task.id}")
@@ -567,11 +569,11 @@ class Cuckoo(ServiceBase):
     #@retry(wait_fixed=2000)
     def query_pcap(self, cuckoo_task):
         try:
-            resp = self.session.get(self.query_pcap_url % cuckoo_task.id, headers=self.auth_header, timeout=self.timeout)
+            resp = self.session.get(cuckoo_task.query_pcap_url % cuckoo_task.id, headers=cuckoo_task.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
-            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to query the pcap for task %s" % cuckoo_task.id)
+            raise CuckooTimeoutException(f"Cuckoo ({cuckoo_task.base_url}) timed out after {self.timeout}s while trying to query the pcap for task %s" % cuckoo_task.id)
         except requests.ConnectionError:
             raise Exception("Unable to reach the Cuckoo nest while trying to query the pcap for task %s" % cuckoo_task.id)
         pcap_data = None
@@ -587,11 +589,11 @@ class Cuckoo(ServiceBase):
     # TODO: Validate that task_id is not None
     def query_task(self, cuckoo_task):
         try:
-            resp = self.session.get(self.query_task_url % cuckoo_task.id, headers=self.auth_header, timeout=self.timeout)
+            resp = self.session.get(cuckoo_task.query_task_url % cuckoo_task.id, headers=cuckoo_task.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
-            raise CuckooTimeoutException(f"({self.base_url}) timed out after {self.timeout}s while "
+            raise CuckooTimeoutException(f"({cuckoo_task.base_url}) timed out after {self.timeout}s while "
                                          f"trying to query the task {cuckoo_task.id}")
         except requests.ConnectionError:
             raise Exception(f"Unable to reach the Cuckoo nest while trying to query the task {cuckoo_task.id}")
@@ -616,11 +618,11 @@ class Cuckoo(ServiceBase):
     # @retry(wait_fixed=2000)
     def query_machine_info(self, machine_name, cuckoo_task):
         try:
-            resp = self.session.get(self.query_machine_info_url % machine_name, headers=self.auth_header, timeout=self.timeout)
+            resp = self.session.get(cuckoo_task.query_machine_info_url % machine_name, headers=cuckoo_task.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
-            raise CuckooTimeoutException(f"({self.base_url}) timed out after {self.timeout}s while trying to query "
+            raise CuckooTimeoutException(f"({cuckoo_task.base_url}) timed out after {self.timeout}s while trying to query "
                                          f"machine info for {machine_name}")
         except requests.ConnectionError:
             raise Exception(f"Unable to reach the Cuckoo nest while trying to query machine info for {machine_name}")
@@ -636,9 +638,9 @@ class Cuckoo(ServiceBase):
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000, stop_max_attempt_number=2)
     def delete_task(self, cuckoo_task):
         try:
-            resp = self.session.get(self.delete_task_url % cuckoo_task.id, headers=self.auth_header, timeout=self.timeout)
+            resp = self.session.get(cuckoo_task.delete_task_url % cuckoo_task.id, headers=cuckoo_task.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
-            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while "
+            raise CuckooTimeoutException(f"Cuckoo ({cuckoo_task.base_url}) timed out after {self.timeout}s while "
                                          f"trying to delete task {cuckoo_task.id}")
         except requests.ConnectionError:
             raise Exception(f"Unable to reach the Cuckoo nest while trying to delete task {cuckoo_task.id}")
@@ -651,22 +653,23 @@ class Cuckoo(ServiceBase):
             if cuckoo_task:
                 cuckoo_task.id = None
 
-    # TODO: Validate params required for request, figure out how to test two requests exceptions
     def query_machines(self):
-        self.log.debug(f"Querying for available analysis machines using url {self.query_machines_url}..")
-        try:
-            resp = self.session.get(self.query_machines_url, headers=self.auth_header)
-        except requests.exceptions.Timeout:
-            raise CuckooTimeoutException(f"Cuckoo ({self.base_url}) timed out after {self.timeout}s while trying to query machines")
-        except requests.ConnectionError:
-            raise Exception(f"Unable to reach the Cuckoo nest ({self.base_url}) while trying to query machines. "
-                            f"Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside "
-                            f"of Assemblyline first before running the service.")
-        if resp.status_code != 200:
-            self.log.error(f"Failed to query machines: {resp.status_code}")
-            raise CuckooVMBusyException(f"Failed to query machines: {resp.status_code}")
-        resp_dict = dict(resp.json())
-        return resp_dict
+        for host in self.hosts:
+            query_machines_url = f"http://{host['remote_host_ip']}:{host['remote_host_port']}/{CUCKOO_API_QUERY_MACHINES}"
+            self.log.debug(f"Querying for available analysis machines using url {query_machines_url}..")
+            try:
+                resp = self.session.get(query_machines_url, headers=host["auth_header"])
+            except requests.exceptions.Timeout:
+                raise CuckooTimeoutException(f"{query_machines_url} timed out after {self.timeout}s while trying to query machines")
+            except requests.ConnectionError:
+                raise Exception(f"Unable to reach the Cuckoo nest ({host['remote_host_ip']}) while trying to query machines. "
+                                f"Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside "
+                                f"of Assemblyline first before running the service.")
+            if resp.status_code != 200:
+                self.log.error(f"Failed to query machines: {resp.status_code}")
+                raise CuckooVMBusyException(f"Failed to query machines: {resp.status_code}")
+            resp_json = resp.json()
+            host["machines"] = resp_json["machines"]
 
     def check_dropped(self, request, cuckoo_task, parent_section):
         dropped_tar_bytes = self.query_report(cuckoo_task, 'dropped')
@@ -767,23 +770,23 @@ class Cuckoo(ServiceBase):
     def report_machine_info(self, machine_name, cuckoo_task, parent_section):
         machine_name_exists = False
         machine = None
-        for machine in self.machines['machines']:
+        machines = [machine for host in self.hosts for machine in host["machines"]]
+        for machine in machines:
             if machine['name'] == machine_name:
                 machine_name_exists = True
                 break
 
         if not machine_name_exists:
-            self.log.warning(f"Machine {machine_name} does not exist in {self.machines}")
+            self.log.warning(f"Machine {machine_name} does not exist in {machines}")
             return
 
         manager = cuckoo_task.report["info"]["machine"]["manager"]
-        # TODO: bad code in terms of machine
-        platform = str(machine["platform"])
+        platform = machine["platform"]
         body = {
             'Name': machine_name,
             'Manager': manager,
             'Platform': platform,
-            'IP': str(machine['ip']),
+            'IP': machine['ip'],
             'Tags': []}
         for tag in machine.get('tags', []):
             body['Tags'].append(safe_str(tag).replace('_', ' '))
@@ -863,15 +866,11 @@ class Cuckoo(ServiceBase):
                           f"not be identified. Tag extension: {tag_extension}")
             return None
 
-        # TODO: this doesn't make sense, why are we checking the sha256?
         # Rename based on the found extension.
-        if file_ext and self.request.sha256:
-            self.file_name = original_ext[0] + file_ext
-            return file_ext
-        else:
-            return None
+        self.file_name = original_ext[0] + file_ext
+        return file_ext
 
-    def _set_task_parameters(self, kwargs, file_ext, parent_section) -> bool:
+    def _set_task_parameters(self, kwargs, file_ext, parent_section):
         # the 'options' kwargs
         task_options = []
 
@@ -884,7 +883,6 @@ class Cuckoo(ServiceBase):
         else:
             kwargs['enforce_timeout'] = False
             kwargs['timeout'] = ANALYSIS_TIMEOUT
-        generate_report = self.request.get_param("generate_report")
         arguments = self.request.get_param("arguments")
         # dump_memory = request.get_param("dump_memory")  # TODO: cloud Cuckoo implementation does not have dump_memory functionality
         no_monitor = self.request.get_param("no_monitor")
@@ -938,7 +936,13 @@ class Cuckoo(ServiceBase):
         if package:
             kwargs["package"] = package
 
-        return generate_report
+    def _set_hosts_that_contain_image(self, specific_image: str, relevant_images: dict):
+        host_list = []
+        for host in self.hosts:
+            if self._does_image_exist(specific_image, host["machines"], self.allowed_images):
+                host_list.append(host["remote_host_ip"])
+        if host_list:
+            relevant_images[specific_image] = host_list
 
     @staticmethod
     def _does_image_exist(specific_image: str, machines: list, allowed_images: list) -> bool:
@@ -1114,7 +1118,7 @@ class Cuckoo(ServiceBase):
             self.log.exception(f"Failed to decode the json: {str(e)}")
             raise e
         except Exception:
-            url = self.query_report_url % cuckoo_task.id + '/' + "all"
+            url = cuckoo_task.query_report_url % cuckoo_task.id + '/' + "all"
             raise Exception(f"Exception converting extracted cuckoo report into json from tar ball: "
                             f"report url: {url}, file_name: {self.file_name}")
         try:
@@ -1300,8 +1304,18 @@ class Cuckoo(ServiceBase):
 
         specific_machine = self._safely_get_param("specific_machine")
         if specific_machine:
+            machine_names = []
+            if len(self.hosts) > 1:
+                host_ip, specific_machine = specific_machine.split(":")
+                for host in self.hosts:
+                    if host_ip == host["remote_host_ip"]:
+                        machine_names = [machine["name"] for machine in host["machines"]]
+                        break
+            else:
+                if ":" in specific_machine:
+                    _, specific_machine = specific_machine.split(":")
+                machine_names = [machine["name"] for machine in self.hosts[0]["machines"]]
             machine_requested = True
-            machine_names = [machine["name"] for machine in self.machines["machines"]]
             if self._does_machine_exist(specific_machine, machine_names):
                 machine_exists = True
                 kwargs["machine"] = specific_machine
@@ -1315,31 +1329,59 @@ class Cuckoo(ServiceBase):
 
     def _handle_specific_image(self) -> (bool, list):
         image_requested = False
-        relevant_images = []
+        # This will follow the format {"<image-tag>": ["<host-ip>"]}
+        relevant_images = {}
 
         specific_image = self._safely_get_param("specific_image")
         if specific_image:
             image_requested = True
             if specific_image == RELEVANT_IMAGE_TAG:
-                relevant_images = self._determine_relevant_images(self.request.file_type, self.allowed_images)
-                for relevant_image in relevant_images[:]:
-                    if not self._does_image_exist(relevant_image, self.machines["machines"], self.allowed_images):
-                        relevant_images.remove(relevant_image)
+                relevant_images_list = self._determine_relevant_images(self.request.file_type, self.allowed_images)
+                for relevant_image in relevant_images_list:
+                    self._set_hosts_that_contain_image(relevant_image, relevant_images)
             elif specific_image == ALL_IMAGES_TAG:
                 for image in self.allowed_images:
-                    if self._does_image_exist(image, self.machines["machines"], self.allowed_images):
-                        relevant_images.append(image)
+                    self._set_hosts_that_contain_image(image, relevant_images)
             else:
-                if self._does_image_exist(specific_image, self.machines["machines"], self.allowed_images):
-                    relevant_images.append(specific_image)
+                self._set_hosts_that_contain_image(specific_image, relevant_images)
             if not relevant_images:
-                available_images = self._get_available_images(self.machines["machines"], self.allowed_images)
+                all_machines = [machine for host in self.hosts for machine in host["machines"]]
+                available_images = self._get_available_images(all_machines, self.allowed_images)
                 no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
                 no_image_sec.body = f"The requested image '{specific_image}' is currently unavailable.\n\n" \
                                     f"General Information:\nAt the moment, the current image options for this " \
                                     f"Cuckoo deployment include {available_images}."
                 self.file_res.add_section(no_image_sec)
         return image_requested, relevant_images
+
+    def _determine_host_to_use(self, hosts) -> dict:
+        # This method will be used to determine the host to use for a submission
+        # Key aspect that we are using to make a decision is the # of pending tasks, aka the queue size
+        host_details = []
+        max_queue_size = 0
+        for host in hosts:
+            host_status_url = f"http://{host['remote_host_ip']}:{host['remote_host_port']}/{CUCKOO_API_QUERY_HOST}"
+            try:
+                resp = self.session.get(host_status_url, headers=host["auth_header"], timeout=self.timeout)
+            except requests.exceptions.Timeout:
+                raise CuckooTimeoutException(f"{host_status_url} timed out after {self.timeout}s")
+            except requests.ConnectionError:
+                raise Exception(f"Unable to reach the Cuckoo nest while trying to {host_status_url}")
+            if resp.status_code != 200:
+                self.log.error(f"Failed to {host_status_url}. Status code: {resp.status_code}")
+            else:
+                resp_dict = resp.json()
+                queue_size = resp_dict["tasks"]["pending"]
+                host_details.append((host, queue_size))
+                if queue_size > max_queue_size:
+                    max_queue_size = queue_size
+
+        for host_detail in host_details:
+            host, queue_size = host_detail
+            if queue_size == max_queue_size:
+                return host
+
+        raise CuckooVMBusyException(f"No host available for submission between {[host['remote_host_ip'] for host in hosts]}")
 
 
 def generate_random_words(num_words):
