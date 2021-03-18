@@ -229,14 +229,15 @@ class Cuckoo(ServiceBase):
 
         image_requested = False
         relevant_images = []
+        relevant_image_keys = []
         if not (machine_requested and machine_exists):
             image_requested, relevant_images = self._handle_specific_image()
             if image_requested and not relevant_images:
                 # If specific image, then we are "specific_image" or bust!
                 return
+            relevant_images_keys = list(relevant_images.keys())
 
         # If an image has been requested, and there is more than 1 image to send the file to, then use threads
-        relevant_images_keys = list(relevant_images.keys())
         if image_requested and len(relevant_images_keys) > 1:
             submission_threads = []
             for relevant_image, host_list in relevant_images.items():
@@ -659,7 +660,7 @@ class Cuckoo(ServiceBase):
     def query_machines(self):
         for host in self.hosts:
             query_machines_url = f"http://{host['remote_host_ip']}:{host['remote_host_port']}/{CUCKOO_API_QUERY_MACHINES}"
-            self.log.debug(f"Querying for available analysis machines using url {query_machines_url}..")
+            self.log.debug(f"Querying for analysis machines using url {query_machines_url}..")
             try:
                 resp = self.session.get(query_machines_url, headers=host["auth_header"])
             except requests.exceptions.Timeout:
@@ -1309,7 +1310,12 @@ class Cuckoo(ServiceBase):
         if specific_machine:
             machine_names = []
             if len(self.hosts) > 1:
-                host_ip, specific_machine = specific_machine.split(":")
+                try:
+                    host_ip, specific_machine = specific_machine.split(":")
+                except ValueError:
+                    self.log.error("If more than one host is specified in the service_manifest.yml, "
+                                   "then the specific_machine value must match the format '<host-ip>:<machine-name>'")
+                    raise
                 for host in self.hosts:
                     if host_ip == host["remote_host_ip"]:
                         machine_names = [machine["name"] for machine in host["machines"]]
