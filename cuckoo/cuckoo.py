@@ -113,6 +113,11 @@ class ReportSizeExceeded(Exception):
     pass
 
 
+class CuckooHostsUnavailable(Exception):
+    """Exception class for when the service cannot reach the hosts"""
+    pass
+
+
 def _exclude_chain_ex(ex):
     """Use this with some of the @retry decorators to only retry if the exception
     ISN'T a RecoverableException or NonRecoverableException"""
@@ -229,7 +234,7 @@ class Cuckoo(ServiceBase):
 
         image_requested = False
         relevant_images = []
-        relevant_image_keys = []
+        relevant_images_keys = []
         if not (machine_requested and machine_exists):
             image_requested, relevant_images = self._handle_specific_image()
             if image_requested and not relevant_images:
@@ -658,9 +663,9 @@ class Cuckoo(ServiceBase):
                 cuckoo_task.id = None
 
     def query_machines(self):
+        number_of_unavailable_hosts = 0
         for host in self.hosts:
             query_machines_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_MACHINES}"
-            self.log.debug(f"Querying for analysis machines using url {query_machines_url}..")
             try:
                 resp = self.session.get(query_machines_url, headers=host["auth_header"])
             except requests.exceptions.Timeout:
@@ -670,10 +675,13 @@ class Cuckoo(ServiceBase):
                                 f"Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside "
                                 f"of Assemblyline first before running the service.")
             if resp.status_code != 200:
-                self.log.error(f"Failed to query machines: {resp.status_code}")
-                raise CuckooVMBusyException(f"Failed to query machines: {resp.status_code}")
+                self.log.error(f"Failed to query machines for {host['ip']}:{host['port']}. Status code: {resp.status_code}")
+                number_of_unavailable_hosts += 1
             resp_json = resp.json()
             host["machines"] = resp_json["machines"]
+
+        if number_of_unavailable_hosts == len(self.hosts):
+            raise CuckooHostsUnavailable(f"Failed to reach any of the hosts at {[host['ip'] + ':' + str(host['port']) for host in self.hosts]}")
 
     def check_dropped(self, request, cuckoo_task, parent_section):
         dropped_tar_bytes = self.query_report(cuckoo_task, 'dropped')
