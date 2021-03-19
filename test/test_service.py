@@ -994,7 +994,7 @@ class TestCuckoo:
     @pytest.mark.parametrize("status_code", [200, 500, None])
     def test_query_machines(status_code, cuckoo_class_instance):
         from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo import CuckooVMBusyException, CuckooTimeoutException, CUCKOO_API_QUERY_MACHINES
+        from cuckoo.cuckoo import CuckooHostsUnavailable, CuckooTimeoutException, CUCKOO_API_QUERY_MACHINES
 
         # Prerequisites before we can mock query_machines response
         cuckoo_class_instance.hosts = [{"ip": "1.1.1.1", "port": 8000, "auth_header": {"blah": "blah"}}]
@@ -1019,7 +1019,7 @@ class TestCuckoo:
 
                 # If the status code is not 200, then we expect an error
                 elif status_code != 200:
-                    with pytest.raises(CuckooVMBusyException):
+                    with pytest.raises(CuckooHostsUnavailable):
                         cuckoo_class_instance.query_machines()
 
     @staticmethod
