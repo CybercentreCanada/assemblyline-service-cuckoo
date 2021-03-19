@@ -1176,7 +1176,7 @@ class Cuckoo(ServiceBase):
             "shots": "Screenshots from Cuckoo analysis",
             # "polarproxy": "HTTPS .pcap from PolarProxy capture",
             "sum": "All traffic from TCPDUMP and PolarProxy",
-            "sysmon": "Sysmon Logging Captured",
+            "sysmon/sysmon.evtx": "Sysmon Logging Captured",
             "supplementary": "Supplementary File"
         }
 
@@ -1191,7 +1191,7 @@ class Cuckoo(ServiceBase):
                 destination_file_path = os.path.join(task_dir, f)
                 tar_obj.extract(f, path=task_dir)
                 file_name = f"{task_id}_{f}"
-                if key == "sysmon":
+                if key == "sysmon/sysmon.evtx":
                     destination_file_path, f = self._encode_sysmon_file(destination_file_path, f)
                     self.log.debug(f"Adding Sysmon log file for task ID {task_id}: {file_name}")
                     try:
