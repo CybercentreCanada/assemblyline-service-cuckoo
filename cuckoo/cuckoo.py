@@ -664,12 +664,14 @@ class Cuckoo(ServiceBase):
 
     def query_machines(self):
         number_of_unavailable_hosts = 0
-        for host in self.hosts:
+        for host in self.hosts[:]:
             query_machines_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_MACHINES}"
             try:
-                resp = self.session.get(query_machines_url, headers=host["auth_header"])
+                resp = self.session.get(query_machines_url, headers=host["auth_header"], timeout=self.timeout)
             except requests.exceptions.Timeout:
-                raise CuckooTimeoutException(f"{query_machines_url} timed out after {self.timeout}s while trying to query machines")
+                self.log.error(f"{query_machines_url} timed out after {self.timeout}s while trying to query machines")
+                number_of_unavailable_hosts += 1
+                continue
             except requests.ConnectionError:
                 raise Exception(f"Unable to reach the Cuckoo nest ({host['ip']}) while trying to query machines. "
                                 f"Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside "
@@ -677,8 +679,10 @@ class Cuckoo(ServiceBase):
             if resp.status_code != 200:
                 self.log.error(f"Failed to query machines for {host['ip']}:{host['port']}. Status code: {resp.status_code}")
                 number_of_unavailable_hosts += 1
-            resp_json = resp.json()
-            host["machines"] = resp_json["machines"]
+                self.hosts.remove(host)
+            else:
+                resp_json = resp.json()
+                host["machines"] = resp_json["machines"]
 
         if number_of_unavailable_hosts == len(self.hosts):
             raise CuckooHostsUnavailable(f"Failed to reach any of the hosts at {[host['ip'] + ':' + str(host['port']) for host in self.hosts]}")
