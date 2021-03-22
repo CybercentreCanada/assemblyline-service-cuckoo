@@ -664,6 +664,7 @@ class Cuckoo(ServiceBase):
 
     def query_machines(self):
         number_of_unavailable_hosts = 0
+        number_of_hosts = len(self.hosts)
         for host in self.hosts[:]:
             query_machines_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_MACHINES}"
             try:
@@ -684,7 +685,7 @@ class Cuckoo(ServiceBase):
                 resp_json = resp.json()
                 host["machines"] = resp_json["machines"]
 
-        if number_of_unavailable_hosts == len(self.hosts):
+        if number_of_unavailable_hosts == number_of_hosts:
             raise CuckooHostsUnavailable(f"Failed to reach any of the hosts at {[host['ip'] + ':' + str(host['port']) for host in self.hosts]}")
 
     def check_dropped(self, request, cuckoo_task, parent_section):

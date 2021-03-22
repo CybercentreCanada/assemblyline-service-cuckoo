@@ -1005,7 +1005,7 @@ class TestCuckoo:
         with requests_mock.Mocker() as m:
             if status_code is None:
                 m.get(query_machines_url, exc=exceptions.Timeout)
-                with pytest.raises(CuckooTimeoutException):
+                with pytest.raises(CuckooHostsUnavailable):
                     cuckoo_class_instance.query_machines()
                 m.get(query_machines_url, exc=ConnectionError)
                 with pytest.raises(Exception):
