@@ -665,7 +665,8 @@ class Cuckoo(ServiceBase):
     def query_machines(self):
         number_of_unavailable_hosts = 0
         number_of_hosts = len(self.hosts)
-        for host in self.hosts[:]:
+        hosts_copy = self.hosts[:]
+        for host in hosts_copy:
             query_machines_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_MACHINES}"
             try:
                 resp = self.session.get(query_machines_url, headers=host["auth_header"], timeout=self.timeout)
@@ -686,7 +687,7 @@ class Cuckoo(ServiceBase):
                 host["machines"] = resp_json["machines"]
 
         if number_of_unavailable_hosts == number_of_hosts:
-            raise CuckooHostsUnavailable(f"Failed to reach any of the hosts at {[host['ip'] + ':' + str(host['port']) for host in self.hosts]}")
+            raise CuckooHostsUnavailable(f"Failed to reach any of the hosts at {[host['ip'] + ':' + str(host['port']) for host in hosts_copy]}")
 
     def check_dropped(self, request, cuckoo_task, parent_section):
         dropped_tar_bytes = self.query_report(cuckoo_task, 'dropped')
