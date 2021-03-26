@@ -1981,8 +1981,8 @@ class TestCuckooResult:
     @staticmethod
     @pytest.mark.parametrize("events, is_process_martian, correct_body",
         [
-            ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], False, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "children": []}]'),
-            ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], True, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "children": []}]'),
+            ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], False, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
+            ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], True, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
             ([], False, None),
         ]
     )
@@ -2121,7 +2121,7 @@ class TestCuckooResult:
         correct_result_section.add_tag("dynamic.process.command_line", "blah")
         correct_result_section.add_tag("dynamic.process.file_name", "blah")
 
-        correct_result_section.body = '[{"timestamp": 1, "process_name": "blah", "details": {"protocol": "blah", "domain": "blah", "dest_ip": "blah", "dest_port": 1}}, {"timestamp": 2, "process_name": "blah", "details": {"command_line": "blah"}}]'
+        correct_result_section.body = '[{"timestamp": "1970-01-01 00:00:01.000", "process_name": "blah (1)", "details": {"protocol": "blah", "domain": "blah", "dest_ip": "blah", "dest_port": 1}}, {"timestamp": "1970-01-01 00:00:02.000", "process_name": "blah (1)", "details": {"command_line": "blah"}}]'
         correct_result_section.body_format = BODY_FORMAT.TABLE
 
         process_all_events(al_result, events)

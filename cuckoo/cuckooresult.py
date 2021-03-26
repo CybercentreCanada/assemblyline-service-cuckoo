@@ -824,8 +824,8 @@ def process_all_events(parent_result_section: ResultSection, events: List[dict] 
     for event in so.sorted_events:
         if isinstance(event, NetworkEvent):
             event_table.append({
-                "timestamp": event.timestamp,
-                "process_name": event.image,
+                "timestamp": datetime.datetime.fromtimestamp(event.timestamp).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                "process_name": f"{event.image} ({event.pid})",
                 "details": {
                     "protocol": event.protocol,
                     "domain": event.domain,
@@ -837,8 +837,8 @@ def process_all_events(parent_result_section: ResultSection, events: List[dict] 
             events_section.add_tag("dynamic.process.command_line", event.command_line)
             events_section.add_tag("dynamic.process.file_name", event.image)
             event_table.append({
-                "timestamp": event.timestamp,
-                "process_name": event.image,
+                "timestamp": datetime.datetime.fromtimestamp(event.timestamp).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                "process_name": f"{event.image} ({event.pid})",
                 "details": {
                     "command_line": event.command_line,
                 }
