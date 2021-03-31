@@ -1587,7 +1587,7 @@ class TestCuckoo:
             cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
 
         mocker.patch("cuckoo.cuckoo.generate_al_result", side_effect=Exception("blah"))
-        with pytest.raises(CuckooProcessingException):
+        with pytest.raises(Exception):
             cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
 
         # Exception tests for json.loads
