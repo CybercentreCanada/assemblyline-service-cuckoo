@@ -621,22 +621,25 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
             if src:
                 src_port = network_call["sport"]
             network_flow = {
-                "timestamp": datetime.datetime.fromtimestamp(network_call["time"]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                "timestamp": network_call["time"],
                 "protocol": protocol,
                 "src_ip": src,
                 "src_port": src_port,
-                "dom": None,
+                "domain": None,
                 "dest_ip": dst,
                 "dest_port": network_call["dport"],
-                "process_name": None
+                "image": None,
+                "pid": None,
+                # "guid": None
             }
             if dst in resolved_ips.keys():
-                network_flow["dom"] = resolved_ips[dst]["domain"]
+                network_flow["domain"] = resolved_ips[dst]["domain"]
                 process_name = resolved_ips[dst].get("process_name")
                 if process_name:
-                    network_flow["process_name"] = process_name + " (" + str(resolved_ips[dst]["process_id"]) + ")"  # this may or may now exist in DNS
+                    network_flow["image"] = process_name  # this may or may now exist in DNS
+                    network_flow["pid"] = resolved_ips[dst]["process_id"]
                 else:
-                    network_flow["process_name"] = process_name
+                    network_flow["image"] = process_name
             network_flows_table.append(network_flow)
 
     protocol_res_sec = None
@@ -649,7 +652,7 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
     copy_of_network_table = network_flows_table[:]
     for network_flow in copy_of_network_table:
         src = network_flow["src_ip"]
-        dom = network_flow["dom"]
+        dom = network_flow["domain"]
         dest_ip = network_flow["dest_ip"]
         # if domain is safelisted
         if dom and slist_check_domain(dom):
@@ -662,7 +665,7 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
             network_flows_table.remove(network_flow)
         else:
             # if process name does not exist from DNS, then find processes that made connection calls
-            if network_flow["process_name"] is None:
+            if network_flow["image"] is None:
                 for process in process_map:
                     process_details = process_map[process]
                     for network_call in process_details["network_calls"]:
@@ -670,7 +673,7 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
                         if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or
                                               connect.get("hostname", "") == network_flow["dest_ip"]) and \
                                 connect["port"] == network_flow["dest_port"]:
-                            network_flow["process_name"] = process_details["name"] + " (" + str(process) + ")"
+                            network_flow["image"] = process_details["name"] + " (" + str(process) + ")"
 
             # Setting heuristics for appropriate sections
             if dns_res_sec is not None and dns_res_sec.heuristic is None:
@@ -683,7 +686,7 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
             # If the record has not been removed then it should be tagged for protocol, domain, ip, and port
             protocol_res_sec.add_tag("network.protocol", network_flow["protocol"])
 
-            domain = network_flow["dom"]
+            domain = network_flow["domain"]
             if domain is not None and not contains_safelisted_value(domain):  # and not is_ip(domain):
                 dns_res_sec.add_tag("network.dynamic.domain", domain)
 

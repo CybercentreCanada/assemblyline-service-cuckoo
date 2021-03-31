@@ -300,9 +300,10 @@ class Cuckoo(ServiceBase):
                 self.delete_task(cuckoo_task)
             raise
         except Exception as e:
+            self.log.error(repr(e))
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
-            raise Exception(e)
+            raise
 
         # Delete and exit
         if cuckoo_task and cuckoo_task.id is not None:
@@ -1182,7 +1183,7 @@ class Cuckoo(ServiceBase):
             self.log.error(f"Error generating report: {repr(e)}")
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
-            raise CuckooProcessingException(f"Unable to generate report for task due to: {repr(e)}")
+            raise
 
     def _extract_console_output(self, task_id):
         # Check if there are any files consisting of console output from detonation
