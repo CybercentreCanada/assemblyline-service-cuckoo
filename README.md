@@ -51,7 +51,6 @@ The following options are available for submissions to the Cuckoo service ([offi
 
 * **analysis_timeout** - Maximum amount of time to wait for analysis to complete. NB: The analysis job may complete faster
 than this if the process being monitored exits.
-* **generate_report** - Generate a full report (cuckoo_report.tar.gz) and attach it as a supplementary file
 * **dll_function** - Specify the DLL function to run on the DLL.
 * **arguments** - command line arguments to pass to the sample being analyzed
 * **custom_options** - Custom options to pass to the cuckoo submission. Same as the `--options` command line option [here](https://cuckoo.sh/docs/usage/submit.html)
