@@ -1223,10 +1223,7 @@ class Cuckoo(ServiceBase):
                 tar_obj.extract(f, path=task_dir)
                 file_name = f"{task_id}_{f}"
                 to_be_extracted = False
-                if key == "sysmon/sysmon.evtx":
-                    destination_file_path, f = self._encode_sysmon_file(destination_file_path, f)
-                    to_be_extracted = True
-                elif key not in ["supplementary", "shots"]:
+                if key not in ["supplementary", "shots"]:
                     to_be_extracted = True
 
                 artefact = {

@@ -1633,9 +1633,7 @@ class TestCuckoo:
             correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{key}"
             dummy_tar_member = dummy_tar_member_class(key, 1)
             tar_obj.members.append(dummy_tar_member)
-            if key == "sysmon/sysmon.evtx":
-                correct_artefact_list.append({"path": sysmon_path, "name": f"{task_id}_{sysmon_name}", "description": val, "to_be_extracted": True})
-            elif key in ["supplementary", "shots"]:
+            if key in ["supplementary", "shots"]:
                 correct_artefact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": False})
             else:
                 correct_artefact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": True})
