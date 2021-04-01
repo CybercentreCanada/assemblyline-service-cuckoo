@@ -630,7 +630,7 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
                 "dest_port": network_call["dport"],
                 "image": None,
                 "pid": None,
-                # "guid": None
+                "guid": None
             }
             if dst in resolved_ips.keys():
                 network_flow["domain"] = resolved_ips[dst]["domain"]
