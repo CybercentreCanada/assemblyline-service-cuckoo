@@ -1037,6 +1037,7 @@ class TestCuckoo:
         task = Task(service_task)
         cuckoo_class_instance._task = task
         cuckoo_class_instance.request = ServiceRequest(task)
+        cuckoo_class_instance.artefact_list = []
         parent_section = ResultSection("blah")
 
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
@@ -1075,6 +1076,7 @@ class TestCuckoo:
         task = Task(service_task)
         cuckoo_class_instance._task = task
         cuckoo_class_instance.request = ServiceRequest(task)
+        cuckoo_class_instance.artefact_list = []
 
         cuckoo_class_instance.check_powershell(task_id, parent_section)
         assert cuckoo_class_instance.artefact_list[0]["name"] == "1_powershell_logging.ps1"
@@ -1099,6 +1101,7 @@ class TestCuckoo:
         task = Task(service_task)
         cuckoo_class_instance._task = task
         cuckoo_class_instance.request = ServiceRequest(task)
+        cuckoo_class_instance.artefact_list = []
 
         parent_section = ResultSection("blah")
         correct_subsection = ResultSection("blah")
@@ -1505,6 +1508,7 @@ class TestCuckoo:
         tar_report = b"blah"
         cuckoo_class_instance.request = dummy_request_class()
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
+        cuckoo_class_instance.artefact_list = []
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
         cuckoo_class_instance._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
@@ -1529,6 +1533,7 @@ class TestCuckoo:
         json_report_path = f"{cuckoo_class_instance.working_directory}/1/reports/{json_file_name}"
         tar_obj = dummy_tar_class()
         cuckoo_class_instance.request = dummy_request_class()
+        cuckoo_class_instance.artefact_list = []
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
@@ -1603,6 +1608,7 @@ class TestCuckoo:
     def test_extract_console_output(cuckoo_class_instance, dummy_request_class, mocker):
         mocker.patch('os.path.exists', return_value=True)
         cuckoo_class_instance.request = dummy_request_class()
+        cuckoo_class_instance.artefact_list = []
         task_id = 1
         cuckoo_class_instance._extract_console_output(task_id)
         assert cuckoo_class_instance.artefact_list[0]["path"] == "/tmp/1_console_output.txt"
@@ -1629,6 +1635,7 @@ class TestCuckoo:
         correct_artefact_list = []
         tar_obj = dummy_tar_class()
         task_id = 1
+        cuckoo_class_instance.artefact_list = []
         for key, val in tarball_file_map.items():
             correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{key}"
             dummy_tar_member = dummy_tar_member_class(key, 1)
@@ -1660,6 +1667,7 @@ class TestCuckoo:
         cuckoo_class_instance.request = dummy_request_class()
         tar_obj = dummy_tar_class()
         task_id = 1
+        cuckoo_class_instance.artefact_list = []
         cuckoo_class_instance._extract_hollowshunter(tar_obj, task_id)
 
         assert cuckoo_class_instance.artefact_list[0] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_dump_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_dump_report.json', "description": 'HollowsHunter report (json)', "to_be_extracted": False}

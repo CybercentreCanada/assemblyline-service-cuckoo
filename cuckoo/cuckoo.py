@@ -186,7 +186,7 @@ class Cuckoo(ServiceBase):
         self.timeout = None
         self.max_report_size = None
         self.allowed_images = []
-        self.artefact_list = []
+        self.artefact_list = None
         self.hosts = []
 
     def start(self):
@@ -204,6 +204,7 @@ class Cuckoo(ServiceBase):
     def execute(self, request: ServiceRequest):
         self.request = request
         self.session = requests.Session()
+        self.artefact_list = []
         request.result = Result()
 
         # Setting working directory for request
@@ -275,6 +276,9 @@ class Cuckoo(ServiceBase):
                 hosts = self.hosts
             self.file_res.add_section(parent_section)
             self._general_flow(kwargs, file_ext, parent_section, hosts)
+
+        # Adding sandbox artefacts using the SandboxOntology helper class
+        SandboxOntology.handle_artefacts(self.artefact_list, self.request)
 
         # Remove empty sections
         for section in self.file_res.sections[:]:
@@ -1072,9 +1076,6 @@ class Cuckoo(ServiceBase):
         self.check_dropped(cuckoo_task, parent_section)
         self.check_powershell(cuckoo_task.id, parent_section)
         # self.check_pcap(cuckoo_task)
-
-        # Adding sandbox artefacts using the SandboxOntology helper class
-        SandboxOntology.handle_artefacts(self.artefact_list, self.request)
 
     def _unpack_tar(self, tar_report, file_ext, cuckoo_task, parent_section):
         tar_file_name = f"{cuckoo_task.id}_cuckoo_report.tar.gz"
