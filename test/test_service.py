@@ -386,6 +386,9 @@ class TestCuckoo:
         assert cuckoo_class_instance.ssdeep_match_pct is None
         assert cuckoo_class_instance.timeout is None
         assert cuckoo_class_instance.max_report_size is None
+        assert cuckoo_class_instance.allowed_images == []
+        assert cuckoo_class_instance.artefact_list is None
+        assert cuckoo_class_instance.hosts == []
 
     @staticmethod
     def test_start(cuckoo_class_instance):
