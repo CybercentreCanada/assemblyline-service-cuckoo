@@ -255,7 +255,7 @@ class TestModule:
         from cuckoo.cuckoo import CUCKOO_POLL_DELAY, GUEST_VM_START_TIMEOUT, REPORT_GENERATION_TIMEOUT
         assert CUCKOO_POLL_DELAY == 5
         assert GUEST_VM_START_TIMEOUT == 360
-        assert REPORT_GENERATION_TIMEOUT == 300
+        assert REPORT_GENERATION_TIMEOUT == 420
 
     @staticmethod
     def test_analysis_constants(cuckoo_class_instance):
@@ -482,6 +482,7 @@ class TestCuckoo:
         mocker.patch.object(Cuckoo, "submit")
         mocker.patch.object(Cuckoo, "_generate_report")
         mocker.patch.object(Cuckoo, "delete_task")
+        mocker.patch.object(Cuckoo, "_is_invalid_analysis_timeout", return_value=False)
         mocker.patch.object(Cuckoo, "_determine_host_to_use", return_value=host_to_use)
         mocker.patch.object(Cuckoo, "_set_task_parameters")
 
@@ -1805,6 +1806,24 @@ class TestCuckoo:
             m.get(host_status_url, status_code=404)
             with pytest.raises(CuckooVMBusyException):
                 cuckoo_class_instance._determine_host_to_use(hosts)
+
+    @staticmethod
+    def test_is_invalid_analysis_timeout(cuckoo_class_instance, dummy_request_class):
+        from assemblyline_v4_service.common.result import ResultSection
+        cuckoo_class_instance.request = dummy_request_class(analysis_timeout=150)
+        parent_section = ResultSection("blah")
+        assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is False
+
+        parent_section = ResultSection("blah")
+        correct_subsection = ResultSection("Invalid Analysis Timeout Requested",
+                                            body="The analysis timeout requested was 900, which exceeds the time that "
+                                                 "Assemblyline will run the service (800). Choose an analysis timeout "
+                                                 "value < 800 and submit the file again.")
+        cuckoo_class_instance.request = dummy_request_class(analysis_timeout=900)
+        assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is True
+        assert check_section_equality(correct_subsection, parent_section.subsections[0])
+
+
 
 
 class TestCuckooResult:

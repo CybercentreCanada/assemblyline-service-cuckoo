@@ -44,7 +44,7 @@ CUCKOO_API_QUERY_HOST = "cuckoo/status"
 
 CUCKOO_POLL_DELAY = 5
 GUEST_VM_START_TIMEOUT = 360  # Give the VM at least 6 minutes to start up
-REPORT_GENERATION_TIMEOUT = 300  # Give the analysis at least 5 minutes to generate the report
+REPORT_GENERATION_TIMEOUT = 420  # Give the analysis at least 7 minutes to generate the report
 ANALYSIS_TIMEOUT = 150
 
 LINUX_IMAGE_PREFIX = "ub"
@@ -286,6 +286,9 @@ class Cuckoo(ServiceBase):
                 self.file_res.sections.remove(section)
 
     def _general_flow(self, kwargs: dict, file_ext: str, parent_section: ResultSection, hosts: list):
+        if self._is_invalid_analysis_timeout(parent_section):
+            return
+
         self._set_task_parameters(kwargs, file_ext, parent_section)
 
         host_to_use = self._determine_host_to_use(hosts)
@@ -1385,6 +1388,19 @@ class Cuckoo(ServiceBase):
                 return host
 
         raise CuckooVMBusyException(f"No host available for submission between {[host['ip'] for host in hosts]}")
+
+    def _is_invalid_analysis_timeout(self, parent_section: ResultSection) -> bool:
+        requested_timeout = self.request.get_param("analysis_timeout")
+        service_timeout = self.service_attributes["timeout"]
+        if requested_timeout > service_timeout:
+            invalid_timeout_res_sec = ResultSection("Invalid Analysis Timeout Requested",
+                                                    body=f"The analysis timeout requested was {requested_timeout}, "
+                                                         f"which exceeds the time that Assemblyline will run the "
+                                                         f"service ({service_timeout}). Choose an analysis timeout "
+                                                         f"value < {service_timeout} and submit the file again.")
+            parent_section.add_subsection(invalid_timeout_res_sec)
+            return True
+        return False
 
 
 def generate_random_words(num_words):
