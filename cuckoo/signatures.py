@@ -733,10 +733,20 @@ CUCKOO_DROPPED_SIGNATURES = [
 
 
 def get_category_id(sig: str) -> int:
+    """
+    This method returns the category ID for a given signature name
+    :param sig: given signature name
+    :return: the category ID
+    """
     category = CUCKOO_SIGNATURES.get(sig, "unknown")
     metadata = CUCKOO_SIGNATURE_CATEGORIES.get(category, {})
     return metadata.get("id", 9999)
 
 
 def get_signature_category(sig: str) -> str:
+    """
+    This method returns the category for a given signature name
+    :param sig: given signature name
+    :return: The category name
+    """
     return CUCKOO_SIGNATURES.get(sig, "unknown")

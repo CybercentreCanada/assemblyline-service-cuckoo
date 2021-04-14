@@ -1,6 +1,6 @@
 # Safelist of data that may come up in analysis that we should ignore.
-
-import re
+from typing import Optional, Dict
+from re import match
 
 SAFELIST_APPLICATIONS = {
     'Cuckoo1': 'C:\\\\tmp.+\\\\bin\\\\.+',
@@ -419,42 +419,83 @@ SAFELIST_URIS = {
 }
 
 
-def match(data, sigs):
-    for name, sig in sigs.items():
-        if re.match(sig.lower(), data.lower()):
-            return name
-    return None
+def is_match(data: str, safelist: Dict[str, str]) -> bool:
+    """
+    This method determines if a given value matches any value in a given safelist
+    :param data: a given value
+    :param safelist: a map of safelisted values and their details
+    :return: a boolean representing if a given value matches any value in a given safelist
+    """
+    for name, sig in safelist.items():
+        if match(sig.lower(), data.lower()):
+            return True
+    return False
 
 
-def slist_check_app(application):
-    return match(application, SAFELIST_APPLICATIONS)
+def slist_check_app(application: str) -> bool:
+    """
+    This method determines if a given application matches any safelisted applications
+    :param application: a given application
+    :return: a boolean representing if a given application matches any safelisted applications
+    """
+    return is_match(application, SAFELIST_APPLICATIONS)
 
 
-def slist_check_cmd(command):
-    return match(command, SAFELIST_COMMANDS)
+def slist_check_cmd(command: str) -> bool:
+    """
+    This method determines if a given command matches any safelisted commands
+    :param command: a given command
+    :return: a boolean representing if a given command matches any safelisted commands
+    """
+    return is_match(command, SAFELIST_COMMANDS)
 
 
-def slist_check_domain(domain):
-    return match(domain, SAFELIST_DOMAINS)
+def slist_check_domain(domain: str) -> bool:
+    """
+    This method determines if a given domain matches any safelisted domains
+    :param domain: a given domain
+    :return: a boolean representing if a given domain matches any safelisted domains
+    """
+    return is_match(domain, SAFELIST_DOMAINS)
 
 
-def slist_check_ip(ip):
-    return match(ip, SAFELIST_IPS)
+def slist_check_ip(ip: str) -> bool:
+    """
+    This method determines if a given IP matches any safelisted IPs
+    :param ip: a given IP
+    :return: a boolean representing if a given IP matches any safelisted IPs
+    """
+    return is_match(ip, SAFELIST_IPS)
 
 
-def slist_check_uri(uri):
-    return match(uri, SAFELIST_URIS)
+def slist_check_uri(uri: str) -> bool:
+    """
+    This method determines if a given URI matches any safelisted URIs
+    :param uri: a given URI
+    :return: a boolean representing if a given URI matches any safelisted URIs
+    """
+    return is_match(uri, SAFELIST_URIS)
 
 
-def slist_check_dropped(name):
-    if name in SAFELIST_DROPPED:
+def slist_check_dropped(dropped_name: str) -> bool:
+    """
+    This method determines if a given file matches any safelisted files
+    :param dropped_name: a given file
+    :return: a boolean representing if a given file matches any safelisted files
+    """
+    if dropped_name in SAFELIST_DROPPED:
         return True
-    elif match(name, SAFELIST_COMMON_PATTERNS):
+    elif is_match(dropped_name, SAFELIST_COMMON_PATTERNS):
         return True
     return False
 
 
-def slist_check_hash(filehash):
-    if filehash in SAFELIST_HASHES:
+def slist_check_hash(file_hash: str) -> bool:
+    """
+    This method determines if a given file_hash matches any safelisted file hashes
+    :param file_hash: a given file
+    :return: a boolean representing if a given file_hash matches any safelisted file hashes
+    """
+    if file_hash in SAFELIST_HASHES:
         return True
     return False

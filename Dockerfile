@@ -1,6 +1,6 @@
 FROM cccs/assemblyline-v4-service-base:latest
 
-ENV SERVICE_PATH cuckoo.cuckoo.Cuckoo
+ENV SERVICE_PATH cuckoo.cuckoo_main.Cuckoo
 
 USER root
 
