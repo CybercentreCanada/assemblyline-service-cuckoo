@@ -5,24 +5,44 @@ import os
 import json
 from ipaddress import ip_address, ip_network
 from urllib.parse import urlparse
-from typing import List
+from typing import List, Dict, Any, Optional, Set
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, MD5_REGEX, URI_PATH
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, NetworkEvent, ProcessEvent
-from assemblyline_v4_service.common.result import Result, BODY_FORMAT, ResultSection, Heuristic
-from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped, slist_check_app, slist_check_cmd
+from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, Heuristic
+from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped, \
+    slist_check_app, slist_check_cmd
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 
 log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
 # Remove the part of the regex that looks to match the entire line
 URL_REGEX = re.compile(FULL_URI.lstrip("^").rstrip("$"))
 UNIQUE_IP_LIMIT = 100
+SCORE_TRANSLATION = {
+    1: 10,
+    2: 100,
+    3: 250,
+    4: 500,
+    5: 750,
+    6: 1000,
+    7: 1000,
+    8: 1000  # dead_host signature
+}
 
 
 # noinspection PyBroadException
 # TODO: break this into smaller methods
-def generate_al_result(api_report, al_result, file_ext, random_ip_range):
+def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, file_ext: str,
+                       random_ip_range: str) -> None:
+    """
+    This method is the main logic that generates the Assemblyline report from the Cuckoo analysis report
+    :param api_report: The JSON report for the Cuckoo analysis
+    :param al_result: The overarching result section detailing what image this task is being sent to
+    :param file_ext: The file extension of the file to be submitted
+    :param random_ip_range: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
+    :return: None
+    """
     log.debug("Generating AL Result.")
     info = api_report.get('info')
     # TODO: should be it's own method
@@ -50,13 +70,13 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
                                  body=json.dumps(body))
         al_result.add_subsection(info_res)
 
-    debug = api_report.get('debug', {})
-    sigs = api_report.get('signatures', [])
-    network = api_report.get('network', {})
-    behaviour = api_report.get('behavior', {})  # Note conversion from American to Canadian spelling
-    curtain = api_report.get("curtain", {})
-    sysmon = api_report.get("sysmon", {})
-    hollowshunter = api_report.get("hollowshunter", {})
+    debug: Dict[str, Any] = api_report.get('debug', {})
+    sigs: List[Dict[str, Any]] = api_report.get('signatures', [])
+    network: Dict[str, Any] = api_report.get('network', {})
+    behaviour: Dict[str, Any] = api_report.get('behavior', {})  # Note conversion from American to Canadian spelling
+    curtain: Dict[str, Any] = api_report.get("curtain", {})
+    sysmon: List[Dict[str, Any]] = api_report.get("sysmon", [])
+    hollowshunter: Dict[str, Any] = api_report.get("hollowshunter", {})
 
     if debug:
         process_debug(debug, al_result)
@@ -64,16 +84,17 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     process_map = get_process_map(behaviour.get("processes", {}))
 
     # These events will be made up of process and network events and will be sent to the SandboxOntology helper class
-    events = []
+    events: List[Dict[str, Any]] = []
     # This will contain a list of dictionaries representing a signature, to be sent to the SandboxOntology helper class
-    signatures = []
+    signatures: List[Dict[str, Any]] = []
 
     is_process_martian = False
     if sigs:
         target = api_report.get("target", {})
         target_file = target.get("file", {})
         target_filename = target_file.get("name")
-        is_process_martian = process_signatures(sigs, al_result, random_ip_range, target_filename, process_map, info["id"], signatures)
+        is_process_martian = process_signatures(sigs, al_result, random_ip_range, target_filename, process_map,
+                                                info["id"], signatures)
 
     if sysmon:
         convert_sysmon_processes(sysmon, events)
@@ -86,7 +107,8 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
             log.debug(
                 "It doesn't look like this file executed (unsupported file type?)")
             noexec_res = ResultSection(title_text="Notes")
-            noexec_res.add_line(f"No program available to execute a file with the following extension: {safe_str(file_ext)}")
+            noexec_res.add_line(f"No program available to execute a file with the following "
+                                f"extension: {safe_str(file_ext)}")
             al_result.add_subsection(noexec_res)
         else:
             # Otherwise, moving on!
@@ -113,7 +135,13 @@ def generate_al_result(api_report, al_result, file_ext, random_ip_range):
     log.debug("AL result generation completed!")
 
 
-def process_debug(debug, al_result):
+def process_debug(debug: Dict[str, Any], parent_result_section: ResultSection) -> None:
+    """
+    This method processes the debug section of the Cuckoo report, adding anything noteworthy to the Assemblyline report
+    :param debug: The JSON of the debug section from the report generated by Cuckoo
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :return: None
+    """
     error_res = ResultSection(title_text='Analysis Errors')
     for error in debug['errors']:
         err_str = str(error)
@@ -129,25 +157,34 @@ def process_debug(debug, al_result):
             error_res.add_line(split_log[1].lstrip().rstrip("\n"))
 
     # Including error that is not reported conveniently by Cuckoo for whatever reason
-    previous_log = None
-    for log in debug['cuckoo']:
-        if log == "\n":  # There is always a newline character following a stacktrace
+    previous_log: Optional[str] = None
+    for log_line in debug['cuckoo']:
+        if log_line == "\n":  # There is always a newline character following a stacktrace
             error_res.add_line(previous_log.rstrip("\n"))
-        elif "ERROR:" in log:  # Hoping that Cuckoo logs as ERROR
-            split_log = log.split("ERROR:")
+        elif "ERROR:" in log_line:  # Hoping that Cuckoo logs as ERROR
+            split_log = log_line.split("ERROR:")
             error_res.add_line(split_log[1].lstrip().rstrip("\n"))
-        previous_log = log
+        previous_log = log_line
 
     if error_res.body and len(error_res.body) > 0:
-        al_result.add_subsection(error_res)
+        parent_result_section.add_subsection(error_res)
 
 
-def process_behaviour(behaviour: dict, parent_result_section: ResultSection, events: List[dict] = None):
+def process_behaviour(behaviour: Dict[str, Any], parent_result_section: ResultSection,
+                      events: Optional[List[Dict[str, Any]]] = None) -> None:
+    """
+    This method processes the behaviour section of the Cuckoo report, adding anything noteworthy to the
+    Assemblyline report
+    :param behaviour: The JSON of the behaviour section from the report generated by Cuckoo
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param events: A list of events that occurred during the analysis of the task
+    :return: None
+    """
     if events is None:
-        events = []
+        events: List[Dict[str, Any]] = []
     # Gathering apistats to determine if calls have been limited
     apistats = behaviour.get("apistats", {})
-    api_sums = {}
+    api_sums: Dict[str, int] = {}
     if apistats:
         api_sums = get_process_api_sums(apistats)
 
@@ -161,10 +198,19 @@ def process_behaviour(behaviour: dict, parent_result_section: ResultSection, eve
         build_limited_calls_section(parent_result_section, processes, api_sums)
 
 
-def build_limited_calls_section(parent_result_section: ResultSection, processes: List[dict] = None, api_sums: dict = {}):
+def build_limited_calls_section(parent_result_section: ResultSection, processes: Optional[List[Dict[str, Any]]] = None,
+                                api_sums: Dict[str, int] = {}) -> None:
+    """
+    This method creates a ResultSection detailing if any process calls have been excluded from the supplementary JSON
+    report
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param processes: A list of processes observed during the analysis of the task
+    :param api_sums: A map of process calls and how many times those process calls were made
+    :return: None
+    """
     if processes is None:
-        processes = []
-    limited_calls_table = []
+        processes: List[Dict[str, Any]] = []
+    limited_calls_table: List[Dict[str, Any]] = []
     for process in processes:
         pid = str(process["pid"])
 
@@ -186,15 +232,20 @@ def build_limited_calls_section(parent_result_section: ResultSection, processes:
         limited_calls_section.body_format = BODY_FORMAT.TABLE
         descr = f"For the sake of service processing, the number of the following " \
                 f"API calls has been reduced in the report.json. The cause of large volumes of specific API calls is " \
-                f"most likely related to the anti-sandbox technique known as API Hammering. For more information, look " \
-                f"to the api_hammering signature."
+                f"most likely related to the anti-sandbox technique known as API Hammering. For more information, " \
+                f"look to the api_hammering signature."
         limited_calls_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
         parent_result_section.add_subsection(limited_calls_section)
 
 
-def get_process_api_sums(apistats: dict) -> dict:
+def get_process_api_sums(apistats: Dict[str, Dict[str, int]]) -> Dict[str, int]:
+    """
+    This method calculates the sum of unique process calls per process
+    :param apistats: A map of the number of process calls made by processes
+    :return: A map of process calls and how many times those process calls were made
+    """
     # Get the total number of api calls per pid
-    api_sums = {}
+    api_sums: Dict[str, int] = {}
     for pid in apistats:
         api_sums[pid] = 0
         process_apistats = apistats[pid]
@@ -203,11 +254,18 @@ def get_process_api_sums(apistats: dict) -> dict:
     return api_sums
 
 
-def convert_cuckoo_processes(events: List[dict] = None, cuckoo_processes: List[dict] = None):
+def convert_cuckoo_processes(events: Optional[List[Dict]] = None,
+                             cuckoo_processes: Optional[List[Dict[str, Any]]] = None) -> None:
+    """
+    This method converts processes observed in Cuckoo to the format supported by the SandboxOntology helper class
+    :param events: A list of events that occurred during the analysis of the task
+    :param cuckoo_processes: A list of processes observed during the analysis of the task
+    :return: None
+    """
     if events is None:
-        events = []
+        events: List[Dict[str, Any]] = []
     if cuckoo_processes is None:
-        cuckoo_processes = []
+        cuckoo_processes: List[Dict[str, Any]] = []
 
     existing_pids = [proc["pid"] for proc in events]
     for item in cuckoo_processes:
@@ -226,11 +284,21 @@ def convert_cuckoo_processes(events: List[dict] = None, cuckoo_processes: List[d
             events.append(ontology_process)
 
 
-def build_process_tree(events: List[dict] = None, al_result: ResultSection = None, is_process_martian: bool = False, signatures: List[dict] = None):
+def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
+                       parent_result_section: Optional[ResultSection] = None, is_process_martian: bool = False,
+                       signatures: Optional[List[Dict[str, Any]]] = None) -> None:
+    """
+    This method builds a process tree ResultSection
+    :param events: A list of events that occurred during the analysis of the task
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param is_process_martian: A boolean flag that indicates if the is_process_martian signature was raised
+    :param signatures: A list of signatures to be mapped to the processes
+    :return: None
+    """
     if events is None:
-        events = []
+        events: List[Dict[str, Any]] = []
     if signatures is None:
-        signatures = []
+        signatures: List[Dict[str, Any]] = []
     if len(events) > 0:
         so = SandboxOntology(events=events)
         process_tree = so.get_process_tree_with_signatures(signatures)
@@ -244,14 +312,14 @@ def build_process_tree(events: List[dict] = None, al_result: ResultSection = Non
             # Let's keep this heuristic as informational
             process_martian_heur.add_signature_id(sig_name, score=10)
             process_tree_section.heuristic = process_martian_heur
-        al_result.add_subsection(process_tree_section)
+        parent_result_section.add_subsection(process_tree_section)
 
 
-def _get_trimming_index(sysmon: list) -> int:
+def _get_trimming_index(sysmon: List[Dict[str, Any]]) -> int:
     """
     Find index after which isn't mainly noise
-    :param sysmon: list
-    :return: int
+    :param sysmon: List of Sysmon events
+    :return: The index in the list of Sysmon events where events that we care about start
     """
     index = 0
     for event in sysmon:
@@ -269,9 +337,23 @@ def _get_trimming_index(sysmon: list) -> int:
 
 
 # TODO: break this method up
-def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: str, target_filename: str, process_map: dict, task_id: int, signatures: List = None) -> bool:
+def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: ResultSection, random_ip_range: str,
+                       target_filename: str, process_map: Dict[int, Dict[str, Any]], task_id: int,
+                       signatures: Optional[List] = None) -> bool:
+    """
+    This method processes the signatures section of the Cuckoo report, adding anything noteworthy to the
+    Assemblyline report
+    :param sigs: The JSON of the signatures section from the report generated by Cuckoo
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param random_ip_range: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
+    :param target_filename: The name of the file that was submitted for analysis
+    :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :param task_id: An integer representing the Cuckoo Task ID
+    :param signatures: A list of signatures that will be sent to the SandboxOntology helper class
+    :return: A boolean flag that indicates if the is_process_martian signature was raised
+    """
     if signatures is None:
-        signatures = []
+        signatures: List[Dict[str, Any]] = []
     if len(sigs) <= 0:
         return False
 
@@ -280,14 +362,16 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
     is_process_martian = False
     sigs_res = ResultSection(title_text="Signatures")
     skipped_sigs = CUCKOO_DROPPED_SIGNATURES
-    skipped_sig_iocs = []
+    skipped_sig_iocs: List[str] = []
     skipped_mark_items = ["type", "suspicious_features", "entropy", "process", "useragent"]
     skipped_category_iocs = ["section"]
     skipped_families = ["generic"]
-    false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut"]  # Signatures that need to be double checked in case they return false positives
+    # Signatures that need to be double checked in case they return false positives
+    false_positive_sigs = ["creates_doc", "creates_hidden_file", "creates_exe", "creates_shortcut"]
     inetsim_network = ip_network(random_ip_range)
     skipped_paths = ["/"]
-    silent_iocs = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_process", "uses_windows_utilities", "creates_exe", "deletes_executed_files"]
+    silent_iocs = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_process", "uses_windows_utilities",
+                   "creates_exe", "deletes_executed_files"]
     # Sometimes the filename gets shortened
     target_filename_remainder = target_filename
     if len(target_filename) > 12:
@@ -310,7 +394,8 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
             # If all marks are false positives, then flag as false positive sig
             fp_count = 0
             for mark in marks:
-                if sig_name == "creates_doc" and (target_filename in mark.get("ioc") or target_filename_remainder in mark.get("ioc")):
+                if sig_name == "creates_doc" and (target_filename in mark.get("ioc") or
+                                                  target_filename_remainder in mark.get("ioc")):
                     # Nothing to see here, false positive because this signature
                     # thinks that the submitted file is a "new doc file"
                     fp_count += 1
@@ -354,7 +439,7 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
 
         # Adding signature and score
         score = sig["severity"]
-        translated_score = translate_score(score)
+        translated_score = SCORE_TRANSLATION[score]
         sig_heur.add_signature_id(sig_name, score=translated_score)
 
         # Setting the Mitre ATT&CK ID for the heuristic
@@ -371,7 +456,7 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
             for family in sig_families:
                 sig_res.add_tag("dynamic.signature.family", family)
 
-         # We want to write a temporary file for the console output
+        # We want to write a temporary file for the console output
         if sig_name == "console_output":
             console_output_file_path = os.path.join("/tmp", f"{task_id}_console_output.txt")
             with open(console_output_file_path, "ab") as f:
@@ -386,8 +471,8 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
         fp_count = 0
         if markcount > 0 and sig_name not in skipped_sig_iocs:
             sig_marks = sig.get('marks', [])
-            process_names = []
-            injected_processes = []
+            process_names: List[str] = []
+            injected_processes: List[str] = []
             for mark in sig_marks:
                 mark_type = mark["type"]
                 pid = mark.get("pid")
@@ -398,7 +483,8 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
                 # Mapping the process name to the process id
                 process_map.get(pid, {})
                 process_name = process_map.get(pid, {}).get("name")
-                if mark_type == "generic" and sig_name not in ["network_cnc_http", "nolookup_communication", "suspicious_powershell", "exploit_heapspray"]:
+                if mark_type == "generic" and sig_name not in ["network_cnc_http", "nolookup_communication",
+                                                               "suspicious_powershell", "exploit_heapspray"]:
                     for item in mark:
                         # Check if key is not flagged to skip, and that we
                         # haven't already raised this ioc
@@ -434,7 +520,8 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
                     else:
                         sig_res.add_line(f'\tIOC: {safe_str(mark["value"])}')
                 elif mark_type == "generic" and sig_name == "exploit_heapspray":
-                    sig_res.add_line(f"\tFun fact: Data was committed to memory at the protection level {safe_str(mark['protection'])}")
+                    sig_res.add_line(f"\tFun fact: Data was committed to memory at the protection "
+                                     f"level {safe_str(mark['protection'])}")
                 elif mark_type == "ioc":
                     ioc = mark["ioc"]
                     category = mark.get("category")
@@ -463,7 +550,8 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
                                     for key in process_map:
                                         if str(key) in ioc:
                                             # Despite incorrect spelling of the signature name,
-                                            # the ioc that is raised does not need changing for applcation_raises_exception.
+                                            # the ioc that is raised does not need changing for
+                                            # applcation_raises_exception.
                                             # All other signatures do.
                                             if sig_name != "application_raises_exception":
                                                ioc = ioc.replace(str(key), process_map[key]["name"])
@@ -500,7 +588,8 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
                     oldfilepath = mark["call"].get("arguments", {}).get("oldfilepath")
                     newfilepath = mark["call"].get("arguments", {}).get("newfilepath")
                     if oldfilepath and newfilepath:
-                        sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}, New file path: {safe_str(newfilepath)}')
+                        sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}, New file '
+                                         f'path: {safe_str(newfilepath)}')
                 elif mark_type == "call" and sig_name == "creates_service":
                     service_name = mark["call"].get("arguments", {}).get("service_name")
                     if service_name:
@@ -516,11 +605,16 @@ def process_signatures(sigs: list, al_result: ResultSection, random_ip_range: st
             # Adding the signature result section to the parent result section
             sigs_res.add_subsection(sig_res)
     if len(sigs_res.subsections) > 0:
-        al_result.add_subsection(sigs_res)
+        parent_result_section.add_subsection(sigs_res)
     return is_process_martian
 
 
 def contains_safelisted_value(val: str) -> bool:
+    """
+    This method checks if a given value is part of a safelist
+    :param val: The given value
+    :return: A boolean representing if the given value is part of a safelist
+    """
     if not val or not isinstance(val, str):
         return False
     ip = re.search(IP_REGEX, val)
@@ -548,7 +642,18 @@ def contains_safelisted_value(val: str) -> bool:
 
 
 # TODO: break this up into methods
-def process_network(network: dict, al_result: ResultSection, random_ip_range: str, process_map: dict, events: List[dict]):
+def process_network(network: Dict[str, Any], parent_result_section: ResultSection, random_ip_range: str,
+                    process_map: Dict[int, Dict[str, Any]], events: List[Dict[str, Any]]) -> None:
+    """
+    This method processes the network section of the Cuckoo report, adding anything noteworthy to the
+    Assemblyline report
+    :param network: The JSON of the network section from the report generated by Cuckoo
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param random_ip_range: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
+    :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :param events: A list of events that occurred during the analysis of the task
+    :return: None
+    """
     log.debug("Processing network results.")
     network_res = ResultSection(title_text="Network Activity")
 
@@ -560,13 +665,13 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
     # DNS Section
 
     dns_calls = network.get("dns", [])
-    dns_res_sec = None
+    dns_res_sec: Optional[ResultSection] = None
     if len(dns_calls) > 0:
         title_text = "Protocol: DNS"
         dns_res_sec = ResultSection(title_text=title_text)
 
     # This will contain the mapping of resolved IPs and their corresponding domains
-    resolved_ips = {}
+    resolved_ips: Dict[str, Dict[str, Any]] = {}
     for dns_call in dns_calls:
         if len(dns_call["answers"]) > 0:
             ip = dns_call["answers"][0]["data"]
@@ -579,13 +684,14 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
             for process in process_map:
                 process_details = process_map[process]
                 for network_call in process_details["network_calls"]:
-                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or network_call.get("InternetConnectA", {}) or network_call.get("GetAddrInfoW", {})
+                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or \
+                          network_call.get("InternetConnectA", {}) or network_call.get("GetAddrInfoW", {})
                     if dns != {} and dns["hostname"] == domain:
                         resolved_ips[ip]["process_name"] = process_details["name"]
                         resolved_ips[ip]["process_id"] = process
 
     # TCP and UDP section
-    network_flows_table = []
+    network_flows_table: List[Dict[str, Any]] = []
 
     # This result section will contain all of the "flows" from src ip to dest ip
     netflows_sec = ResultSection(title_text="Network Flows")
@@ -597,7 +703,7 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
         if len(network_calls) <= 0:
             continue
         elif len(network_calls) > 50:
-            network_calls_made_to_unique_ips = []
+            network_calls_made_to_unique_ips: List[Dict[str, Any]] = []
             # Collapsing network calls into calls made to unique IP+port combos
             for network_call in network_calls:
                 if len(network_calls_made_to_unique_ips) >= 100:
@@ -615,9 +721,9 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
         for network_call in network_calls:
             dst = network_call["dst"]
             src = network_call["src"]
-            src_port = None
+            src_port: Optional[str] = None
             if slist_check_ip(src):
-                src = None
+                src: Optional[str] = None
             if src:
                 src_port = network_call["sport"]
             network_flow = {
@@ -642,7 +748,7 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
                     network_flow["image"] = process_name
             network_flows_table.append(network_flow)
 
-    protocol_res_sec = None
+    protocol_res_sec: Optional[ResultSection] = None
     if len(network_flows_table) > 0:
         protocol_res_sec = ResultSection(title_text="Protocol: TCP/UDP")
         protocol_res_sec.set_heuristic(1004)
@@ -654,10 +760,10 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
         src = network_flow["src_ip"]
         dom = network_flow["domain"]
         dest_ip = network_flow["dest_ip"]
-        # if domain is safelisted
+        # if domain is safe-listed
         if dom and slist_check_domain(dom):
             network_flows_table.remove(network_flow)
-        # if no source ip and destination ip is safelisted or is the dns server
+        # if no source ip and destination ip is safe-listed or is the dns server
         elif (not src and slist_check_ip(dest_ip)) or dest_ip in dns_servers:
             network_flows_table.remove(network_flow)
         # if dest ip is noise
@@ -669,7 +775,8 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
                 for process in process_map:
                     process_details = process_map[process]
                     for network_call in process_details["network_calls"]:
-                        connect = network_call.get("connect", {}) or network_call.get("InternetConnectW", {}) or network_call.get("InternetConnectA", {})
+                        connect = network_call.get("connect", {}) or network_call.get("InternetConnectW", {}) or \
+                                  network_call.get("InternetConnectA", {})
                         if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or
                                               connect.get("hostname", "") == network_flow["dest_ip"]) and \
                                 connect["port"] == network_flow["dest_port"]:
@@ -715,8 +822,9 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
     if protocol_res_sec and len(protocol_res_sec.tags) > 0:
         network_res.add_subsection(protocol_res_sec)
     if len(network_flows_table) > 0:
-        # Need to convert each dictionary to a string in order to get the set of network_flows_table, since dictionaries are not hashable
-        unique_netflows = []
+        # Need to convert each dictionary to a string in order to get the set of network_flows_table, since
+        # dictionaries are not hashable
+        unique_netflows: List[Dict[str, Any]] = []
         for item in network_flows_table:
             if item not in unique_netflows:  # Remove duplicates
                 unique_netflows.append(item)
@@ -725,7 +833,7 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
         network_res.add_subsection(netflows_sec)
 
     # HTTP/HTTPS section
-    req_table = []
+    req_table: List[Dict[str, Any]] = []
     http_protocols = ["http", "https", "http_ex", "https_ex"]
     for protocol in http_protocols:
         http_calls = [x for x in network.get(protocol, [])]
@@ -745,23 +853,25 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
                 port = http_call["port"]
                 uri = http_call["uri"]
                 proto = protocol
-            if slist_check_ip(host) is not None or slist_check_domain(host) is not None or slist_check_uri(uri) is not None:
+            if slist_check_ip(host) is not None or slist_check_domain(host) is not None or \
+                    slist_check_uri(uri) is not None:
                 continue
             req = {
                 "protocol": proto,
-                "host": host,  # Note: will be removed in like twenty lines, we just need it for tagging
-                "port": port,  # Note: will be removed in like twenty lines, we just need it for tagging
-                "path": path,  # Note: will be removed in like twenty lines, we just need it for tagging
-                "user-agent": http_call.get("user-agent"),  # Note: will be removed in like twenty lines, we just need it for tagging
+                "host": host,  # Note: will be removed, we just need it for tagging
+                "port": port,  # Note: will be removed, we just need it for tagging
+                "path": path,  # Note: will be removed, we just need it for tagging
+                "user-agent": http_call.get("user-agent"),  # Note: will be removed, we just need it for tagging
                 "request": request,
                 "process_name": None,
-                "uri": uri,  # Note: will be removed in like twenty lines, we just need it for tagging
-                "method": http_call["method"]  # Note: will be removed in like twenty lines, we just need it to check if a remote file was accessed
+                "uri": uri,  # Note: will be removed, we just need it for tagging
+                "method": http_call["method"]  # Note: will be removed, need it to check if a remote file was accessed
             }
             for process in process_map:
                 process_details = process_map[process]
                 for network_call in process_details["network_calls"]:
-                    send = network_call.get("send", {}) or network_call.get("InternetConnectW", {}) or network_call.get("InternetConnectA", {})
+                    send = network_call.get("send", {}) or network_call.get("InternetConnectW", {}) or \
+                           network_call.get("InternetConnectA", {})
                     if send != {} and (send.get("service", 0) == 3 or send.get("buffer", "") == request):
                         req["process_name"] = process_details["name"] + " (" + str(process) + ")"
             if req not in req_table:
@@ -809,12 +919,18 @@ def process_network(network: dict, al_result: ResultSection, random_ip_range: st
         network_res.add_subsection(http_sec)
 
     if len(network_res.subsections) > 0:
-        al_result.add_subsection(network_res)
+        parent_result_section.add_subsection(network_res)
 
 
-def process_all_events(parent_result_section: ResultSection, events: List[dict] = None):
+def process_all_events(parent_result_section: ResultSection, events: Optional[List[Dict]] = None) -> None:
+    """
+    This method converts all events to a table that is sorted by timestamp
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param events: A list of events that occurred during the analysis of the task
+    :return: None
+    """
     if events is None:
-        events = []
+        events: List[Dict[str, Any]] = []
     # Each item in the events table will follow the structure below:
     # {
     #   "timestamp": timestamp,
@@ -823,7 +939,7 @@ def process_all_events(parent_result_section: ResultSection, events: List[dict] 
     # }
     so = SandboxOntology(events=events)
     events_section = ResultSection(title_text="Events")
-    event_table = []
+    event_table: List[Dict[str, Any]] = []
     for event in so.sorted_events:
         if isinstance(event, NetworkEvent):
             event_table.append({
@@ -853,9 +969,17 @@ def process_all_events(parent_result_section: ResultSection, events: List[dict] 
     parent_result_section.add_subsection(events_section)
 
 
-def process_curtain(curtain: dict, al_result: ResultSection, process_map: dict):
+def process_curtain(curtain: Dict[str, Any], parent_result_section: ResultSection, process_map: Dict[int, Dict[str, Any]]) -> None:
+    """
+    This method processes the Curtain section of the Cuckoo report and adds anything noteworthy to the
+    Assemblyline report
+    :param curtain: The JSON output from the Curtain module (Powershell commands that were run)
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :return: None
+    """
     log.debug("Processing curtain results.")
-    curtain_body = []
+    curtain_body: List[Dict[str, Any]] = []
     curtain_res = ResultSection(title_text="PowerShell Activity", body_format=BODY_FORMAT.TABLE)
     for pid in curtain.keys():
         process_name = process_map[int(pid)]["name"] if process_map.get(int(pid)) else "powershell.exe"
@@ -874,15 +998,22 @@ def process_curtain(curtain: dict, al_result: ResultSection, process_map: dict):
             curtain_res.add_tag("file.powershell.cmdlet", behaviour)
     if len(curtain_body) > 0:
         curtain_res.body = json.dumps(curtain_body)
-        al_result.add_subsection(curtain_res)
+        parent_result_section.add_subsection(curtain_res)
 
 
-def convert_sysmon_processes(sysmon: List[dict] = None, events: List[dict] = None):
+def convert_sysmon_processes(sysmon: Optional[List[Dict[str, Any]]] = None,
+                             events: Optional[List[Dict[str, Any]]] = None) -> None:
+    """
+    This method converts processes observed by Sysmon to the format supported by the SandboxOntology helper class
+    :param sysmon: A list of processes observed during the analysis of the task by the Sysmon tool
+    :param events: A list of events that occurred during the analysis of the task
+    :return: None
+    """
     if sysmon is None:
-        sysmon = []
+        sysmon: Optional[List[Dict[str, Any]]] = []
 
     if events is None:
-        events = []
+        events: Optional[List[Dict[str, Any]]] = []
 
     existing_pids = [proc["pid"] for proc in events]
 
@@ -924,23 +1055,38 @@ def convert_sysmon_processes(sysmon: List[dict] = None, events: List[dict] = Non
             events.append(ontology_process)
 
 
-def process_hollowshunter(hollowshunter: dict, al_result: Result, process_map: dict):
+def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: ResultSection,
+                          process_map: Dict[int, Dict[str, Any]]) -> None:
+    """
+    This method processes the HollowsHunter section of the Cuckoo report and adds anything noteworthy to the
+    Assemblyline report
+    :param hollowshunter: The JSON output from the HollowsHunter module
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :return: None
+    """
     # TODO: obviously a huge work in progress
     log.debug("Processing hollowshunter results.")
-    hollowshunter_body = []
+    hollowshunter_body: List[Any] = []
     hollowshunter_res = ResultSection(title_text="HollowsHunter Analysis", body_format=BODY_FORMAT.TABLE)
     if len(hollowshunter_body) > 0:
         hollowshunter_res.body = json.dumps(hollowshunter_body)
-        al_result.add_subsection(hollowshunter_res)
+        parent_result_section.add_subsection(hollowshunter_res)
 
 
-def process_decrypted_buffers(process_map: dict, al_result: ResultSection):
+def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_result_section: ResultSection) -> None:
+    """
+    This method checks for any decrypted buffers found in the process map, and adds them to the Assemblyline report
+    :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :return:
+    """
     log.debug("Processing decrypted buffers.")
     buffer_res = ResultSection(title_text="Decrypted Buffers", body_format=BODY_FORMAT.TABLE)
     buffer_body = []
-    unique_ips = set()
-    unique_domains = set()
-    unique_uris = set()
+    unique_ips: Set[str] = set()
+    unique_domains: Set[str] = set()
+    unique_uris: Set[str] = set()
 
     for process in process_map:
         buffer_calls = process_map[process]["decrypted_buffers"]
@@ -974,10 +1120,15 @@ def process_decrypted_buffers(process_map: dict, al_result: ResultSection):
         buffer_res.add_tag("network.static.uri", safe_uri)
     if len(buffer_body) > 0:
         buffer_res.body = json.dumps(buffer_body)
-        al_result.add_subsection(buffer_res)
+        parent_result_section.add_subsection(buffer_res)
 
 
 def is_ip(val: str) -> bool:
+    """
+    This method safely handles if a given string represents an IP
+    :param val: the given string
+    :return: a boolean representing if the given string represents an IP
+    """
     try:
         ip_address(val)
         return True
@@ -989,24 +1140,15 @@ def is_ip(val: str) -> bool:
     return False
 
 
-def translate_score(score: int) -> int:
-    score_translation = {
-        1: 10,
-        2: 100,
-        3: 250,
-        4: 500,
-        5: 750,
-        6: 1000,
-        7: 1000,
-        8: 1000  # dead_host signature
-    }
-    return score_translation[score]
-
-
-def get_process_map(processes: dict = None) -> dict:
+def get_process_map(processes: Optional[List[Dict[str, Any]]] = None) -> Dict[int, Dict[str, Any]]:
+    """
+    This method creates a process map that maps process IDs with useful details
+    :param processes: A list of processes observed by Cuckoo
+    :return: A map of process IDs to process names, network calls, and decrypted buffers
+    """
     if processes is None:
-        processes = {}
-    process_map = {}
+        processes: List[Dict[str, Any]] = []
+    process_map: Dict[int, Dict[str, Any]] = {}
     api_calls_of_interest = {
         "getaddrinfo": ["hostname"],  # DNS
         "GetAddrInfoW": ["hostname"],  # DNS
@@ -1034,7 +1176,7 @@ def get_process_map(processes: dict = None) -> dict:
             api = call["api"]
             if category == "network" and api in api_calls_of_interest.keys():
                 args = call["arguments"]
-                args_of_interest = {}
+                args_of_interest: Dict[str, str] = {}
                 for arg in api_calls_of_interest.get(api, []):
                     if arg in args:
                         args_of_interest[arg] = args[arg]
@@ -1044,7 +1186,7 @@ def get_process_map(processes: dict = None) -> dict:
                         network_calls.append(item_to_add)
             elif category == "crypto" and api in api_calls_of_interest.keys():
                 args = call["arguments"]
-                args_of_interest = {}
+                args_of_interest: Dict[str, str] = {}
                 for arg in api_calls_of_interest.get(api, []):
                     if arg in args:
                         args_of_interest[arg] = args[arg]
@@ -1052,7 +1194,7 @@ def get_process_map(processes: dict = None) -> dict:
                     decrypted_buffers.append({api: args_of_interest})
             elif category in ["system"] and api in api_calls_of_interest.keys():
                 args = call["arguments"]
-                args_of_interest = {}
+                args_of_interest: Dict[str, str] = {}
                 for arg in api_calls_of_interest.get(api, []):
                     if arg in args and "cfg:" in args[arg]:
                         args_of_interest[arg] = args[arg]
