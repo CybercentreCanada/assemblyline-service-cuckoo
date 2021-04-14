@@ -1,192 +1,137 @@
-# Safelist of data that may come up in analysis that we should ignore.
-from typing import Optional, Dict
+"""
+Safelists of data that may come up in analysis that is "known good", and we can ignore in the Assemblyline report.
+"""
+from typing import List
 from re import match
 
-SAFELIST_APPLICATIONS = {
-    'Cuckoo1': 'C:\\\\tmp.+\\\\bin\\\\.+',
-    'Azure1': 'C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe',
-    'Azure2': 'C:\\\\WindowsAzure\\\\GuestAgent.*\\\\GuestAgent\\\\WindowsAzureGuestAgent\.exe',
-    'Sysmon1': 'C:\\\\Windows\\\\System32\\\\csrss\.exe',
-    'Sysmon2': 'dllhost.exe',
-    'Cuckoo2': 'C:\\\\Windows\\\\System32\\\\lsass\.exe',
-    'Sysmon3': 'C:\\\\Windows\\\\System32\\\\SearchIndexer\.exe',
-}
+SAFELIST_APPLICATIONS = [
+    # Cuckoo
+    r'C:\\tmp.+\\bin\\.+', r'C:\\Windows\\System32\\lsass\.exe',
+    r'C:\\Program Files\\Common Files\\Microsoft Shared\\OfficeSoftwareProtectionPlatform\\OSPPSVC\.exe',
+    # Sysmon
+    r'C:\\Windows\\System32\\csrss\.exe', r'C:\\Windows\\System32\\SearchIndexer\.exe',
+    # Azure
+    r'C:\\Program Files\\Microsoft Monitoring Agent\\Agent\\(MonitoringHost\.exe|Health Service State\\ICT 2\\(CMF-64|CMF)\\DesiredStateConfiguration\\DscRun\.exe)',
+    r'C:\\WindowsAzure\\GuestAgent.*\\(GuestAgent\\WindowsAzureGuestAgent\.exe|WaAppAgent\.exe|CollectGuestLogs\.exe)',
+    # Flash
+    r'C:\\windows\\SysWOW64\\Macromed\\Flash\\FlashPlayerUpdateService\.exe',
+]
 
-SAFELIST_COMMANDS = {
-    'Cuckoo1': 'C:\\\\Python27\\\\pythonw\.exe C:/tmp.+/analyzer\.py',
-    'Cuckoo2': 'C:\\\\windows\\\\system32\\\\lsass\.exe',
-    'Sysmon1': 'C:\\\\windows\\\\system32\\\\services\.exe',
-    'Sysmon2': 'C:\\\\windows\\\\system32\\\\sppsvc\.exe',
-    'Azure1': '"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MonitoringHost\.exe" -Embedding',
-    'Flash1': 'C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\.exe',
-    'Azure2': '"C:\\\\Program Files\\\\Microsoft Monitoring Agent\\\\Agent\\\\MOMPerfSnapshotHelper.exe\\" -Embedding',
-    'Sysmon3': 'C:\\\\windows\\\\system32\\\\svchost\.exe -k DcomLaunch',
-    'Sysmon4': 'C:\\\\windows\\\\system32\\\\SearchIndexer\.exe \/Embedding',
-    'Sysmon5': 'C:\\\\Windows\\\\System32\\\\wevtutil.exe query-events microsoft-windows-powershell/operational /rd:true /e:root /format:xml /uni:true',
-}
+SAFELIST_COMMANDS = [
+    # Cuckoo
+    r'C:\\Python27\\pythonw\.exe C:/tmp.+/analyzer\.py',
+    # Azure
+    r'"C:\\Program Files\\Microsoft Monitoring Agent\\Agent\\MonitoringHost\.exe" -Embedding',
+    r'"C:\\Program Files\\Microsoft Monitoring Agent\\Agent\\MOMPerfSnapshotHelper\.exe\\" -Embedding',
+    r'"C:\\windows\\system32\\cscript\.exe" /nologo ("MonitorKnowledgeDiscovery\.vbs"|"ChangeEventModuleBatchSize\.vbs)',
+    # Windows
+    r'C:\\windows\\system32\\(SppExtComObj|mobsync)\.exe -Embedding',
+    r'(C:\\Windows\\)*explorer\.exe',
+    r'wmiadap\.exe (/F /T /R|/D /T)',
+    r'C:\\windows\\system32\\(sppsvc|wuauclt|appidpolicyconverter|appidcertstorecheck)\.exe',
+    r'C:\\Windows\\SystemApps\\(ShellExperienceHost|Microsoft\.Windows\.Cortana)_.*\\(ShellExperienceHost|SearchUI\.exe)\.exe" -ServerName:App\.App.*\.mca',
+    r'C:\\Windows\\system32\\dllhost\.exe /Processid:.*',
+    r'C:\\Windows\\system32\\wbem\\WmiApSrv\.exe',
+    r'C:\\Windows\\system32\\sc\.exe start wuauserv',
+    r'"C:\\windows\\system32\\SearchProtocolHost\.exe" Global\\UsGthrFltPipeMssGthrPipe_S-1-5-21-451555073-2684619755-382164121-5006_ Global\\UsGthrCtrlFltPipeMssGthrPipe_S-1-5-21-451555073-2684619755-382164121-5006 1 -2147483646 "Software\\Microsoft\\Windows Search" "Mozilla/4\.0 (compatible; MSIE 6\.0; Windows NT; MS Search 4\.0 Robot)" "C:\\ProgramData\\Microsoft\\Search\\Data\\Temp\\usgthrsvc" "DownLevelDaemon" "1"',
+    # If an error is raised, WerFault will pop up and WerMgr will try to upload it
+    r'C:\\Windows\\system32\\WerFault\.exe -u -p [0-9]{3,5} -s [0-9]{3,5}',
+    r'C:\\Windows\\system32\\wermgr\.exe -upload',
+    # Sysmon
+    r'\\\?\?\\C:\\Windows\\system32\\conhost\.exe',
+    r'\\\?\?\\C:\\Windows\\system32\\conhost\.exe ".*"',
+    r'\\\?\?\\C:\\Windows\\system32\\conhost\.exe 0xffffffff -ForceV1',
+    r'C:\\windows\\system32\\svchost\.exe -k (DcomLaunch|NetworkService|UnistackSvcGroup|WerSvcGroup|netsvcs -p -s (Schedule|Winmgmt|UsoSvc))',
+    r'C:\\windows\\system32\\SearchIndexer\.exe \/Embedding',
+    r'C:\\Windows\\System32\\wevtutil\.exe query-events microsoft-windows-powershell/operational /rd:true /e:root /format:xml /uni:true',
+    r'C:\\Windows\\System32\\wevtutil\.exe query-events microsoft-windows-sysmon/operational /format:xml /e:Events',
+]
 
 # These domains may be present due to benign activity on the host
-# TODO: the keys play a useless role
-SAFELIST_DOMAINS = {
+SAFELIST_DOMAINS = [
     # Adobe
-    'Adobe': r'.*\.adobe\.com$',
-
+     r'.*\.adobe\.com$',
     # Google
-    'Google Play': r'play\.google\.com$',
-
+    r'play\.google\.com$',
     # Android
-    'Android NTP': r'.*\.android\.pool\.ntp\.org$',
-    'Android Googlesource': r'android\.googlesource\.com$',
-    'Android Schemas': r'schemas\.android\.com$',
-
+    r'.*\.android\.pool\.ntp\.org$', r'android\.googlesource\.com$', r'schemas\.android\.com$',
     # XML
-    'XMLPull': r'xmlpull\.org$',
-    'OpenXML': r'schemas\.openxmlformats\.org$',
-
+    r'xmlpull\.org$', r'schemas\.openxmlformats\.org$',
     # Akamai
-    'Akamaized': r'img-s-msn-com\.akamaized\.net$',
-    'Akamaihd': r'fbstatic-a\.akamaihd\.net$',
-
+    r'img-s-msn-com\.akamaized\.net$', r'fbstatic-a\.akamaihd\.net$',
     # ASPNet
-    'AJAX ASPNet': r'ajax\.aspnetcdn\.com$',
-
+    r'ajax\.aspnetcdn\.com$',
     # WWW
-    'W3': r'(www\.)?w3\.org$',
-
+    r'(www\.)?w3\.org$',
     # Omniroot
-    'Omniroot': r'ocsp\.omniroot\.com$',
-
+    r'ocsp\.omniroot\.com$',
     # WPAD
-    'WPAD': r'^wpad\..*$',
-
+    r'^wpad\..*$',
     # Microsoft
-    'Schemas': r'schemas\.microsoft\.com$',
-    'Microsoft IPv4To6': r'.*\.?teredo\.ipv6\.microsoft\.com$',
-    'Microsoft Watson': r'watson\.microsoft\.com$',
-    'Microsoft DNS Check': r'dns\.msftncsi\.com$',
-    'Microsoft IPv4 Check': r'www\.msftncsi\.com$',
-    'Microsoft IPv6 Check': r'ipv6\.msftncsi\.com$',
-    'Microsoft CRL server': r'crl\.microsoft\.com$',
-    'Microsoft WWW': r'(www|go)\.microsoft\.com$',
-    'ISATAP': r'isatap\..*\.microsoft\.com$',
-    'Tile Service': r'tile-service\.weather\.microsoft\.com$',
-    'Geover': r'.*\.prod\.do\.dsp\.mp\.microsoft\.com$',
-    'Live': r'(login|g)\.live\.com$',
-    'Office Apps': r'nexus\.officeapps\.live\.com$',
-    'Events': r'.*\.events\.data\.microsoft\.com$',
-    'WDCP': r'wdcp\.microsoft\.com$',
-    'FE3': r'fe3\.delivery\.mp\.microsoft\.com$',
-    'WNS': r'client\.wns\.windows\.com$',
-    'Go Microsoft': r'(www\.)?go\.microsoft\.com$',
-    'JS': r'js\.microsoft\.com$',
-    'Ajax': r'ajax\.microsoft\.com$',
-    'IEOnline': r'ieonline\.microsoft\.com$',
-    'DNS': r'dns\.msftncsi\.com$',
-    'MSOCSP': r'ocsp\.msocsp\.com$',
-    'FS': r'fs\.microsoft\.com$',
-    'ConnectTest': r'www\.msftconnecttest\.com$',
-    'NCSI': r'www\.msftncsi\.com$',
-    'Internet Explorer': r'iecvlist\.microsoft\.com$',
-    'Internet Explorer Too': r'r20swj13mr\.microsoft\.com$',
-    'Microsoft Edge': r'(([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\.msedge\.net$',
-    'Microsoft Store': r'displaycatalog\.md\.mp\.microsoft\.com$',
-    'Office Client': r'officeclient\.microsoft\.com$',
-
+    r'schemas\.microsoft\.com$', r'.*\.?teredo\.ipv6\.microsoft\.com$', r'watson\.microsoft\.com$',
+    r'dns\.msftncsi\.com$', r'www\.msftncsi\.com$', r'ipv6\.msftncsi\.com$', r'crl\.microsoft\.com$',
+    r'(www|go)\.microsoft\.com$', r'isatap\..*\.microsoft\.com$', r'tile-service\.weather\.microsoft\.com$',
+    r'.*\.prod\.do\.dsp\.mp\.microsoft\.com$', r'(login|g)\.live\.com$', r'nexus\.officeapps\.live\.com$',
+    r'.*\.events\.data\.microsoft\.com$', r'wdcp\.microsoft\.com$', r'fe3\.delivery\.mp\.microsoft\.com$',
+    r'client\.wns\.windows\.com$', r'(www\.)?go\.microsoft\.com$', r'js\.microsoft\.com$', r'ajax\.microsoft\.com$',
+    r'ieonline\.microsoft\.com$', r'dns\.msftncsi\.com$', r'ocsp\.msocsp\.com$', r'fs\.microsoft\.com$',
+    r'www\.msftconnecttest\.com$', r'www\.msftncsi\.com$', r'iecvlist\.microsoft\.com$', r'r20swj13mr\.microsoft\.com$',
+    r'(([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\.msedge\.net$', r'displaycatalog\.md\.mp\.microsoft\.com$',
+    r'officeclient\.microsoft\.com$',
     # Windows
-    'Windows Settings': r'settings-win\.data\.microsoft\.com$',
-    'Windows Diagnostics': r'.*vortex-win\.data\.microsoft\.com$',
-    'Windows Update': r'.*\.windowsupdate\.com$',
-    'Windows Time Server': r'time\.(microsoft|windows)\.com$',
-    'Windows': r'.*\.windows\.com$',
-    'Windows Updater': r'.*\.update\.microsoft\.com$',
-    'Windows Downloader': r'.*download\.microsoft\.com$',
-    'Windows KMS': r'kms\.core\.windows\.net$',
-    'Windows Microsoft': r'.*windows\.microsoft\.com$',
-    'Windows IPv6': r'win10\.ipv6\.microsoft\.com$',
-
+    r'settings-win\.data\.microsoft\.com$', r'.*vortex-win\.data\.microsoft\.com$', r'.*\.windowsupdate\.com$',
+    r'time\.(microsoft|windows)\.com$', r'.*\.windows\.com$', r'.*\.update\.microsoft\.com$',
+    r'.*download\.microsoft\.com$', r'kms\.core\.windows\.net$', r'.*windows\.microsoft\.com$',
+    r'win10\.ipv6\.microsoft\.com$',
     # MSN
-    'MSN Content': r'cdn\.content\.prod\.cms\.msn\.com$',
-    'MSN': r'(www\.)?msn\.com$',
-    'S MSN': r'(www\.)?static-hp-eas\.s-msn\.com$',
-    'Img S MSN': r'img\.s-msn\.com$',
-
+    r'cdn\.content\.prod\.cms\.msn\.com$', r'(www\.)?msn\.com$', r'(www\.)?static-hp-eas\.s-msn\.com$',
+    r'img\.s-msn\.com$',
     # Bing
-    'Bing': r'(www\.)?bing\.com$',
-    'Bing API': r'api\.bing\.com$',
-
+    r'(www\.)?bing\.com$', r'api\.bing\.com$',
     # Azure
-    'Azure Monitoring Disk': r'md-ssd-.*\.blob\.core\.windows\.net$',
-    'Azure Monitoring Table': r'.*\.table\.core\.windows\.net',
-    'Azure Monitoring Blob': r'.*\.blob\.core\.windows\.net',
-    'Azure OpInsights': r'.*\.opinsights\.azure\.com',
-    'Reddog': r'.*reddog\.microsoft\.com$',
-    'Agent Service Api': r'agentserviceapi\.azure-automation\.net$',
-    'Guest Configuration Api': r'agentserviceapi\.guestconfiguration\.azure\.com$',
-    'Blob Storage': r'.*\.blob\.storage\.azure\.net$',
-
+    r'md-ssd-.*\.blob\.core\.windows\.net$', r'.*\.table\.core\.windows\.net', r'.*\.blob\.core\.windows\.net',
+    r'.*\.opinsights\.azure\.com', r'.*reddog\.microsoft\.com$', r'agentserviceapi\.azure-automation\.net$',
+     r'agentserviceapi\.guestconfiguration\.azure\.com$', r'.*\.blob\.storage\.azure\.net$',
     # Office
-    'Office Network Requests': r'config\.edge\.skype\.com',
-    'OneNote': r'cdn\.onenote\.net$',
-
+    r'config\.edge\.skype\.com', r'cdn\.onenote\.net$',
     # Verisign
-    'Verisign': r'(www\.)?verisign\.com$',
-    'Verisign CRL': 'csc3-2010-crl\.verisign\.com$',
-    'Verisign AIA': 'csc3-2010-aia\.verisign\.com$',
-    'Verisign OCSP': 'ocsp\.verisign\.com$',
-    'Verisign Logo': 'logo\.verisign\.com$',
-    'Verisign General CRL': 'crl\.verisign\.com$',
-
+    r'(www\.)?verisign\.com$', 'csc3-2010-crl\.verisign\.com$', 'csc3-2010-aia\.verisign\.com$', 'ocsp\.verisign\.com$',
+    'logo\.verisign\.com$', 'crl\.verisign\.com$',
     # Ubuntu
-    'Ubuntu Update': r'(changelogs|daisy|ntp|ddebs|security)\.ubuntu\.com$',
-    'Archive Ubuntu': r'(azure|ca)\.archive\.ubuntu\.com$',
-
+    r'(changelogs|daisy|ntp|ddebs|security)\.ubuntu\.com$', r'(azure|ca)\.archive\.ubuntu\.com$',
     # Local
-    'TCP Local': r'.*\.local$',
-    'Unix Local': r'local$',
-    'Localhost': r'localhost$',
-
+    r'.*\.local$', r'local$', r'localhost$',
     # Comodo
-    "Comodo": r".*\.comodoca\.com$",
-
+    r".*\.comodoca\.com$",
     # .arpa
-    'IPv6 Reverse DNS': r'[0-9a-f\.]+\.ip6.arpa$',
-
+    r'[0-9a-f\.]+\.ip6.arpa$',
     # Oracle
-    'Java': r'(www\.)?java\.com$',
-    'Oracle': r'sldc-esd\.oracle\.com$',
-    'Java Sun': r'javadl\.sun\.com$',
-
+    r'(www\.)?java\.com$', r'sldc-esd\.oracle\.com$', r'javadl\.sun\.com$',
     # Digicert
-    'OCSP Digicert': r'ocsp\.digicert\.com$',
-    'CRL Digicert': r'crl[0-9]\.digicert\.com$',
-
+    r'ocsp\.digicert\.com$', r'crl[0-9]\.digicert\.com$',
     # Symantec
-    'Symantec Certificates': r's[a-z0-9]?\.symc[bd]\.com$',
-    'Symantec OCSP/CRL': r'(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com$',
-
+    r's[a-z0-9]?\.symc[bd]\.com$', r'(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com$',
     # Thawte
-    'Thawte OCSP': r'ocsp\.thawte\.com$',
-
+    r'ocsp\.thawte\.com$',
     # GlobalSign
-    'GlobalSign OCSP': r'ocsp[0-9]?\.globalsign\.com$',
-    'GlobalSign CRL': r'crl\.globalsign\.(com|net)$',
-
+    r'ocsp[0-9]?\.globalsign\.com$', r'crl\.globalsign\.(com|net)$',
     # Google
-    'Google': r'google\.com$',
-}
+    r'google\.com$',
+]
 
 # Note: This list should be updated if we change our analysis network topology/addresses
-# TODO: keys are useless
-SAFELIST_IPS = {
-    'Public DNS': r'(^1\.1\.1\.1$)|(^8\.8\.8\.8$)',
-    'Local': r'(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*',
-    'Honeynet': r'169\.169\.169\.169',
-    'Windows SSDP': r'239\.255\.255\.250',
-    'Azure VM Version': r'169\.254\.169\.254',
-    'Azure Telemetry': r'168\.63\.129\.16',
-    'Windows IGMP': r'224\..*',
-    'Local DHCP': r'255\.255\.255\.255',
-}
+SAFELIST_IPS = [
+    # Public DNS
+    r'(^1\.1\.1\.1$)|(^8\.8\.8\.8$)',
+    # Local
+    r'(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*', r'255\.255\.255\.255',
+    # Honeynet
+    r'169\.169\.169\.169',
+    # Windows
+    r'239\.255\.255\.250', r'224\..*',
+    # Azure
+    r'169\.254\.169\.254', r'168\.63\.129\.16',
+]
 
 SAFELIST_DROPPED = [
      "SharedDataEvents",
@@ -320,114 +265,87 @@ SAFELIST_HASHES = [
 
 GUID_PATTERN = r'{[A-F0-9]{8}\-([A-F0-9]{4}\-){3}[A-F0-9]{12}\}'
 
-SAFELIST_COMMON_PATTERNS = {
-    'Office Temp Files': r'\\~[A-Z]{3}%s\.tmp$' % GUID_PATTERN,
-    'Meta Font': r'[A-F0-9]{7,8}\.(w|e)mf$',
-    'IE Recovery Store': r'RecoveryStore\.%s\.dat$' % GUID_PATTERN,
-    'IE Recovery Files': r'%s\.dat$' % GUID_PATTERN,
-    # TODO: use this elsewhere, like in signatures
-    'Doc Tmp': r'(?:[a-f0-9]{2}|\~\$)[a-f0-9]{62}\.(doc|xls|ppt)x?$',
-    'CryptnetCache': r'AppData\\[^\\]+\\MicrosoftCryptnetUrlCache\\',
-    'Cab File': r'\\Temp\\Cab....\.tmp',
-    'Office File': r'\\Microsoft\\OFFICE\\DATA\\[a-z0-9]+\.dat$',
-    'Internet file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.MSO\\',
-    'Word file': r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.Word\\~WRS',
-    'Word Temp Files': r'.*\\Temp\\~\$[a-z0-9]+\.doc',
-    'Office Blocks': r'\\Microsoft\\Document Building Blocks\\[0-9]{4}\\',
-    'Office ACL': r'AppData\\Roaming\\MicrosoftOffice\\.*\.acl$',
-    'Office Dictionary': r'AppData\\Roaming\\Microsoft\\UProof\\CUSTOM.DIC$',
-    'Office 2003 Dictionary': r'.*AppData\\Roaming\\Microsoft\\Proof\\\~\$CUSTOM.DIC$',
-    'Office Form': r'AppData\\Local\\Temp\\Word...\\MSForms.exd$'
-}
-
-# TODO: keys are not used, convert to list
-SAFELIST_URIS = {
-    # Local
-    'Localhost': r'(?:ftp|http)s?://localhost(?:$|/.*)',
-    'Local': r'(?:ftp|http)s?://(?:(?:(?:10|127)(?:\.(?:[2](?:[0-5][0-5]|[01234][6-9])|[1][0-9][0-9]|[1-9][0-9]|[0-9])){3})|(?:172\.(?:1[6-9]|2[0-9]|3[0-1])(?:\.(?:2[0-4][0-9]|25[0-5]|[1][0-9][0-9]|[1-9][0-9]|[0-9])){2}|(?:192\.168(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])){2})))(?:$|/.*)',
-
-    # Android
-    'Android': r'https?://schemas\.android\.com/apk/res(-auto|/android)',
-    'Android Googlesource': r'https?://android\.googlesource\.com/toolchain/llvm-project',
-
-    # XML
-    'XMLPull': r'https?://xmlpull\.org/v1/doc/features\.html(?:$|.*)',
-    'OpenXML': r'https?://schemas\.openxmlformats\.org(?:$|/.*)',
-    'OpenXML Office Relationships': r'https?://schemas\.openxmlformats\.org/officeDocument/2006/relationships/(image|attachedTemplate|header|footnotes|fontTable|customXml|endnotes|theme|settings|webSettings|glossaryDocument|numbering|footer|styles)',
-    'OpenXML 2006 Drawing': r'https?://schemas\.openxmlformats\.org/drawingml/2006/(main|wordprocessingDrawing)',
-    'OpenXML 2006 Relationships': r'https?://schemas\.openxmlformats\.org/package/2006/relationships',
-    'OpenXML 2006 Markup': r'https?://schemas\.openxmlformats\.org/markup-compatibility/2006',
-    'OpenXML Office Relationships/Math': r'https?://schemas\.openxmlformats\.org/officeDocument/2006/(relationships|math)',
-    'OpenXML Word': r'https?://schemas\.openxmlformats\.org/word/2010/wordprocessingShape',
-    'OpenXML Word Processing': r'https?://schemas\.openxmlformats\.org/wordprocessingml/2006/main',
-
-    # Microsoft
-    'Schemas': r'https?://schemas\.microsoft\.com(?:$|/.*)',
-    'Go Microsoft': r'https?://(www\.)?go\.microsoft\.com*',
-    'Microsoft Store': r'https?://displaycatalog\.md\.mp\.microsoft\.com*',
-    'Office Client': r'https?://officeclient\.microsoft\.com*',
-
-    # Windows
-    'Update': r'https?://ctldl\.windowsupdate\.com/.*',
-
-    # Ubuntu
-    'Archive': r'https?://ca\.archive\.ubuntu\.com/.*',
-
+SAFELIST_COMMON_PATTERNS = [
     # Office
-    '2010 Word': r'https?://schemas\.microsoft\.com/office/word/2010/(wordml|wordprocessingCanvas|wordprocessingInk|wordprocessingGroup|wordprocessingDrawing)',
-    '2012/2006 Word': r'https?://schemas\.microsoft\.com/office/word/(2012|2006)/wordml',
-    '2015 Word': r'https?://schemas\.microsoft\.com/office/word/2015/wordml/symex',
-    '2014 Word Drawing': r'https?://schemas\.microsoft\.com/office/drawing/2014/chartex',
-    '2015 Word Drawing': r'https?://schemas\.microsoft\.com/office/drawing/2015/9/8/chartex',
+    # TODO: use this elsewhere, like in signatures
+    r'(?:[a-f0-9]{2}|\~\$)[a-f0-9]{62}\.(doc|xls|ppt)x?$',
+    r'\\~[A-Z]{3}%s\.tmp$' % GUID_PATTERN, r'\\Microsoft\\OFFICE\\DATA\\[a-z0-9]+\.dat$',
+    r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.Word\\~WRS', r'.*\\Temp\\~\$[a-z0-9]+\.doc',
+    r'\\Microsoft\\Document Building Blocks\\[0-9]{4}\\', r'AppData\\Roaming\\MicrosoftOffice\\.*\.acl$',
+    r'AppData\\Roaming\\Microsoft\\UProof\\CUSTOM.DIC$', r'.*AppData\\Roaming\\Microsoft\\Proof\\\~\$CUSTOM.DIC$',
+    r'AppData\\Local\\Temp\\Word...\\MSForms.exd$'
+    # Meta Font
+    r'[A-F0-9]{7,8}\.(w|e)mf$',
+    # IE
+    r'RecoveryStore\.%s\.dat$' % GUID_PATTERN, r'%s\.dat$' % GUID_PATTERN,
+    r'AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.MSO\\',
+    # CryptnetCache
+    r'AppData\\[^\\]+\\MicrosoftCryptnetUrlCache\\',
+    # Cab File
+    r'\\Temp\\Cab....\.tmp',
+]
 
+SAFELIST_URIS = [
+    # Local
+    r'(?:ftp|http)s?://localhost(?:$|/.*)',
+    r'(?:ftp|http)s?://(?:(?:(?:10|127)(?:\.(?:[2](?:[0-5][0-5]|[01234][6-9])|[1][0-9][0-9]|[1-9][0-9]|[0-9])){3})|(?:172\.(?:1[6-9]|2[0-9]|3[0-1])(?:\.(?:2[0-4][0-9]|25[0-5]|[1][0-9][0-9]|[1-9][0-9]|[0-9])){2}|(?:192\.168(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])){2})))(?:$|/.*)',
+    # Android
+    r'https?://schemas\.android\.com/apk/res(-auto|/android)',
+    r'https?://android\.googlesource\.com/toolchain/llvm-project',
+    # XML
+    r'https?://xmlpull\.org/v1/doc/features\.html(?:$|.*)', r'https?://schemas\.openxmlformats\.org(?:$|/.*)',
+    r'https?://schemas\.openxmlformats\.org/officeDocument/2006/relationships/(image|attachedTemplate|header|footnotes|fontTable|customXml|endnotes|theme|settings|webSettings|glossaryDocument|numbering|footer|styles)',
+    r'https?://schemas\.openxmlformats\.org/drawingml/2006/(main|wordprocessingDrawing)',
+    r'https?://schemas\.openxmlformats\.org/package/2006/relationships',
+    r'https?://schemas\.openxmlformats\.org/markup-compatibility/2006',
+    r'https?://schemas\.openxmlformats\.org/officeDocument/2006/(relationships|math)',
+    r'https?://schemas\.openxmlformats\.org/word/2010/wordprocessingShape',
+    r'https?://schemas\.openxmlformats\.org/wordprocessingml/2006/main',
+    # Microsoft
+    r'https?://schemas\.microsoft\.com(?:$|/.*)', r'https?://(www\.)?go\.microsoft\.com*',
+    r'https?://displaycatalog\.md\.mp\.microsoft\.com*', r'https?://officeclient\.microsoft\.com*',
+    # Windows
+    r'https?://ctldl\.windowsupdate\.com/.*',
+    # Ubuntu
+    r'https?://ca\.archive\.ubuntu\.com/.*',
+    # Office
+    r'https?://schemas\.microsoft\.com/office/word/2010/(wordml|wordprocessingCanvas|wordprocessingInk|wordprocessingGroup|wordprocessingDrawing)',
+    r'https?://schemas\.microsoft\.com/office/word/(2012|2006)/wordml',
+    r'https?://schemas\.microsoft\.com/office/word/2015/wordml/symex',
+    r'https?://schemas\.microsoft\.com/office/drawing/2014/chartex',
+    r'https?://schemas\.microsoft\.com/office/drawing/2015/9/8/chartex',
     # Verisign
-    'Verisign': r'https?://www\.verisign\.com/(rpa0|rpa|cps0)',
-    'Verisign OCSP': r'https?://ocsp\.verisign\.com',
-    'Verisign Logo': r'https?://logo\.verisign\.com/vslogo\.gif04',
-    'Verisign CRL': r'https?://crl\.verisign\.com/pca3-g5\.crl04',
-    'Verisign CRL file': r'https?://csc3-2010-crl\.verisign\.com/CSC3-2010\.crl0D',
-    'Verisign AIA file': r'https?://csc3-2010-aia\.verisign\.com/CSC3-2010\.cer0',
-    'Verisign General CRL': r'https?://crl\.verisign\.com/.*',
-
+    r'https?://www\.verisign\.com/(rpa0|rpa|cps0)', r'https?://ocsp\.verisign\.com', r'https?://crl\.verisign\.com/.*',
+    r'https?://logo\.verisign\.com/vslogo\.gif04', r'https?://crl\.verisign\.com/pca3-g5\.crl04',
+    r'https?://csc3-2010-crl\.verisign\.com/CSC3-2010\.crl0D', r'https?://csc3-2010-aia\.verisign\.com/CSC3-2010\.cer0',
     # Azure
-    'WPAD': r'https?://wpad\..*/wpad\.dat',
-
+    r'https?://wpad\..*/wpad\.dat',
     # Digicert
-    'OCSP Digicert': r'https?://ocsp\.digicert\.com/.*',
-    'CRL Digicert': r'https?://crl[0-9]\.digicert\.com/.*',
-
+    r'https?://ocsp\.digicert\.com/.*', r'https?://crl[0-9]\.digicert\.com/.*',
     # Symantec
-    'Symantec Certificates': r'https?://s[a-z0-9]?\.symc[bd]\.com/.*',
-    'Symantec OCSP/CRL': r'https?://(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com/.*',
-
+    r'https?://s[a-z0-9]?\.symc[bd]\.com/.*', r'https?://(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com/.*',
     # Thawte
-    'Thawte OCSP': r'https?://ocsp\.thawte\.com/.*',
-
+    r'https?://ocsp\.thawte\.com/.*',
     # Entrust
-    'Entrust OCSP': r'https?://ocsp\.entrust\.net/.*',
-    'Entrust CRL': r'https?://crl\.entrust\.net/.*',
-
+    r'https?://ocsp\.entrust\.net/.*', r'https?://crl\.entrust\.net/.*',
     # GlobalSign
-    'GlobalSign OCSP': r'https?://ocsp[0-9]?\.globalsign\.com/.*',
-    'GlobalSign CRL': r'https?://crl\.globalsign\.(com|net)/.*',
-
+    r'https?://ocsp[0-9]?\.globalsign\.com/.*', r'https?://crl\.globalsign\.(com|net)/.*',
     # W3
-    'W3': r'https?://www\.w3\.org/.*',
-
+    r'https?://www\.w3\.org/.*',
     # Google
-    'Google': r'https?://www\.google\.com',
-}
+    r'https?://www\.google\.com',
+]
 
 
-def is_match(data: str, safelist: Dict[str, str]) -> bool:
+def is_match(data: str, safelist: List[str]) -> bool:
     """
     This method determines if a given value matches any value in a given safelist
     :param data: a given value
-    :param safelist: a map of safelisted values and their details
+    :param safelist: a list of safelisted values
     :return: a boolean representing if a given value matches any value in a given safelist
     """
-    for name, sig in safelist.items():
-        if match(sig.lower(), data.lower()):
+    for pattern in safelist:
+        if match(pattern.lower(), data.lower()):
             return True
     return False
 
@@ -496,6 +414,4 @@ def slist_check_hash(file_hash: str) -> bool:
     :param file_hash: a given file
     :return: a boolean representing if a given file_hash matches any safelisted file hashes
     """
-    if file_hash in SAFELIST_HASHES:
-        return True
-    return False
+    return file_hash in SAFELIST_HASHES
