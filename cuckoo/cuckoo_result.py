@@ -1,5 +1,5 @@
 import datetime
-import logging
+from logging import getLogger
 import re
 import os
 import json
@@ -8,14 +8,16 @@ from urllib.parse import urlparse
 from typing import List, Dict, Any, Optional, Set
 
 from assemblyline.common.str_utils import safe_str
+from assemblyline.common import log as al_log
 from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, MD5_REGEX, URI_PATH
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, NetworkEvent, ProcessEvent
 from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, Heuristic
-from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, slist_check_dropped, \
-    slist_check_app, slist_check_cmd
+from cuckoo.safelist import slist_check_ip, slist_check_domain, slist_check_uri, slist_check_hash, \
+    slist_check_dropped, slist_check_app, slist_check_cmd
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 
-log = logging.getLogger('assemblyline.svc.cuckoo.cuckooresult')
+al_log.init_logging('service.cuckoo.cuckoo_result')
+log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
 # Remove the part of the regex that looks to match the entire line
 URL_REGEX = re.compile(FULL_URI.lstrip("^").rstrip("$"))
 UNIQUE_IP_LIMIT = 100
@@ -43,7 +45,6 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
     :param random_ip_range: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
     :return: None
     """
-    log.debug("Generating AL Result.")
     info = api_report.get('info')
     # TODO: should be it's own method
     if info is not None:
@@ -104,8 +105,6 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
                            len(behaviour.get("processes", [])),
                            len(behaviour.get("summary", []))]
         if not any(item > 0 for item in sample_executed):
-            log.debug(
-                "It doesn't look like this file executed (unsupported file type?)")
             noexec_res = ResultSection(title_text="Notes")
             noexec_res.add_line(f"No program available to execute a file with the following "
                                 f"extension: {safe_str(file_ext)}")
@@ -131,8 +130,6 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
 
     if process_map:
         process_decrypted_buffers(process_map, al_result)
-
-    log.debug("AL result generation completed!")
 
 
 def process_debug(debug: Dict[str, Any], parent_result_section: ResultSection) -> None:
@@ -876,27 +873,26 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
                     continue
 
                 resolved_ips[request] = {
-                    "type": dns_type,
                     "domain": answer
                 }
             elif dns_type == "PTR" and "ip6.arpa" in request:
                 # Drop it
-                pass
+                continue
             # An 'A' record provides the IP address associated with a domain name.
             else:
                 resolved_ips[answer] = {
-                    "type": dns_type,
                     "domain": request,
                 }
-            # now map process_name to the dns_call
-            for process in process_map:
-                process_details = process_map[process]
-                for network_call in process_details["network_calls"]:
-                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or \
-                          network_call.get("InternetConnectA", {}) or network_call.get("GetAddrInfoW", {})
-                    if dns != {} and dns["hostname"] in [request, answer]:
-                        resolved_ips[answer]["process_name"] = process_details["name"]
-                        resolved_ips[answer]["process_id"] = process
+    # now map process_name to the dns_call
+    for process in process_map:
+        process_details = process_map[process]
+        for network_call in process_details["network_calls"]:
+            dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or \
+                  network_call.get("InternetConnectA", {}) or network_call.get("GetAddrInfoW", {})
+            if dns != {}:
+                ip_mapped_to_host = next(ip for ip, details in resolved_ips.items() if details["domain"] == dns["hostname"])
+                resolved_ips[ip_mapped_to_host]["process_name"] = process_details["name"]
+                resolved_ips[ip_mapped_to_host]["process_id"] = process
     return resolved_ips
 
 
@@ -1021,7 +1017,6 @@ def process_curtain(curtain: Dict[str, Any], parent_result_section: ResultSectio
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :return: None
     """
-    log.debug("Processing curtain results.")
     curtain_body: List[Dict[str, Any]] = []
     curtain_res = ResultSection(title_text="PowerShell Activity", body_format=BODY_FORMAT.TABLE)
     for pid in curtain.keys():
@@ -1109,7 +1104,6 @@ def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: 
     :return: None
     """
     # TODO: obviously a huge work in progress
-    log.debug("Processing hollowshunter results.")
     hollowshunter_body: List[Any] = []
     hollowshunter_res = ResultSection(title_text="HollowsHunter Analysis", body_format=BODY_FORMAT.TABLE)
     if len(hollowshunter_body) > 0:
@@ -1124,7 +1118,6 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
     :return:
     """
-    log.debug("Processing decrypted buffers.")
     buffer_res = ResultSection(title_text="Decrypted Buffers", body_format=BODY_FORMAT.TABLE)
     buffer_body = []
     unique_ips: Set[str] = set()
