@@ -654,7 +654,6 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     :param events: A list of events that occurred during the analysis of the task
     :return: None
     """
-    log.debug("Processing network results.")
     network_res = ResultSection(title_text="Network Activity")
 
     # List containing paths that are noise, or to be ignored
@@ -670,83 +669,13 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         title_text = "Protocol: DNS"
         dns_res_sec = ResultSection(title_text=title_text)
 
-    # This will contain the mapping of resolved IPs and their corresponding domains
-    resolved_ips: Dict[str, Dict[str, Any]] = {}
-    for dns_call in dns_calls:
-        if len(dns_call["answers"]) > 0:
-            ip = dns_call["answers"][0]["data"]
-            domain = dns_call["request"]
-            resolved_ips[ip] = {
-                "type": dns_call["type"],
-                "domain": domain,
-            }
-            # now map process_name to the dns_call
-            for process in process_map:
-                process_details = process_map[process]
-                for network_call in process_details["network_calls"]:
-                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or \
-                          network_call.get("InternetConnectA", {}) or network_call.get("GetAddrInfoW", {})
-                    if dns != {} and dns["hostname"] == domain:
-                        resolved_ips[ip]["process_name"] = process_details["name"]
-                        resolved_ips[ip]["process_id"] = process
-
-    # TCP and UDP section
-    network_flows_table: List[Dict[str, Any]] = []
-
-    # This result section will contain all of the "flows" from src ip to dest ip
-    netflows_sec = ResultSection(title_text="Network Flows")
-
+    resolved_ips = _get_dns_map(dns_calls, process_map)
+    low_level_flows = {
+        "udp": network.get("udp", []),
+        "tcp": network.get("tcp", [])
+    }
+    network_flows_table, netflows_sec = _get_low_level_flows(resolved_ips, low_level_flows)
     dns_servers = network.get("dns_servers", [])
-    netflow_protocols = ["udp", "tcp"]
-    for protocol in netflow_protocols:
-        network_calls = [x for x in network.get(protocol, [])]
-        if len(network_calls) <= 0:
-            continue
-        elif len(network_calls) > 50:
-            network_calls_made_to_unique_ips: List[Dict[str, Any]] = []
-            # Collapsing network calls into calls made to unique IP+port combos
-            for network_call in network_calls:
-                if len(network_calls_made_to_unique_ips) >= 100:
-                    # BAIL! Too many to put in a table
-                    too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
-                    too_many_unique_ips_sec.body = f"The number of TCP calls displayed has been capped " \
-                                                   f"at {UNIQUE_IP_LIMIT}. The full results can be found " \
-                                                   f"in cuckoo_traffic.pcap"
-                    netflows_sec.add_subsection(too_many_unique_ips_sec)
-                    break
-                dst_port_pair = json.dumps({network_call["dst"]: network_call["dport"]})
-                if dst_port_pair not in [json.dumps({x["dst"]: x["dport"]}) for x in network_calls_made_to_unique_ips]:
-                    network_calls_made_to_unique_ips.append(network_call)
-            network_calls = network_calls_made_to_unique_ips
-        for network_call in network_calls:
-            dst = network_call["dst"]
-            src = network_call["src"]
-            src_port: Optional[str] = None
-            if slist_check_ip(src):
-                src: Optional[str] = None
-            if src:
-                src_port = network_call["sport"]
-            network_flow = {
-                "timestamp": network_call["time"],
-                "protocol": protocol,
-                "src_ip": src,
-                "src_port": src_port,
-                "domain": None,
-                "dest_ip": dst,
-                "dest_port": network_call["dport"],
-                "image": None,
-                "pid": None,
-                "guid": None
-            }
-            if dst in resolved_ips.keys():
-                network_flow["domain"] = resolved_ips[dst]["domain"]
-                process_name = resolved_ips[dst].get("process_name")
-                if process_name:
-                    network_flow["image"] = process_name  # this may or may now exist in DNS
-                    network_flow["pid"] = resolved_ips[dst]["process_id"]
-                else:
-                    network_flow["image"] = process_name
-            network_flows_table.append(network_flow)
 
     protocol_res_sec: Optional[ResultSection] = None
     if len(network_flows_table) > 0:
@@ -853,8 +782,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                 port = http_call["port"]
                 uri = http_call["uri"]
                 proto = protocol
-            if slist_check_ip(host) is not None or slist_check_domain(host) is not None or \
-                    slist_check_uri(uri) is not None:
+            if slist_check_ip(host) or slist_check_domain(host) or slist_check_uri(uri):
                 continue
             req = {
                 "protocol": proto,
@@ -920,6 +848,121 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
 
     if len(network_res.subsections) > 0:
         parent_result_section.add_subsection(network_res)
+
+
+def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """
+    This method creates a map between
+    :param dns_calls: DNS details that were captured by Cuckoo
+    :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :return: the mapping of resolved IPs and their corresponding domains
+    """
+    resolved_ips: Dict[str, Dict[str, Any]] = {}
+    for dns_call in dns_calls:
+        if len(dns_call["answers"]) > 0:
+            answer = dns_call["answers"][0]["data"]
+            request = dns_call["request"]
+            dns_type = dns_call["type"]
+
+            # A DNS pointer record (PTR for short) provides the domain name associated with an IP address.
+            if dns_type == "PTR" and "in-addr.arpa" in request:
+                # Determine the ip from the ARPA request by extracting and reversing the IP from the "ip"
+                request = request.replace(".in-addr.arpa", "")
+                split_ip = request.split(".")
+                request = f"{split_ip[3]}.{split_ip[2]}.{split_ip[1]}.{split_ip[0]}"
+
+                # If PTR and A request for the same ip-domain pair, we choose the A
+                if request in resolved_ips:
+                    continue
+
+                resolved_ips[request] = {
+                    "type": dns_type,
+                    "domain": answer
+                }
+            elif dns_type == "PTR" and "ip6.arpa" in request:
+                # Drop it
+                pass
+            # An 'A' record provides the IP address associated with a domain name.
+            else:
+                resolved_ips[answer] = {
+                    "type": dns_type,
+                    "domain": request,
+                }
+            # now map process_name to the dns_call
+            for process in process_map:
+                process_details = process_map[process]
+                for network_call in process_details["network_calls"]:
+                    dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or \
+                          network_call.get("InternetConnectA", {}) or network_call.get("GetAddrInfoW", {})
+                    if dns != {} and dns["hostname"] in [request, answer]:
+                        resolved_ips[answer]["process_name"] = process_details["name"]
+                        resolved_ips[answer]["process_id"] = process
+    return resolved_ips
+
+
+def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
+                         flows: Dict[str, List[Dict[str, Any]]]) -> (List[Dict[str, Any]], ResultSection):
+    """
+    This method converts low level network calls to a general format
+    :param resolved_ips: A map of process IDs to process names, network calls, and decrypted buffers
+    :param flows: UDP and TCP flows from Cuckoo's analysis
+    :return: Returns a table of low level network calls, and a result section for the table
+    """
+    # TCP and UDP section
+    network_flows_table: List[Dict[str, Any]] = []
+
+    # This result section will contain all of the "flows" from src ip to dest ip
+    netflows_sec = ResultSection(title_text="Network Flows")
+
+    for protocol, network_calls in flows.items():
+        if len(network_calls) <= 0:
+            continue
+        elif len(network_calls) > 50:
+            network_calls_made_to_unique_ips: List[Dict[str, Any]] = []
+            # Collapsing network calls into calls made to unique IP+port combos
+            for network_call in network_calls:
+                if len(network_calls_made_to_unique_ips) >= 100:
+                    # BAIL! Too many to put in a table
+                    too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
+                    too_many_unique_ips_sec.body = f"The number of TCP calls displayed has been capped " \
+                                                   f"at {UNIQUE_IP_LIMIT}. The full results can be found " \
+                                                   f"in cuckoo_traffic.pcap"
+                    netflows_sec.add_subsection(too_many_unique_ips_sec)
+                    break
+                dst_port_pair = json.dumps({network_call["dst"]: network_call["dport"]})
+                if dst_port_pair not in [json.dumps({x["dst"]: x["dport"]}) for x in network_calls_made_to_unique_ips]:
+                    network_calls_made_to_unique_ips.append(network_call)
+            network_calls = network_calls_made_to_unique_ips
+        for network_call in network_calls:
+            dst = network_call["dst"]
+            src = network_call["src"]
+            src_port: Optional[str] = None
+            if slist_check_ip(src):
+                src: Optional[str] = None
+            if src:
+                src_port = network_call["sport"]
+            network_flow = {
+                "timestamp": network_call["time"],
+                "protocol": protocol,
+                "src_ip": src,
+                "src_port": src_port,
+                "domain": None,
+                "dest_ip": dst,
+                "dest_port": network_call["dport"],
+                "image": None,
+                "pid": None,
+                "guid": None
+            }
+            if dst in resolved_ips.keys():
+                network_flow["domain"] = resolved_ips[dst]["domain"]
+                process_name = resolved_ips[dst].get("process_name")
+                if process_name:
+                    network_flow["image"] = process_name  # this may or may now exist in DNS
+                    network_flow["pid"] = resolved_ips[dst]["process_id"]
+                else:
+                    network_flow["image"] = process_name
+            network_flows_table.append(network_flow)
+    return network_flows_table, netflows_sec
 
 
 def process_all_events(parent_result_section: ResultSection, events: Optional[List[Dict]] = None) -> None:

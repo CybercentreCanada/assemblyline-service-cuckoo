@@ -131,11 +131,13 @@ submission_params:
 #    type: str
 #    value: inetsim
 
-# TODO: implement platform options
-#  - default: "windows"
-#    name: platform
-#    type: str
-#    value: "windows"
+  # If you don't care about the version of the operating system that you get, as long as it matches the platform, use this
+  # This has the second-highest precedence when submitting a file
+  - default: "none"
+    name: platform
+    type: list
+    value: "none"
+    list: ["none", "windows", "linux"]
 
 heuristics:
   - heur_id: 1
