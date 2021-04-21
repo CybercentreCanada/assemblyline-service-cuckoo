@@ -52,6 +52,9 @@ x86_IMAGE_SUFFIX = "x86"
 x64_IMAGE_SUFFIX = "x64"
 RELEVANT_IMAGE_TAG = "auto"
 ALL_IMAGES_TAG = "all"
+NO_PLATFORM = "none"
+WINDOWS_PLATFORM = "windows"
+LINUX_PLATFORM = "linux"
 MACHINE_NAME_REGEX = f"(?:{'|'.join([LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX])})(.*)" \
                      f"(?:{'|'.join([x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX])})"
 
@@ -231,10 +234,18 @@ class Cuckoo(ServiceBase):
             # If specific machine, then we are "specific_machine" or bust!
             return
 
+        platform_requested = None
+        hosts_with_platform: Dict[str, List[str]] = {}
+        if not (machine_requested and machine_exists):
+            platform_requested, hosts_with_platform = self._handle_specific_platform(kwargs)
+            if platform_requested and len(hosts_with_platform[next(iter(hosts_with_platform))]) == 0:
+                # If a specific platform is requested, then we are specific platform or bust!
+                return
+
         image_requested = False
         relevant_images: Dict[str, List[str]] = {}
         relevant_images_keys: List[str] = []
-        if not (machine_requested and machine_exists):
+        if not machine_requested and not platform_requested:
             image_requested, relevant_images = self._handle_specific_image()
             if image_requested and not relevant_images:
                 # If specific image, then we are "specific_image" or bust!
@@ -264,6 +275,11 @@ class Cuckoo(ServiceBase):
             self.file_res.add_section(parent_section)
             kwargs["tags"] = relevant_images_keys[0]
             hosts = [host for host in self.hosts if host["ip"] in relevant_images[relevant_images_keys[0]]]
+            self._general_flow(kwargs, file_ext, parent_section, hosts)
+        elif platform_requested and len(hosts_with_platform[next(iter(hosts_with_platform))]) > 0:
+            parent_section = ResultSection(next(iter(hosts_with_platform)))
+            self.file_res.add_section(parent_section)
+            hosts = [host for host in self.hosts if host["ip"] in hosts_with_platform[next(iter(hosts_with_platform))]]
             self._general_flow(kwargs, file_ext, parent_section, hosts)
         else:
             if kwargs.get("machine"):
@@ -1368,7 +1384,7 @@ class Cuckoo(ServiceBase):
                 self.log.warning('Unable to retrieve machine name from result.')
             else:
                 self.report_machine_info(machine_name, cuckoo_task, parent_section)
-            self.log.debug(f"Generating AL Result from Cuckoo results for task ID: {cuckoo_task.id}..")
+            self.log.debug(f"Generating AL Result from Cuckoo results for task ID: {cuckoo_task.id}.")
             generate_al_result(cuckoo_task.report, parent_section, file_ext, self.config.get("random_ip_range"))
         except RecoverableError as e:
             self.log.error(f"Recoverable error. Error message: {repr(e)}")
@@ -1556,6 +1572,42 @@ class Cuckoo(ServiceBase):
                                       f"Cuckoo deployment include {machine_names}."
                 self.file_res.add_section(no_machine_sec)
         return machine_requested, machine_exists
+
+    def _handle_specific_platform(self, kwargs: Dict[str, Any]) -> (bool, Dict[str, List[str]]):
+        """
+        This method handles if a specific platform was requested
+        :param kwargs: The keyword arguments that will be sent to Cuckoo when submitting the file, detailing specifics
+        about the run
+        :return: A tuple containing if a platform was requested, and where that platform exists
+        """
+        platform_requested = False
+        hosts_with_platform: Dict[str, List[str]] = {}
+        machine_platform_set = set()
+        specific_platform = self._safely_get_param("platform")
+        hosts_with_platform[specific_platform] = []
+        if specific_platform == NO_PLATFORM:
+            return platform_requested, {}
+        else:
+            platform_requested = True
+
+        # Check every machine on every host
+        for host in self.hosts:
+            machine_platforms = set([machine["platform"] for machine in host["machines"]])
+            machine_platform_set = machine_platform_set.union(machine_platforms)
+            if specific_platform in machine_platforms:
+                hosts_with_platform[specific_platform].append(host["ip"])
+                continue
+        kwargs["platform"] = specific_platform
+
+        if platform_requested and not hosts_with_platform[specific_platform]:
+            no_platform_sec = ResultSection(title_text='Requested Platform Does Not Exist')
+            no_platform_sec.body = f"The requested platform '{specific_platform}' is currently unavailable.\n\n" \
+                                   f"General Information:\nAt the moment, the current platform options for this " \
+                                   f"Cuckoo deployment include {sorted(machine_platform_set)}."
+            self.file_res.add_section(no_platform_sec)
+        else:
+            kwargs["platform"] = specific_platform
+        return platform_requested, hosts_with_platform
 
     def _handle_specific_image(self) -> (bool, Dict[str, List[str]]):
         """

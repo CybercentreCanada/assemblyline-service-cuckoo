@@ -26,10 +26,12 @@ SAFELIST_COMMANDS = [
     r'"C:\\windows\\system32\\cscript\.exe" /nologo ("MonitorKnowledgeDiscovery\.vbs"|"ChangeEventModuleBatchSize\.vbs)',
     # Windows
     r'C:\\windows\\system32\\(SppExtComObj|mobsync)\.exe -Embedding',
-    r'(C:\\Windows\\)*explorer\.exe',
+    r'C:\\windows\\system32\\wbem\\wmiprvse\.exe -secured -Embedding',
+    r'(C:\\Windows\\)?explorer\.exe',
+    r'"C:\\Windows\\explorer\.exe" /LOADSAVEDWINDOWS',
     r'wmiadap\.exe (/F /T /R|/D /T)',
     r'C:\\windows\\system32\\(sppsvc|wuauclt|appidpolicyconverter|appidcertstorecheck)\.exe',
-    r'C:\\Windows\\SystemApps\\(ShellExperienceHost|Microsoft\.Windows\.Cortana)_.*\\(ShellExperienceHost|SearchUI\.exe)\.exe" -ServerName:App\.App.*\.mca',
+    r'"C:\\Windows\\SystemApps\\(ShellExperienceHost|Microsoft\.Windows\.Cortana)_.*\\(ShellExperienceHost|SearchUI)\.exe" -ServerName:(App|CortanaUI)\.App.*\.mca',
     r'C:\\Windows\\system32\\dllhost\.exe /Processid:.*',
     r'C:\\Windows\\system32\\wbem\\WmiApSrv\.exe',
     r'C:\\Windows\\system32\\sc\.exe start wuauserv',
@@ -87,7 +89,7 @@ SAFELIST_DOMAINS = [
     r'cdn\.content\.prod\.cms\.msn\.com$', r'(www\.)?msn\.com$', r'(www\.)?static-hp-eas\.s-msn\.com$',
     r'img\.s-msn\.com$',
     # Bing
-    r'(www\.)?bing\.com$', r'api\.bing\.com$',
+    r'((api|www|platform)\.)?bing\.com$',
     # Azure
     r'md-ssd-.*\.blob\.core\.windows\.net$', r'.*\.table\.core\.windows\.net', r'.*\.blob\.core\.windows\.net',
     r'.*\.opinsights\.azure\.com', r'.*reddog\.microsoft\.com$', r'agentserviceapi\.azure-automation\.net$',
@@ -117,6 +119,8 @@ SAFELIST_DOMAINS = [
     r'ocsp[0-9]?\.globalsign\.com$', r'crl\.globalsign\.(com|net)$',
     # Google
     r'google\.com$',
+    # INetSim
+    r'(www\.)?inetsim\.org$',
 ]
 
 # Note: This list should be updated if we change our analysis network topology/addresses

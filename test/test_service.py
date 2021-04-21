@@ -409,6 +409,7 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, "query_machines", return_value={})
         mocker.patch.object(Cuckoo, "_handle_specific_machine", return_value=(False, True))
         mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(False, {}))
+        mocker.patch.object(Cuckoo, "_handle_specific_platform", return_value=(False, {}))
         mocker.patch.object(Cuckoo, "_general_flow")
 
         service_task = ServiceTask(sample)
@@ -1698,6 +1699,28 @@ class TestCuckooMain:
         if correct_body:
             correct_result_section = ResultSection(title_text='Requested Machine Does Not Exist')
             correct_result_section.body = correct_body
+            assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
+
+    @staticmethod
+    @pytest.mark.parametrize("platform_requested, expected_return, expected_result_section",
+        [
+            ("blah", (True, {"blah": []}), 'The requested platform \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current platform options for this Cuckoo deployment include [\'linux\', \'windows\'].'),
+            ("none", (False, {}), None),
+            ("windows", (True, {'windows': ['blah']}), None),
+            ("linux", (True, {'linux': ['blah']}), None),
+        ]
+    )
+    def test_handle_specific_platform(platform_requested, expected_return, expected_result_section, cuckoo_class_instance, dummy_result_class_instance, mocker):
+        from cuckoo.cuckoo_main import Cuckoo
+        from assemblyline_v4_service.common.result import ResultSection
+        mocker.patch.object(Cuckoo, "_safely_get_param", return_value=platform_requested)
+        kwargs = dict()
+        cuckoo_class_instance.hosts = [{"ip": "blah", "machines": [{"platform": "windows"}, {"platform": "linux"}]}]
+        cuckoo_class_instance.file_res = dummy_result_class_instance
+        assert cuckoo_class_instance._handle_specific_platform(kwargs) == expected_return
+        if expected_result_section:
+            correct_result_section = ResultSection(title_text='Requested Platform Does Not Exist')
+            correct_result_section.body = expected_result_section
             assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
 
     @staticmethod
@@ -3031,11 +3054,13 @@ class TestSafelist:
             '"C:\\\\windows\\\\system32\\\\cscript\\.exe" /nologo '
             '("MonitorKnowledgeDiscovery\\.vbs"|"ChangeEventModuleBatchSize\\.vbs)',
             'C:\\\\windows\\\\system32\\\\(SppExtComObj|mobsync)\\.exe -Embedding',
-            '(C:\\\\Windows\\\\)*explorer\\.exe',
+            'C:\\\\windows\\\\system32\\\\wbem\\\\wmiprvse\\.exe -secured -Embedding',
+            '(C:\\\\Windows\\\\)?explorer\\.exe',
+            '"C:\\\\Windows\\\\explorer\\.exe" /LOADSAVEDWINDOWS',
             'wmiadap\\.exe (/F /T /R|/D /T)',
             'C:\\\\windows\\\\system32\\\\(sppsvc|wuauclt|appidpolicyconverter|appidcertstorecheck)\\.exe',
-            'C:\\\\Windows\\\\SystemApps\\\\(ShellExperienceHost|Microsoft\\.Windows\\.Cortana)_.*\\\\(ShellExperienceHost|SearchUI\\.exe)\\.exe" '
-            '-ServerName:App\\.App.*\\.mca',
+            '"C:\\\\Windows\\\\SystemApps\\\\(ShellExperienceHost|Microsoft\\.Windows\\.Cortana)_.*\\\\(ShellExperienceHost|SearchUI)\\.exe" '
+            '-ServerName:(App|CortanaUI)\\.App.*\\.mca',
             'C:\\\\Windows\\\\system32\\\\dllhost\\.exe /Processid:.*',
             'C:\\\\Windows\\\\system32\\\\wbem\\\\WmiApSrv\\.exe',
             'C:\\\\Windows\\\\system32\\\\sc\\.exe start wuauserv',
@@ -3120,8 +3145,7 @@ class TestSafelist:
             '(www\\.)?msn\\.com$',
             '(www\\.)?static-hp-eas\\.s-msn\\.com$',
             'img\\.s-msn\\.com$',
-            '(www\\.)?bing\\.com$',
-            'api\\.bing\\.com$',
+            '((api|www|platform)\\.)?bing\\.com$',
             'md-ssd-.*\\.blob\\.core\\.windows\\.net$',
             '.*\\.table\\.core\\.windows\\.net',
             '.*\\.blob\\.core\\.windows\\.net',
@@ -3155,7 +3179,8 @@ class TestSafelist:
             'ocsp\\.thawte\\.com$',
             'ocsp[0-9]?\\.globalsign\\.com$',
             'crl\\.globalsign\\.(com|net)$',
-            'google\\.com$'
+            'google\\.com$',
+            '(www\\.)?inetsim\\.org$'
         ]
         assert SAFELIST_IPS == [
             '(^1\\.1\\.1\\.1$)|(^8\\.8\\.8\\.8$)',
