@@ -939,7 +939,8 @@ class Cuckoo(ServiceBase):
         :param machine_section: The ResultSection containing details about the machine
         :return: None
         """
-        machine_section.add_tag("dynamic.operating_system.platform", platform.capitalize())
+        if platform:
+            machine_section.add_tag("dynamic.operating_system.platform", platform.capitalize())
         if any(processor_tag in machine_name for processor_tag in [x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX]):
             if x86_IMAGE_SUFFIX in machine_name:
                 machine_section.add_tag("dynamic.operating_system.processor", x86_IMAGE_SUFFIX)
