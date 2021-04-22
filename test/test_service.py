@@ -218,7 +218,8 @@ def check_section_equality(this, that) -> bool:
                                this.classification == that.classification and \
                                this.depth == that.depth and \
                                len(this.subsections) == len(that.subsections) and \
-                               this.title_text == that.title_text
+                               this.title_text == that.title_text and \
+                               this.tags == that.tags
 
     if not current_section_equality:
         return False
@@ -1122,6 +1123,7 @@ class TestCuckooMain:
             for tag in machine.get('tags', []):
                 body['Tags'].append(safe_str(tag).replace('_', ' '))
             correct_result_section.body = json.dumps(body)
+            correct_result_section.tags = {'dynamic.operating_system.platform': ['Blah']}
             cuckoo_class_instance.report_machine_info(machine_name, cuckoo_task, parent_section)
             assert check_section_equality(correct_result_section, parent_section.subsections[0])
         else:
@@ -1132,7 +1134,7 @@ class TestCuckooMain:
     @pytest.mark.parametrize("machine_name, platform, expected_tags",
         [
             ("", "", []),
-            ("blah", "blah", []),
+            ("blah", "blah", [("dynamic.operating_system.platform", "Blah")]),
             ("vmss-udev-win10x64", "windows", [("dynamic.operating_system.platform", "Windows"), ("dynamic.operating_system.processor", "x64"), ("dynamic.operating_system.version", "10")]),
             ("vmss-udev-win7x86", "windows", [("dynamic.operating_system.platform", "Windows"), ("dynamic.operating_system.processor", "x86"), ("dynamic.operating_system.version", "7")]),
             ("vmss-udev-ub1804x64", "linux", [("dynamic.operating_system.platform", "Linux"), ("dynamic.operating_system.processor", "x64"), ("dynamic.operating_system.version", "1804")]),
@@ -1813,45 +1815,41 @@ class TestCuckooResult:
         assert URL_REGEX == compile(base_uri_regex.lstrip("^").rstrip("$"))
         assert MD5_REGEX == base_md5_regex
         assert UNIQUE_IP_LIMIT == 100
-        assert SCORE_TRANSLATION == { 1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000 }
+        assert SCORE_TRANSLATION == {1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000}
 
     @staticmethod
-    @pytest.mark.parametrize("api_report, file_ext, random_ip_range, correct_body",
+    @pytest.mark.parametrize("api_report, correct_body",
         [
-            ({}, None, None, None),
+            ({}, None),
             (
                     {"info": {"started": "blah", "ended": "blah", "duration": "blah", "id": "blah", "route": "blah", "version": "blah"}},
-                    None, None,
                     '{"ID": "blah", "Duration": -1, "Routing": "blah", "Version": "blah"}',
             ),
             (
                     {"info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}},
-                    None, None,
                     '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
             ),
             (
                     {"info": {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"}, "debug": "blah", "signatures": "blah", "network": "blah", "behavior": {"blah": "blah"}, "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
-                    None, None, None
+                     None
             ),
             (
                     {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"summary": "blah"}},
-                    None, None,
                     '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
             ),
             (
                     {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"processtree": "blah"}},
-                    None, None,
                     '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
             ),
             (
                     {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"processes": "blah"}},
-                    None, None,
                     '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
             ),
         ]
     )
-    def test_generate_al_result(api_report, file_ext, random_ip_range, correct_body, mocker):
+    def test_generate_al_result(api_report, correct_body, mocker):
         from cuckoo.cuckoo_result import generate_al_result
+        from ipaddress import ip_network
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
 
         correct_process_map = {"blah": "blah"}
@@ -1866,7 +1864,8 @@ class TestCuckooResult:
         mocker.patch("cuckoo.cuckoo_result.process_hollowshunter")
         mocker.patch("cuckoo.cuckoo_result.process_decrypted_buffers")
         al_result = ResultSection("blah")
-        generate_al_result(api_report, al_result, file_ext, random_ip_range)
+        file_ext = "blah"
+        generate_al_result(api_report, al_result, file_ext, ip_network("192.0.2.0/24"))
 
         if api_report == {}:
             assert al_result.subsections == []
@@ -2017,14 +2016,13 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _get_trimming_index
         assert _get_trimming_index(sysmon) == correct_index
 
-    # TODO: complete tests for signatures
     @staticmethod
     @pytest.mark.parametrize("sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian",
         [
-            (None, [], "", "", {}, None, False),
+            (None, [], "192.0.2.0/24", "", {}, None, False),
             (None, [{"name": "blah", "severity": 1}], "192.0.2.0/24", "", {}, None, False),
             ("blah", [{"name": "blah", "severity": 1, "markcount": 1}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
-            ("process_martian", [{"name": "process_martian"}], "192.0.2.0/24", "", {}, None, True),
+            ("process_martian", [{"name": "process_martian", "markcount": 1}], "192.0.2.0/24", "", {}, None, True),
             ("creates_doc", [{"name": "creates_doc", "severity": 1, "markcount": 1, "marks": [{"ioc": "blahblah"}]}], "192.0.2.0/24", "blahblah", {}, None, False),
             ("creates_hidden_file", [{"name": "creates_hidden_file", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"filepath": "blahblah"}}}]}], "192.0.2.0/24", "blahblah", {}, None, False),
             ("creates_hidden_file", [{"name": "creates_hidden_file", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"filepath": "desktop.ini"}}}]}], "192.0.2.0/24", "blahblah", {}, None, False),
@@ -2032,7 +2030,6 @@ class TestCuckooResult:
             ("creates_shortcut", [{"name": "creates_shortcut", "severity": 1, "markcount": 1, "marks": [{"ioc": "blahblah.lnk"}]}], "192.0.2.0/24", "blahblah.blah", {}, None, False),
             ("attack_id", [{"name": "attack_id", "severity": 1, "markcount": 1, "marks": [], "ttp": ["T1186"]}], "192.0.2.0/24", "blahblahblahblah", {}, 'No description for signature.', False),
             ("skipped_families", [{"name": "skipped_families", "severity": 1, "markcount": 1, "marks": [], "families": ["generic"]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
-            ("families", [{"name": "families", "severity": 1, "markcount": 1, "marks": [], "families": ["blah"]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tFamilies: blah', False),
             ("console_output", [{"name": "console_output", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"buffer": "blah"}}, "type": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
             ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tIOC: 1', False),
             ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "domain": "blah.adobe.com"}]}], "192.0.2.0/24", "", {}, None, False),
@@ -2042,15 +2039,19 @@ class TestCuckooResult:
             ("network_cnc_http", [{"name": "network_cnc_http", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 11.11.11.11", "suspicious_features": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tFun fact: blah\n\tIOC: blah 11.11.11.11', False),
             ("nolookup_communication", [{"name": "nolookup_communication", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "host": "11.11.11.11"}]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
             ("nolookup_communication", [{"name": "nolookup_communication", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "host": "127.0.0.1"}]}], "192.0.2.0/24", "", {}, None, False),
-            # ("suspicious_powershell", [{"name": "suspicious_powershell", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "value": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\t"IOC: blah', False),
+            ("blah", [{"name": "blah", "markcount": 1, "severity": 1, "marks": [{"type": "ioc", "ioc": "blah", "category": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tIOC: blah', False),
+            ("blah", [{"name": "blah", "markcount": 1, "severity": 1, "marks": [{"type": "call", "pid": "1"}]}], "192.0.2.0/24", "", {1: {"name": "blah"}}, 'No description for signature.', False),
+            ("injection_explorer", [{"name": "injection_explorer", "markcount": 1, "severity": 1, "marks": [{"type": "call", "pid": 2, "call": {"arguments": {"process_identifier": 1}}}]}], "192.0.2.0/24", "", {2: {"name": "blah1"}, 1: {"name": "blah2"}}, 'No description for signature.\n\tProcess Name: blah1\n\tInjected Process: blah2', False),
+            ("process_interest", [{"name": "process_interest", "markcount": 1, "severity": 1, "marks": [{"type": "call", "pid": 2, "call": {"arguments": {"process_identifier": 1}}}]}], "192.0.2.0/24", "", {2: {"name": "blah"}, 1: {"name": "blah"}}, None, False),
         ]
     )
     def test_process_signatures(sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian):
         from cuckoo.cuckoo_result import process_signatures
+        from ipaddress import ip_network
         from assemblyline_v4_service.common.result import ResultSection, Heuristic
         al_result = ResultSection("blah")
         task_id = 1
-        assert process_signatures(sigs, al_result, random_ip_range, target_filename, process_map, task_id) == correct_is_process_martian
+        assert process_signatures(sigs, al_result, ip_network(random_ip_range), target_filename, process_map, task_id) == correct_is_process_martian
         if correct_body is None:
             assert al_result.subsections == []
         else:
@@ -2077,12 +2078,194 @@ class TestCuckooResult:
                 elif sig_name == "nolookup_communication":
                     correct_subsection.add_tag("network.dynamic.ip", "11.11.11.11")
                 correct_result_section.add_subsection(correct_subsection)
+            elif sig_name == "injection_explorer":
+                correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
+                correct_subsection.heuristic = Heuristic(17, signatures={sig_name: 1}, score_map={sig_name: 10})
+                correct_subsection.heuristic.frequency = 1
+                correct_result_section.add_subsection(correct_subsection)
             else:
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
                 correct_subsection.heuristic = Heuristic(9999, signatures={sig_name: 1}, score_map={sig_name: 10})
                 correct_subsection.heuristic.frequency = 1
                 correct_result_section.add_subsection(correct_subsection)
             assert check_section_equality(al_result.subsections[0], correct_result_section)
+
+    @staticmethod
+    @pytest.mark.parametrize("name, marks, filename, filename_remainder, expected_result",
+        [
+            ("blah", [], "blah.txt", "blah.txt", False),
+            ("creates_doc", [{"ioc": "blah.exe", "type": "blah"}], "blah.txt", "blah.txt", False),
+            ("creates_doc", [{"ioc": "blah.txt"}], "blah.txt", "blah.txt", True),
+            ("creates_doc", [{"ioc": "~blahblahblahblahblah"}], "blahblahblahblahblah.txt", "blahblahblahblahblah", True),
+            ("creates_doc", [{"ioc": "blah.exe", "type": "blah"}, {"ioc": "blah.txt", "type": "blah"}], "blah.txt", "blah.txt", False),
+            ("creates_hidden_file", [{"call": {"arguments": {"filepath": "blah.exe"}}}], "blah.txt", "blah.txt", False),
+            ("creates_hidden_file", [{"call": {"arguments": {"filepath": "blah.txt"}}}], "blah.txt", "blah.txt", True),
+            ("creates_hidden_file", [{"call": {"arguments": {"filepath": "desktop.ini"}}}], "blah.txt", "blah.txt", True),
+            ("creates_exe", [{"ioc": "blah.lnk"}], "blah.txt", "blah.txt", True),
+            ("creates_exe", [{"ioc": "AppData\\Roaming\\Microsoft\\Office\\Recent\\Temp.LNK"}], "blah.txt", "blah.txt", True),
+            ("network_cnc_http", [{"suspicious_request": "evil http://blah.com", "type": "generic"}], "blah.txt", "blah.txt", False),
+            ("network_cnc_http", [{"suspicious_request": "benign http://w3.org", "type": "generic"}], "blah.txt", "blah.txt", True),
+            ("nolookup_communication", [{"host": "http://blah.com", "type": "generic"}], "blah.txt", "blah.txt", False),
+            ("nolookup_communication", [{"host": "http://w3.org", "type": "generic"}], "blah.txt", "blah.txt", True),
+            ("nolookup_communication", [{"host": "192.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", True),
+            ("nolookup_communication", [{"host": "193.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"suspicious_features": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"entropy": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"process": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"useragent": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"blah": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"blah": "http://w3.org", "type": "generic"}], "blah.txt", "blah.txt", True),
+            ("blah", [{"blah": "193.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"blah": "192.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", True),
+            ("blah", [{"ioc": "blah", "type": "ioc"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"ioc": "blah", "type": "ioc", "category": "section"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"ioc": "http://w3.org", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+            ("network_http", [{"ioc": "benign http://w3.org/", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+            ("network_http", [{"ioc": "super benign http://w3.org/", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+            ("network_http", [{"ioc": "super http://w3.org/benign", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+            ("network_http_post", [{"ioc": "benign http://w3.org/", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+            ("network_http_post", [{"ioc": "super benign http://w3.org/", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+            ("network_http_post", [{"ioc": "super http://w3.org/benign", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+            ("network_http_post", [{"ioc": "super http://evil.com", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("persistence_autorun", [{"ioc": "super http://evil.com", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("creates_shortcut", [{"ioc": "super http://evil.com", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("ransomware_mass_file_delete", [{"ioc": "super http://evil.com", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("suspicious_process", [{"ioc": "super http://evil.com", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("uses_windows_utilities", [{"ioc": "super http://evil.com", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("creates_exe", [{"ioc": "super http://evil.com", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("deletes_executed_files", [{"ioc": "super http://evil.com", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"ioc": "blah", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("blah", [{"ioc": "192.0.2.123", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+        ]
+    )
+    def test_is_signature_a_false_positive(name, marks, filename, filename_remainder, expected_result):
+        from ipaddress import ip_network
+        from cuckoo.cuckoo_result import _is_signature_a_false_positive
+        inetsim_network = ip_network("192.0.2.0/24")
+        assert _is_signature_a_false_positive(name, marks, filename, filename_remainder, inetsim_network) == expected_result
+
+    @staticmethod
+    @pytest.mark.parametrize("name, signature, expected_tags, expected_heuristic_id, expected_description, expected_attack_ids",
+        [
+            ("blah", {"severity": 1}, [], 9999, 'No description for signature.', []),
+            ("blah", {"description": "blah", "severity": 1}, [], 9999, 'blah', []),
+            ("blah", {"description": "blah", "severity": 1, "ttp": []}, [], 9999, 'blah', []),
+            ("blah", {"description": "blah", "severity": 1, "ttp": ["T1112"]}, [], 9999, 'blah', ["T1112"]),
+            ("blah", {"description": "blah", "severity": 1, "ttp": ["T1112", "T1234"]}, [], 9999, 'blah', ["T1112", "T1234"]),
+            ("blah", {"description": "blah", "severity": 1, "families": ["generic"]}, [], 9999, 'blah', []),
+            ("blah", {"description": "blah", "severity": 1, "families": ["blah"]}, ["blah"], 9999, 'blah\n\tFamilies: blah', []),
+        ]
+    )
+    def test_create_signature_result_section(name, signature, expected_tags, expected_heuristic_id, expected_description, expected_attack_ids):
+        from cuckoo.cuckoo_result import _create_signature_result_section, SCORE_TRANSLATION
+        from assemblyline_v4_service.common.result import ResultSection, Heuristic
+        expected_result = ResultSection(f"Signature: {name}", body=expected_description)
+        sig_heur = Heuristic(expected_heuristic_id)
+        sig_heur.add_signature_id(name, score=10)
+        for attack_id in expected_attack_ids:
+            sig_heur.add_attack_id(attack_id)
+        for tag in expected_tags:
+            expected_result.add_tag("dynamic.signature.family", tag)
+        expected_result.heuristic = sig_heur
+        translated_score = SCORE_TRANSLATION[signature["severity"]]
+
+        assert check_section_equality(_create_signature_result_section(name, signature, translated_score), expected_result)
+
+    @staticmethod
+    def test_write_console_output_to_file():
+        from os import remove
+        from cuckoo.cuckoo_result import _write_console_output_to_file
+        _write_console_output_to_file(1, [{"call": {"arguments": {"buffer": "blah"}}}])
+        remove("/tmp/1_console_output.txt")
+        assert True
+
+    @staticmethod
+    @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body",
+        [
+            ("blah", {}, {}, None),
+            ("network_cnc_http", {"suspicious_request": "evil http://evil.com", "suspicious_features": "http://evil.com"}, {'network.dynamic.uri': ['http://evil.com']}, '\tFun fact: http://evil.com\n\tIOC: evil http://evil.com'),
+            ("network_cnc_http", {"suspicious_request": "benign http://w3.org"}, {}, None),
+            ("nolookup_communication", {"host": "193.0.2.123"}, {'network.dynamic.ip': ['193.0.2.123']}, None),
+            ("nolookup_communication", {"host": "192.0.2.123"}, {}, None),
+            ("suspicious_powershell", {"options": "blah", "option": "blah", "value": "blah"}, {}, '\tIOC: blah via blah'),
+            ("suspicious_powershell", {"value": "blah"}, {}, '\tIOC: blah'),
+            ("exploit_heapspray", {"protection": "blah"}, {}, '\tFun fact: Data was committed to memory at the protection level blah'),
+            ("exploit_heapspray", {"protection": "blah"}, {}, '\tFun fact: Data was committed to memory at the protection level blah'),
+            ("blah", {"type": "blah"}, {}, None),
+            ("blah", {"suspicious_features": "blah"}, {}, None),
+            ("blah", {"entropy": "blah"}, {}, None),
+            ("blah", {"process": "blah"}, {}, None),
+            ("blah", {"useragent": "blah"}, {}, None),
+            ("blah", {"blah": "192.0.2.123"}, {}, None),
+            ("blah", {"blah": "193.0.2.123"}, {}, '\tIOC: 193.0.2.123'),
+            ("blah", {"blah": "blah"}, {}, '\tIOC: blah'),
+            ("blah", {"description": "blah"}, {}, '\tFun fact: blah'),
+        ]
+    )
+    def test_tag_and_describe_generic_signature(signature_name, mark, expected_tags, expected_body):
+        from ipaddress import ip_network
+        from assemblyline_v4_service.common.result import ResultSection
+        from cuckoo.cuckoo_result import _tag_and_describe_generic_signature
+        inetsim_network = ip_network("192.0.2.0/24")
+        expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
+        actual_result = ResultSection("blah")
+        _tag_and_describe_generic_signature(signature_name, mark, actual_result, inetsim_network)
+        assert check_section_equality(actual_result, expected_result)
+
+    @staticmethod
+    @pytest.mark.parametrize("signature_name, mark, process_map, expected_tags, expected_body",
+        [
+            ("blah", {"ioc": "http://w3.org", "category": "blah"}, {}, {}, None),
+            ("network_http", {"ioc": "evil http://evil.org", "category": "blah"}, {}, {'network.dynamic.uri': ['http://evil.org']}, '\tIOC: evil http://evil.org'),
+            ("network_http", {"ioc": "evil http://evil.org", "category": "blah"}, {}, {'network.dynamic.uri': ['http://evil.org']}, '\tIOC: evil http://evil.org'),
+            ("network_http", {"ioc": "evil http://evil.org/", "category": "blah"}, {}, {}, None),
+            ("network_http_post", {"ioc": "evil http://evil.org/", "category": "blah"}, {}, {}, None),
+            ("network_http_post", {"ioc": "evil evil http://evil.org", "category": "blah"}, {}, {}, None),
+            ("network_http_post", {"ioc": "evil evil http://evil.org", "category": "blah"}, {}, {}, None),
+            ("persistence_autorun", {"ioc": "blah", "category": "blah"}, {}, {"dynamic.autorun_location": ["blah"]}, None),
+            ("creates_shortcut", {"ioc": "blah", "category": "blah"}, {}, {}, None),
+            ("ransomware_mass_file_delete", {"ioc": "blah", "category": "blah"}, {}, {}, None),
+            ("suspicious_process", {"ioc": "blah", "category": "blah"}, {}, {}, None),
+            ("uses_windows_utilities", {"ioc": "blah", "category": "blah"}, {}, {}, None),
+            ("creates_exe", {"ioc": "blah", "category": "blah"}, {}, {}, None),
+            ("deletes_executed_files", {"ioc": "blah", "category": "blah"}, {}, {}, None),
+            ("p2p_cnc", {"ioc": "blah", "category": "blah"}, {}, {"network.dynamic.ip": ["blah"]}, '\tIOC: blah'),
+            ("blah", {"ioc": "1", "category": "blah"}, {}, {}, '\tIOC: 1'),
+            ("blah", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: blah'),
+            ("application_raises_exception", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: 1'),
+            ("blah", {"ioc": "blah", "category": "file"}, {}, {"dynamic.process.file_name": ["blah"]}, '\tIOC: blah'),
+            ("blah", {"ioc": "blah", "category": "cmdline"}, {}, {"dynamic.process.command_line": ["blah"]}, '\tIOC: blah'),
+        ]
+    )
+    def test_tag_and_describe_ioc_signature(signature_name, mark, process_map, expected_tags, expected_body):
+        from ipaddress import ip_network
+        from assemblyline_v4_service.common.result import ResultSection
+        from cuckoo.cuckoo_result import _tag_and_describe_ioc_signature
+        inetsim_network = ip_network("192.0.2.0/24")
+        expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
+        actual_result = ResultSection("blah")
+        _tag_and_describe_ioc_signature(signature_name, mark, actual_result, inetsim_network, process_map)
+        assert check_section_equality(actual_result, expected_result)
+
+    @staticmethod
+    @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body",
+        [
+            ("blah", {"blah": "blah"}, {}, None),
+            ("creates_hidden_file", {"call": {"arguments": {}}}, {}, None),
+            ("creates_hidden_file", {"call": {"arguments": {"filepath": "blah"}}}, {"dynamic.process.file_name": ["blah"]}, None),
+            ("moves_self", {"call": {"arguments": {}}}, {}, None),
+            ("moves_self", {"call": {"arguments": {"oldfilepath": "blah", "newfilepath": "blah"}}}, {}, '\tOld file path: blah, New file path: blah'),
+            ("creates_service", {"call": {"arguments": {}}}, {}, None),
+            ("creates_service", {"call": {"arguments": {"service_name": "blah"}}}, {}, '\tNew service name: blah'),
+        ]
+    )
+    def test_tag_and_describe_call_signature(signature_name, mark, expected_tags, expected_body):
+        from assemblyline_v4_service.common.result import ResultSection
+        from cuckoo.cuckoo_result import _tag_and_describe_call_signature
+        expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
+        actual_result = ResultSection("blah")
+        _tag_and_describe_call_signature(signature_name, mark, actual_result)
+        assert check_section_equality(actual_result, expected_result)
 
     @staticmethod
     @pytest.mark.parametrize("val, expected_return",
@@ -2209,10 +2392,10 @@ class TestCuckooResult:
     @staticmethod
     @pytest.mark.parametrize("process_map, correct_buffer_body, correct_tags",
         [
-            ({0: {"decrypted_buffers": []}}, None, None),
-            ({0: {"decrypted_buffers": [{"blah": "blah"}]}}, None, None),
-            ({0: {"decrypted_buffers": [{"CryptDecrypt": {"buffer": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', None),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', None),
+            ({0: {"decrypted_buffers": []}}, None, {}),
+            ({0: {"decrypted_buffers": [{"blah": "blah"}]}}, None, {}),
+            ({0: {"decrypted_buffers": [{"CryptDecrypt": {"buffer": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', {}),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', {}),
             ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}}, '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1'], 'network.static.uri': ['127.0.0.1']}),
             ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.blah"}}]}}, '[{"Decrypted Buffer": "blah.blah"}]', {'network.static.domain': ['blah.blah'], 'network.static.uri': ['blah.blah']}),
             ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}}, '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1'], 'network.static.uri': ['127.0.0.1:999']}),
