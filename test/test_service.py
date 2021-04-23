@@ -1795,6 +1795,27 @@ class TestCuckooMain:
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is True
         assert check_section_equality(correct_subsection, parent_section.subsections[0])
 
+    @staticmethod
+    @pytest.mark.parametrize("title_heur_tuples, correct_section_heur_map",
+        [
+            ([("blah1", 1), ("blah2", 2)], {'blah1': 1, 'blah2': 2}),
+            ([("blah1", 1), ("blah1", 2)], {'blah1': 1}),
+        ]
+    )
+    def test_get_subsection_heuristic_map(title_heur_tuples, correct_section_heur_map, cuckoo_class_instance):
+        from assemblyline_v4_service.common.result import ResultSection, Heuristic
+        subsections = []
+        for title, heur_id in title_heur_tuples:
+            subsection = ResultSection(title)
+            sub_heur = Heuristic(heur_id)
+            subsection.heuristic = sub_heur
+            subsections.append(subsection)
+        actual_section_heur_map = {}
+        cuckoo_class_instance._get_subsection_heuristic_map(subsections, actual_section_heur_map)
+        assert actual_section_heur_map == correct_section_heur_map
+        if len(correct_section_heur_map) == 1:
+            assert subsections[1].heuristic is None
+
 
 class TestCuckooResult:
     @classmethod
