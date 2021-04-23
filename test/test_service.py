@@ -2020,7 +2020,7 @@ class TestCuckooResult:
     @pytest.mark.parametrize("sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian",
         [
             (None, [], "192.0.2.0/24", "", {}, None, False),
-            (None, [{"name": "blah", "severity": 1}], "192.0.2.0/24", "", {}, None, False),
+            ("blah", [{"name": "blah", "severity": 1}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
             ("blah", [{"name": "blah", "severity": 1, "markcount": 1}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
             ("process_martian", [{"name": "process_martian", "markcount": 1}], "192.0.2.0/24", "", {}, None, True),
             ("creates_doc", [{"name": "creates_doc", "severity": 1, "markcount": 1, "marks": [{"ioc": "blahblah"}]}], "192.0.2.0/24", "blahblah", {}, None, False),
