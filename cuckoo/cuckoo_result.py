@@ -377,7 +377,7 @@ def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: Result
         sig_name = sig['name']
         sig_marks = sig.get('marks', [])
 
-        if sig_name == "process_martian":
+        if not is_process_martian and sig_name == "process_martian":
             is_process_martian = True
 
         if sig_name in CUCKOO_DROPPED_SIGNATURES:
@@ -399,10 +399,6 @@ def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: Result
         # Find any indicators of compromise from the signature marks
         for mark in sig_marks:
             pid = mark.get("pid")
-            if pid:
-                sig_to_add = {"pid": pid, "name": sig_name, "score": translated_score}
-                if sig_to_add not in signatures:
-                    signatures.append(sig_to_add)
             process_name = process_map.get(pid, {}).get("name")
 
             # Adding tags and descriptions to the signature section, based on the type of mark
@@ -421,6 +417,13 @@ def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: Result
                     if injected_process_name and injected_process_name not in injected_processes:
                         injected_processes.append(injected_process_name)
                         sig_res.add_line(f'\tInjected Process: {safe_str(injected_process_name)}')
+
+            # not (process_names != [] and injected_processes != [] and process_names == injected_processes) means the
+            # signature was not raised for injecting itself, which is a false positive
+            if pid and not (process_names != [] and injected_processes != [] and process_names == injected_processes):
+                sig_to_add = {"pid": pid, "name": sig_name, "score": translated_score}
+                if sig_to_add not in signatures:
+                    signatures.append(sig_to_add)
 
         if not (process_names != [] and injected_processes != [] and process_names == injected_processes):
             sigs_res.add_subsection(sig_res)
