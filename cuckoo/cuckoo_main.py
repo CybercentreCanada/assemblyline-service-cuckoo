@@ -304,6 +304,11 @@ class Cuckoo(ServiceBase):
             if not section.subsections:
                 self.file_res.sections.remove(section)
 
+        if len(self.file_res.sections) > 1:
+            section_heur_map = {}
+            for section in self.file_res.sections:
+                self._get_subsection_heuristic_map(section.subsections, section_heur_map)
+
     def _general_flow(self, kwargs: Dict[str, Any], file_ext: str, parent_section: ResultSection,
                       hosts: List[Dict[str, Any]]) -> None:
         """
@@ -1693,6 +1698,18 @@ class Cuckoo(ServiceBase):
             parent_section.add_subsection(invalid_timeout_res_sec)
             return True
         return False
+
+    def _get_subsection_heuristic_map(self, subsections: List[ResultSection], section_heur_map: Dict[str, int]) -> None:
+        for subsection in subsections:
+            if subsection.heuristic:
+                if subsection.title_text in section_heur_map:
+                    # If more than one subsection exists with the same title text, then there should be no heuristic
+                    # associated with the second subsection, as this will artificially inflate the overall score
+                    subsection.heuristic = None
+                else:
+                    section_heur_map[subsection.title_text] = subsection.heuristic.heur_id
+            if subsection.subsections:
+                self._get_subsection_heuristic_map(subsection.subsections, section_heur_map)
 
 
 def generate_random_words(num_words: int) -> str:
