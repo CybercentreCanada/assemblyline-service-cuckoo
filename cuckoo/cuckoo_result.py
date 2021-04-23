@@ -371,9 +371,6 @@ def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: Result
         target_filename_remainder = target_filename[-11:]
 
     for sig in sigs:
-        if not sig.get("markcount", 0):
-            log.debug(f"The signature {sig} does not have any marks, how is this possible?")
-            continue
         sig_name = sig['name']
         sig_marks = sig.get('marks', [])
 
@@ -593,6 +590,8 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             host = http_call["host"]
             if "ex" in protocol:
                 path = http_call["uri"]
+                if host in path:
+                    path = path.split(host)[1]
                 request = http_call["request"]
                 port = http_call["dport"]
                 uri = http_call["protocol"] + "://" + host + path
@@ -1160,7 +1159,7 @@ def _create_signature_result_section(name: str, signature: Dict[str, Any], trans
     sig_heur.add_signature_id(name, score=translated_score)
 
     # Setting the Mitre ATT&CK ID for the heuristic
-    attack_ids = signature.get('ttp', [])
+    attack_ids = signature.get('ttp', {})
     for attack_id in attack_ids:
         sig_heur.add_attack_id(attack_id)
 
