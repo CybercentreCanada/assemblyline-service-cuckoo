@@ -1687,8 +1687,8 @@ class Cuckoo(ServiceBase):
         :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: A boolean representing if the analysis timeout is invalid
         """
-        requested_timeout = self.request.get_param("analysis_timeout")
-        service_timeout = self.service_attributes["timeout"]
+        requested_timeout = int(self.request.get_param("analysis_timeout"))
+        service_timeout = int(self.service_attributes["timeout"])
         if requested_timeout > service_timeout:
             invalid_timeout_res_sec = ResultSection("Invalid Analysis Timeout Requested",
                                                     body=f"The analysis timeout requested was {requested_timeout}, "
