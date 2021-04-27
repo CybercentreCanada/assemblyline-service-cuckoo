@@ -277,13 +277,15 @@ def convert_cuckoo_processes(events: Optional[List[Dict]] = None,
     for item in cuckoo_processes:
         # If process pid doesn't match any processes that Sysmon already picked up
         if item["pid"] not in existing_pids:
-            if slist_check_app(item["process_path"]) or slist_check_cmd(item["command_line"]):
+            process_path = item.get("process_path")
+            command_line = item["command_line"]
+            if not process_path or not command_line or slist_check_app(process_path) or slist_check_cmd(command_line):
                 continue
             ontology_process = {
                 "pid": item["pid"],
                 "ppid": item["ppid"],
-                "image": item["process_path"],
-                "command_line": item["command_line"],
+                "image": process_path,
+                "command_line": command_line,
                 "timestamp": item["first_seen"],
                 "guid": "placeholder" if not item.get("guid") else item["guid"],  # TODO: Somehow get the GUID
             }
