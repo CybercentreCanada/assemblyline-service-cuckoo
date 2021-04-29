@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Set
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
+from assemblyline.common.attack_map import revoke_map
 from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, MD5_REGEX, URI_PATH
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, NetworkEvent, ProcessEvent
 from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, Heuristic
@@ -1163,6 +1164,8 @@ def _create_signature_result_section(name: str, signature: Dict[str, Any], trans
     # Setting the Mitre ATT&CK ID for the heuristic
     attack_ids = signature.get('ttp', {})
     for attack_id in attack_ids:
+        if attack_id in revoke_map:
+            attack_id = revoke_map[attack_id]
         sig_heur.add_attack_id(attack_id)
 
     sig_res.heuristic = sig_heur
