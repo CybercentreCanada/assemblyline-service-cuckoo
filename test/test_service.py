@@ -2050,6 +2050,7 @@ class TestCuckooResult:
             ("creates_exe", [{"name": "creates_exe", "severity": 1, "markcount": 1, "marks": [{"ioc": "AppData\\Roaming\\Microsoft\\Office\\Recent\\Temp.LNK"}]}], "192.0.2.0/24", "blahblah", {}, None, False),
             ("creates_shortcut", [{"name": "creates_shortcut", "severity": 1, "markcount": 1, "marks": [{"ioc": "blahblah.lnk"}]}], "192.0.2.0/24", "blahblah.blah", {}, None, False),
             ("attack_id", [{"name": "attack_id", "severity": 1, "markcount": 1, "marks": [], "ttp": ["T1186"]}], "192.0.2.0/24", "blahblahblahblah", {}, 'No description for signature.', False),
+            ("attack_id", [{"name": "attack_id", "severity": 1, "markcount": 1, "marks": [], "ttp": ["T1187"]}], "192.0.2.0/24", "blahblahblahblah", {}, 'No description for signature.', False),
             ("skipped_families", [{"name": "skipped_families", "severity": 1, "markcount": 1, "marks": [], "families": ["generic"]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
             ("console_output", [{"name": "console_output", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"buffer": "blah"}}, "type": "blah"}]}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
             ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic"}]}], "192.0.2.0/24", "", {}, 'No description for signature.\n\tIOC: 1', False),
@@ -2068,6 +2069,7 @@ class TestCuckooResult:
     )
     def test_process_signatures(sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian):
         from cuckoo.cuckoo_result import process_signatures
+        from assemblyline.common.attack_map import revoke_map
         from ipaddress import ip_network
         from assemblyline_v4_service.common.result import ResultSection, Heuristic
         al_result = ResultSection("blah")
@@ -2081,7 +2083,7 @@ class TestCuckooResult:
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
                 correct_subsection.heuristic = Heuristic(9999, signatures={sig_name: 1}, score_map={sig_name: 10})
                 correct_subsection.heuristic.frequency = 1
-                correct_subsection.heuristic.attack_ids = ["T1186"]
+                correct_subsection.heuristic.attack_ids = [revoke_map.get(sigs[0]["ttp"][0], sigs[0]["ttp"][0])]
                 correct_result_section.add_subsection(correct_subsection)
             elif sig_name == "console_output":
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
