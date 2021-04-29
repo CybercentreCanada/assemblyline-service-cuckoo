@@ -710,13 +710,14 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
                     "domain": request,
                 }
     # now map process_name to the dns_call
-    for process in process_map:
-        process_details = process_map[process]
+    for process, process_details in process_map.items():
         for network_call in process_details["network_calls"]:
             dns = network_call.get("getaddrinfo", {}) or network_call.get("InternetConnectW", {}) or \
                   network_call.get("InternetConnectA", {}) or network_call.get("GetAddrInfoW", {})
-            if dns != {}:
-                ip_mapped_to_host = next(ip for ip, details in resolved_ips.items() if details["domain"] == dns["hostname"])
+            if dns != {} and dns["hostname"]:
+                ip_mapped_to_host = next((ip for ip, details in resolved_ips.items() if details["domain"] == dns["hostname"]), None)
+                if not ip_mapped_to_host:
+                    continue
                 resolved_ips[ip_mapped_to_host]["process_name"] = process_details["name"]
                 resolved_ips[ip_mapped_to_host]["process_id"] = process
     return resolved_ips
@@ -1040,7 +1041,7 @@ def get_process_map(processes: Optional[List[Dict[str, Any]]] = None) -> Dict[in
                 args = call["arguments"]
                 args_of_interest: Dict[str, str] = {}
                 for arg in api_calls_of_interest.get(api, []):
-                    if arg in args:
+                    if arg in args and args[arg]:
                         args_of_interest[arg] = args[arg]
                 if args_of_interest:
                     item_to_add = {api: args_of_interest}
@@ -1050,7 +1051,7 @@ def get_process_map(processes: Optional[List[Dict[str, Any]]] = None) -> Dict[in
                 args = call["arguments"]
                 args_of_interest: Dict[str, str] = {}
                 for arg in api_calls_of_interest.get(api, []):
-                    if arg in args:
+                    if arg in args and args[arg]:
                         args_of_interest[arg] = args[arg]
                 if args_of_interest:
                     decrypted_buffers.append({api: args_of_interest})
