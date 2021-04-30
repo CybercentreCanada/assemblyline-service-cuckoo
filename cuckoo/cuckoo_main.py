@@ -27,7 +27,7 @@ from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.constants import RECOGNIZED_TYPES
 
-from cuckoo.cuckoo_result import generate_al_result
+from cuckoo.cuckoo_result import generate_al_result, INETSIM
 from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
@@ -191,6 +191,7 @@ class Cuckoo(ServiceBase):
         self.allowed_images: List[str] = []
         self.artefact_list: Optional[List[Dict[str, str]]] = None
         self.hosts: List[Dict[str, Any]] = []
+        self.routing = ""
 
     def start(self) -> None:
         for host in self.config["remote_host_details"]["hosts"]:
@@ -201,6 +202,7 @@ class Cuckoo(ServiceBase):
         self.timeout = 120  # arbitrary number, not too big, not too small
         self.max_report_size = self.config.get('max_report_size', 275000000)
         self.allowed_images = self.config.get("allowed_images", [])
+        self.routing = self.config.get("routing", INETSIM)
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
@@ -1391,7 +1393,7 @@ class Cuckoo(ServiceBase):
             else:
                 self.report_machine_info(machine_name, cuckoo_task, parent_section)
             self.log.debug(f"Generating AL Result from Cuckoo results for task ID: {cuckoo_task.id}.")
-            generate_al_result(cuckoo_task.report, parent_section, file_ext, self.config.get("random_ip_range"))
+            generate_al_result(cuckoo_task.report, parent_section, file_ext, self.config.get("random_ip_range"), self.routing)
         except RecoverableError as e:
             self.log.error(f"Recoverable error. Error message: {repr(e)}")
             if cuckoo_task and cuckoo_task.id is not None:
