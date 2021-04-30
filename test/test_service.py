@@ -1886,7 +1886,7 @@ class TestCuckooResult:
         mocker.patch("cuckoo.cuckoo_result.process_decrypted_buffers")
         al_result = ResultSection("blah")
         file_ext = "blah"
-        generate_al_result(api_report, al_result, file_ext, ip_network("192.0.2.0/24"))
+        generate_al_result(api_report, al_result, file_ext, ip_network("192.0.2.0/24"), "blah")
 
         if api_report == {}:
             assert al_result.subsections == []
