@@ -101,6 +101,7 @@ submission_params:
     value: true
 
   # value = auto + all + allowed_images
+  # This has the third-highest precedence when submitting a file
   - default: ""
     name: specific_image
     type: list
@@ -125,11 +126,11 @@ submission_params:
     type: str
     value: ""
 
-# TODO: implement routing options
-#  - default: inetsim
-#    name: routing
-#    type: str
-#    value: inetsim
+  - default: INetSim
+    name: routing
+    type: list
+    value: INetSim
+    list: ["INetSim"]
 
   # If you don't care about the version of the operating system that you get, as long as it matches the platform, use this
   # This has the second-highest precedence when submitting a file

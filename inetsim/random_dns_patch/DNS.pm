@@ -332,20 +332,15 @@ sub getIP {
         return $static_host_to_ip{$hostname};
     }
     elsif ($return_random_ip) {
-        # have we already create an IP for this hostname?
-        # my $existing_addr = `/bin/fgrep $hostname $dns_mapping_file | /usr/bin/cut -d"," -f2`;
+        # have we already created an IP for this hostname?
         open(my $dns_mapping_fh, $dns_mapping_file) or die "Can't open $dns_mapping_file";
 
         my @dns_mappings = <$dns_mapping_fh>;
-        # open(my $fh, "dns.list");
-        # my @list=<$fh>;
         my @matching_hostnames=grep /$hostname/,@dns_mappings;
         close($dns_mapping_fh);
 
         if (scalar(@matching_hostnames) > 0) {
             my @line_parts = split(",", $matching_hostnames[0]);
-            # &INetSim::Log::MainLog("failed! (Cannot switch group)", &INetSim::Config::getConfigParameter("DNS_ServiceName"));
-            #&INetSim::Log::MainLog("returning @line_parts", &INetSim::Config::getConfigParameter("DNS_ServiceName"));
             return $line_parts[1];
         }
         else {
@@ -356,7 +351,7 @@ sub getIP {
             my $addr = $min_addr + rand($max_addr - $min_addr);
             my $dqip = n2dq($addr);
 
-            # Save the IP mapping and treutnr the ip
+            # Save the IP mapping and return the ip
             open(my $fh, '>>', $dns_mapping_file);
             say $fh "$hostname,$dqip";
             close($fh);
@@ -391,12 +386,9 @@ sub getHost {
 
         if (scalar(@matching_ips) > 0) {
             my @line_parts = split(",", $matching_ips[0]);
-            # &INetSim::Log::MainLog("returning @line_parts", &INetSim::Config::getConfigParameter("DNS_ServiceName"));
             return $line_parts[0];
         }
         else {
-            # return the default hostname
-            # do we want to do this? or make up a random hostname too?
             return &INetSim::Config::getConfigParameter("DNS_Default_Hostname") . "." . &INetSim::Config::getConfigParameter("DNS_Default_Domainname");
         }
     }
