@@ -43,6 +43,7 @@ SILENT_IOCS = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_pr
 
 INETSIM = "INetSim"
 DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
+BUFFER_API_CALLS = ["send"]
 
 # noinspection PyBroadException
 # TODO: break this into smaller methods
@@ -129,7 +130,7 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
         build_process_tree(events, al_result, is_process_martian, signatures)
 
     if network:
-        process_network(network, al_result, validated_random_ip_range, routing, process_map, events)
+        process_network(network, al_result, validated_random_ip_range, routing, process_map, events, info["id"])
 
     if len(events) > 0:
         process_all_events(al_result, events)
@@ -468,7 +469,8 @@ def contains_safelisted_value(val: str) -> bool:
 
 # TODO: break this up into methods
 def process_network(network: Dict[str, Any], parent_result_section: ResultSection, inetsim_network: IPv4Network,
-                    routing: str, process_map: Dict[int, Dict[str, Any]], events: List[Dict[str, Any]]) -> None:
+                    routing: str, process_map: Dict[int, Dict[str, Any]], events: List[Dict[str, Any]],
+                    task_id: int) -> None:
     """
     This method processes the network section of the Cuckoo report, adding anything noteworthy to the
     Assemblyline report
@@ -478,6 +480,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     :param routing: The method of routing used in the Cuckoo environment
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param events: A list of events that occurred during the analysis of the task
+    :param task_id: The ID of the Cuckoo Task
     :return: None
     """
     network_res = ResultSection(title_text="Network Activity")
@@ -574,10 +577,10 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         network_res.add_subsection(dns_res_sec)
     if protocol_res_sec and len(protocol_res_sec.tags) > 0:
         network_res.add_subsection(protocol_res_sec)
+    unique_netflows: List[Dict[str, Any]] = []
     if len(network_flows_table) > 0:
         # Need to convert each dictionary to a string in order to get the set of network_flows_table, since
         # dictionaries are not hashable
-        unique_netflows: List[Dict[str, Any]] = []
         for item in network_flows_table:
             if item not in unique_netflows:  # Remove duplicates
                 unique_netflows.append(item)
@@ -671,6 +674,10 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         if remote_file_access_sec.heuristic:
             http_sec.add_subsection(remote_file_access_sec)
         network_res.add_subsection(http_sec)
+    else:
+        _process_non_http_traffic_over_http(network_res, unique_netflows)
+
+    _write_encrypted_buffers_to_file(task_id, process_map, network_res)
 
     if len(network_res.subsections) > 0:
         parent_result_section.add_subsection(network_res)
@@ -1209,6 +1216,32 @@ def _write_console_output_to_file(task_id: int, marks: List[Dict[str, Any]]) -> 
     f.close()
 
 
+def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[str, Any]],
+                                     network_res: ResultSection) -> None:
+    """
+    Write temporary files containing encrypted buffers observed during network analysis
+    :param task_id: The ID of the Cuckoo Task
+    :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :param network_res: The result section containing details about the network behaviour
+    :return: None
+    """
+    buffer_count = 0
+    for pid, process_details in process_map.items():
+        for network_call in process_details["network_calls"]:
+            for api_call in BUFFER_API_CALLS:
+                if api_call in network_call:
+                    buffer = network_call[api_call]["buffer"]
+                    encrypted_buffer_file_path = os.path.join("/tmp", f"{task_id}_encrypted_buffer_{buffer_count}.txt")
+                    with open(encrypted_buffer_file_path, "wb") as f:
+                        f.write(buffer.encode())
+                    f.close()
+                    buffer_count += 1
+    if buffer_count > 0:
+        encrypted_buffer_result_section = ResultSection(f"{buffer_count} Encrypted Buffer(s) Found")
+        encrypted_buffer_result_section.set_heuristic(1006)
+        network_res.add_subsection(encrypted_buffer_result_section)
+
+
 def _tag_and_describe_generic_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultSection,
                                         inetsim_network: IPv4Network) -> None:
     """
@@ -1313,3 +1346,26 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         service_name = mark["call"].get("arguments", {}).get("service_name")
         if service_name:
             sig_res.add_line(f'\tNew service name: {safe_str(service_name)}')
+
+
+def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netflows: List[Dict[str, Any]]) -> None:
+    """
+    This method adds a result section detailing non-HTTP network traffic over ports commonly used for HTTP
+    :param network_res: The result section that will contain the result section detailing this traffic, if any
+    :param unique_netflows: Network flows observed during Cuckoo analysis
+    :return: None
+    """
+    non_http_traffic_result_section = ResultSection("Non-HTTP Traffic over HTTP Ports")
+    non_http_list = []
+    # If there was no HTTP/HTTPS calls made, then confirm that there was no suspicious
+    for netflow in unique_netflows:
+        if netflow["dest_port"] in [443, 80]:
+            non_http_list.append(netflow)
+            non_http_traffic_result_section.add_tag("network.dynamic.ip", safe_str(netflow["dest_ip"]))
+            non_http_traffic_result_section.add_tag("network.dynamic.domain", safe_str(netflow["domain"]))
+            non_http_traffic_result_section.add_tag("network.port", safe_str(netflow["dest_port"]))
+    if len(non_http_list) > 0:
+        non_http_traffic_result_section.set_heuristic(1005)
+        non_http_traffic_result_section.body_format = BODY_FORMAT.TABLE
+        non_http_traffic_result_section.body = json.dumps(non_http_list)
+        network_res.add_subsection(non_http_traffic_result_section)
