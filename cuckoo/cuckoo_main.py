@@ -1294,6 +1294,7 @@ class Cuckoo(ServiceBase):
         try:
             # TODO: This doesn't need to happen with the tar obj open
             self._extract_console_output(cuckoo_task.id)
+            self._extract_encrypted_buffers(cuckoo_task.id)
             self._extract_hollowshunter(tar_obj, cuckoo_task.id)
             self._extract_artefacts(tar_obj, cuckoo_task.id)
 
@@ -1428,6 +1429,31 @@ class Cuckoo(ServiceBase):
                 "to_be_extracted": False
             }
             self.artefact_list.append(artefact)
+            self.log.debug(f"Adding supplementary file {console_output_file_name}")
+
+    def _extract_encrypted_buffers(self, task_id: int) -> None:
+        """
+        This method adds files containing encrypted buffers, if any exist
+        :param task_id: An integer representing the Cuckoo Task ID
+        :return: None
+        """
+        # Check if there are any files consisting of encrypted buffers
+        temp_dir = "/tmp"
+        encrypted_buffer_files: List[str] = []
+        for f in os.listdir(temp_dir):
+            file_path = os.path.join(temp_dir, f)
+            if os.path.isfile(file_path) and f"{task_id}_encrypted_buffer_" in file_path:
+                encrypted_buffer_files.append(file_path)
+
+        for encrypted_buffer_file in encrypted_buffer_files:
+            artefact = {
+                "name": encrypted_buffer_file,
+                "path": encrypted_buffer_file,
+                "description": "Encrypted Buffer Observed in Network Traffic",
+                "to_be_extracted": True
+            }
+            self.artefact_list.append(artefact)
+            self.log.debug(f"Adding extracted file {encrypted_buffer_file}")
 
     def _extract_artefacts(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
         """

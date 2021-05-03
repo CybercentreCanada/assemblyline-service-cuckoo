@@ -505,6 +505,18 @@ heuristics:
     filetype: '*'
     description: Cuckoo detected traffic made over TCP/UDP
 
+  - heur_id: 1005
+    name: Non-HTTP Traffic over HTTP ports
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected non-HTTP traffic being made over HTTP ports (80, 443)
+
+  - heur_id: 1006
+    name: Enrypted Buffer
+    score: 500
+    filetype: '*'
+    description: Cuckoo detected an encrypted buffer being transferred through a network call
+
   - heur_id: 9999
     name: Unknown
     score: 0

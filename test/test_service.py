@@ -1583,11 +1583,20 @@ class TestCuckooMain:
         assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == False
 
     @staticmethod
-    def test_extract_artefacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class, mocker):
-        from cuckoo.cuckoo_main import Cuckoo
+    def test_extract_encrypted_buffers(cuckoo_class_instance, dummy_request_class, mocker):
+        mocker.patch('os.listdir', return_value=["1_encrypted_buffer_0.txt"])
+        mocker.patch('os.path.isfile', return_value=True)
+        cuckoo_class_instance.request = dummy_request_class()
+        cuckoo_class_instance.artefact_list = []
+        task_id = 1
+        cuckoo_class_instance._extract_encrypted_buffers(task_id)
+        assert cuckoo_class_instance.artefact_list[0]["path"] == "/tmp/1_encrypted_buffer_0.txt"
+        assert cuckoo_class_instance.artefact_list[0]["name"] == "/tmp/1_encrypted_buffer_0.txt"
+        assert cuckoo_class_instance.artefact_list[0]["description"] == "Encrypted Buffer Observed in Network Traffic"
+        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"]
 
-        sysmon_path = "blah"
-        sysmon_name = "sysmon/sysmon.evtx"
+    @staticmethod
+    def test_extract_artefacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
 
         tarball_file_map = {
             "buffer": "Extracted buffer",
@@ -1985,8 +1994,9 @@ class TestCuckooResult:
     @pytest.mark.parametrize("processes, correct_events",
         [
             ([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}], [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah"}]),
-            ([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}], [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah"}]),
+            ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}], []),
             ([], []),
+            (None, []),
         ]
     )
     def test_convert_cuckoo_processes(processes, correct_events):
@@ -2310,6 +2320,37 @@ class TestCuckooResult:
     @staticmethod
     def test_process_network():
         pass
+
+    @staticmethod
+    def test_write_encrypted_buffers_to_file():
+        from os import remove
+        from assemblyline_v4_service.common.result import ResultSection
+        from cuckoo.cuckoo_result import _write_encrypted_buffers_to_file
+        test_parent_section = ResultSection("blah")
+        correct_result_section = ResultSection("1 Encrypted Buffer(s) Found")
+        correct_result_section.set_heuristic(1006)
+        _write_encrypted_buffers_to_file(1, {1: {"network_calls": [{"send": {"buffer": "blah"}}]}}, test_parent_section)
+        assert check_section_equality(test_parent_section.subsections[0], correct_result_section)
+        remove("/tmp/1_encrypted_buffer_0.txt")
+
+    @staticmethod
+    def test_process_non_http_traffic_over_http():
+        from json import dumps
+        from cuckoo.cuckoo_result import _process_non_http_traffic_over_http
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+        test_parent_section = ResultSection("blah")
+        network_flows = [{"dest_port": 80, "dest_ip": "127.0.0.1", "domain": "blah"}, {"dest_port": 443, "dest_ip": "127.0.0.2", "domain": "blah2"}]
+        correct_result_section = ResultSection("Non-HTTP Traffic over HTTP Ports")
+        correct_result_section.set_heuristic(1005)
+        correct_result_section.tags = {
+            "network.dynamic.ip": ["127.0.0.1", "127.0.0.2"],
+            "network.dynamic.domain": ["blah", "blah2"],
+            "network.port": [80, 443],
+        }
+        correct_result_section.body_format = BODY_FORMAT.TABLE
+        correct_result_section.body = dumps(network_flows)
+        _process_non_http_traffic_over_http(test_parent_section, network_flows)
+        assert check_section_equality(test_parent_section.subsections[0], correct_result_section)
 
     @staticmethod
     def test_process_all_events():
