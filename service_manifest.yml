@@ -37,6 +37,7 @@ config:
   # Cuckoo Service specifications
   dedup_similar_percent: 40
   max_dll_exports_exec: 5
+  default_analysis_timeout: 150
 
   # Docker Container Limit
   max_report_size: 275000000

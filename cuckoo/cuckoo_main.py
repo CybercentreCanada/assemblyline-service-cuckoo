@@ -1052,7 +1052,7 @@ class Cuckoo(ServiceBase):
             kwargs['timeout'] = timeout
         else:
             kwargs['enforce_timeout'] = False
-            kwargs['timeout'] = ANALYSIS_TIMEOUT
+            kwargs['timeout'] = self.config.get("default_analysis_timeout", ANALYSIS_TIMEOUT)
         arguments = self.request.get_param("arguments")
         # dump_memory = request.get_param("dump_memory")  # TODO: cloud Cuckoo implementation does not have
         #  dump_memory functionality
