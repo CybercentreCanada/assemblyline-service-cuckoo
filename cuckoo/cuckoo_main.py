@@ -1094,7 +1094,7 @@ class Cuckoo(ServiceBase):
         else:
             task_options.append("screenshots=1")
 
-        if simulate_user not in [True, 'True']:  # Not sure why sometimes this specific param is a string
+        if not simulate_user:
             task_options.append("human=0")
 
         # If deep_scan, then get 100 HH files of all types
