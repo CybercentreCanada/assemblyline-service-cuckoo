@@ -32,6 +32,7 @@ from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc|dll)$"
+ENCRYPTED_BUFFER_REGEX = "^\/tmp\/%s_encrypted_buffer_[0-9]{1,2}\.txt$"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
@@ -1442,7 +1443,7 @@ class Cuckoo(ServiceBase):
         encrypted_buffer_files: List[str] = []
         for f in os.listdir(temp_dir):
             file_path = os.path.join(temp_dir, f)
-            if os.path.isfile(file_path) and f"{task_id}_encrypted_buffer_" in file_path:
+            if os.path.isfile(file_path) and re.match(ENCRYPTED_BUFFER_REGEX % task_id, file_path):
                 encrypted_buffer_files.append(file_path)
 
         for encrypted_buffer_file in encrypted_buffer_files:
