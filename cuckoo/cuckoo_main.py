@@ -332,7 +332,7 @@ class Cuckoo(ServiceBase):
         cuckoo_task = CuckooTask(self.file_name, host_to_use, **kwargs)
 
         try:
-            self.submit(self.request.file_contents, cuckoo_task, parent_section)
+            self.submit(self.request.file_contents, cuckoo_task)
 
             if cuckoo_task.id:
                 self._generate_report(file_ext, cuckoo_task, parent_section)
@@ -354,7 +354,7 @@ class Cuckoo(ServiceBase):
         if cuckoo_task and cuckoo_task.id is not None:
             self.delete_task(cuckoo_task)
 
-    def submit(self, file_content: bytes, cuckoo_task: CuckooTask, parent_section: ResultSection) -> None:
+    def submit(self, file_content: bytes, cuckoo_task: CuckooTask) -> None:
         """
         This method contains the submitting, polling, and report retrieving logic
         :param file_content: The content of the file to be submitted
@@ -365,7 +365,6 @@ class Cuckoo(ServiceBase):
         try:
             """ Submits a new file to Cuckoo for analysis """
             task_id = self.submit_file(file_content, cuckoo_task)
-            self.log.debug(f"Submitted file. Task id: {task_id}.")
             if not task_id:
                 self.log.error("Failed to get task for submitted file.")
                 return
@@ -379,7 +378,7 @@ class Cuckoo(ServiceBase):
                 self.delete_task(cuckoo_task)
             raise Exception(err_msg)
 
-        self.log.debug(f"Submission succeeded. File: {cuckoo_task.file} -- Task ID: {cuckoo_task.id}")
+        self.log.debug(f"Submission succeeded. File: {cuckoo_task.file} -- Task {cuckoo_task.id}")
 
         try:
             status: Optional[str] = self.poll_started(cuckoo_task)
@@ -387,42 +386,20 @@ class Cuckoo(ServiceBase):
             self.log.error(f"VM startup timed out or {cuckoo_task.id} was never added to the Cuckoo DB.")
             status: Optional[str] = None
 
-        # TODO: if status != TASK_STARTED, but still exists, then the rest of the function does nothing
         if status == TASK_STARTED:
             try:
-                status = self.poll_report(cuckoo_task, parent_section)
+                status = self.poll_report(cuckoo_task)
             except RetryError:
                 self.log.error("Max retries exceeded for report status.")
                 status = None
 
         err_msg: Optional[str] = None
-        # TODO: Turn this into a map?
         if status is None:
             err_msg = "Timed out while waiting for Cuckoo to analyze file."
         elif status == TASK_MISSING:
             err_msg = "Task went missing while waiting for Cuckoo to analyze file."
-        elif status == TASK_STOPPED:
-            err_msg = "Service has been stopped while waiting for Cuckoo to analyze file."
-        # TODO: why even check then?
-        elif status == INVALID_JSON:
-            # This has already been handled in poll_report
-            pass
-        elif status == REPORT_TOO_BIG:
-            # This has already been handled in poll_report
-            pass
-        elif status == SERVICE_CONTAINER_DISCONNECTED:
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
-            raise Exception("The service container has closed the pipe after making an "
-                            "API request, most likely due to lack of disk space.")
-        elif status == MISSING_REPORT:
-            # Raise an exception to force a retry
-            raise RecoverableError(f"Retrying after {MISSING_REPORT} status")
         elif status == ANALYSIS_FAILED:
-            task_id = cuckoo_task.id
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
-            raise Exception(f"The analysis of #{task_id} has failed. This is most likely because a non-native "
+            raise Exception(f"The analysis of #{cuckoo_task.id} has failed. This is most likely because a non-native "
                             f"file type was attempted to be detonated. Example: .dll on a Linux VM.")
 
         if err_msg:
@@ -435,7 +412,6 @@ class Cuckoo(ServiceBase):
         # Need to kill the container; we're about to go down..
         self.log.info("Service is being stopped; removing all running containers and metadata..")
 
-    # TODO: stop_max_attempt_number should be GUEST_VM_START_TIMEOUT / CUCKOO_POLL_DELAY
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
            stop_max_attempt_number=(GUEST_VM_START_TIMEOUT/CUCKOO_POLL_DELAY),
            retry_on_result=_retry_on_none)
@@ -452,7 +428,7 @@ class Cuckoo(ServiceBase):
 
         # Detect if mismatch
         if task_info["id"] != cuckoo_task.id:
-            self.log.warning(f"Cuckoo returned mismatched task info for task: {cuckoo_task.id}. Trying again..")
+            self.log.warning(f"Cuckoo returned mismatched task info for task {cuckoo_task.id}. Trying again..")
             return None
 
         if task_info.get("guest", {}).get("status") == TASK_STARTING:
@@ -477,7 +453,7 @@ class Cuckoo(ServiceBase):
            stop_max_attempt_number=((GUEST_VM_START_TIMEOUT + REPORT_GENERATION_TIMEOUT)/CUCKOO_POLL_DELAY),
            retry_on_result=_retry_on_none,
            retry_on_exception=_exclude_chain_ex)
-    def poll_report(self, cuckoo_task: CuckooTask, parent_section: ResultSection) -> Optional[str]:
+    def poll_report(self, cuckoo_task: CuckooTask) -> Optional[str]:
         """
         This method polls the Cuckoo server for the status of the task, doing so until a report has been generated
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
@@ -491,47 +467,19 @@ class Cuckoo(ServiceBase):
 
         # Detect if mismatch
         if task_info["id"] != cuckoo_task.id:
-            self.log.warning(f"Cuckoo returned mismatched task info for task: {cuckoo_task.id}. Trying again..")
+            self.log.warning(f"Cuckoo returned mismatched task info for task {cuckoo_task.id}. Trying again..")
             return None
 
         # Check for errors first to avoid parsing exceptions
         status = task_info["status"]
         if "fail" in status:
-            self.log.error(f"Analysis has failed for #{cuckoo_task.id} due to {task_info['errors']}.")
+            self.log.error(f"Analysis has failed for task {cuckoo_task.id} due to {task_info['errors']}.")
             return ANALYSIS_FAILED
         elif status == TASK_COMPLETED:
-            self.log.debug(f"Analysis has completed for #{cuckoo_task.id}, waiting on report to be produced.")
+            self.log.debug(f"Analysis has completed for task {cuckoo_task.id}, waiting on report to be produced.")
         elif status == TASK_REPORTED:
-            self.log.debug(f"Cuckoo report generation has completed for {cuckoo_task.id}.")
-
-            try:
-                cuckoo_task.report = self.query_report(cuckoo_task)
-            except MissingCuckooReportException as e:
-                self.log.error(e)
-                return MISSING_REPORT
-            except JSONDecodeError as e:
-                self.log.error(e)
-                invalid_json_sec = ResultSection(title_text='Invalid JSON Report Generated')
-                invalid_json_sec.add_line("Exception converting Cuckoo report "
-                                          "HTTP response into JSON. The unparsed files have been attached. The error "
-                                          "is found below:")
-                invalid_json_sec.add_line(str(e))
-                parent_section.add_subsection(invalid_json_sec)
-                return INVALID_JSON
-            except ReportSizeExceeded as e:
-                self.log.error(e)
-                report_too_big_sec = ResultSection(title_text="Report Size is Too Large")
-                report_too_big_sec.add_line("Successful query of report. However, the size of the report that was "
-                                            "generated was too large, and the Cuckoo service container may have "
-                                            "crashed.")
-                report_too_big_sec.add_line(str(e))
-                parent_section.add_subsection(report_too_big_sec)
-                return REPORT_TOO_BIG
-            except Exception as e:
-                self.log.error(e)
-                return SERVICE_CONTAINER_DISCONNECTED
-            if cuckoo_task.report:
-                return status
+            self.log.debug(f"Cuckoo report generation has completed for task {cuckoo_task.id}.")
+            return status
         else:
             self.log.debug(f"Waiting for task {cuckoo_task.id} to finish. Current status: {status}.")
 
@@ -582,7 +530,7 @@ class Cuckoo(ServiceBase):
                     return 0
             return task_id
 
-    def query_report(self, cuckoo_task: CuckooTask, fmt: str = "json", params: Optional[Dict[str, str]] = None) -> Any:
+    def query_report(self, cuckoo_task: CuckooTask, fmt: str, params: Optional[Dict[str, str]] = None) -> Any:
         """
         This method retrieves the report from the Cuckoo server
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
@@ -591,7 +539,7 @@ class Cuckoo(ServiceBase):
         :return: Depending on what is requested, will return a string representing that a JSON report has been
         generated or the bytes of a tarball
         """
-        self.log.debug(f"Querying report, task_id: {cuckoo_task.id} - format: {fmt}")
+        self.log.debug(f"Querying report for task {cuckoo_task.id} - format: {fmt}")
         try:
             # There are edge cases that require us to stream the report to disk
             temp_report = tempfile.SpooledTemporaryFile()
@@ -600,13 +548,7 @@ class Cuckoo(ServiceBase):
                 if int(resp.headers["Content-Length"]) > self.max_report_size:
                     # BAIL, TOO BIG and there is a strong chance it will crash the Docker container
                     resp.status_code = 413  # Request Entity Too Large
-                elif fmt == "json" and resp.status_code == 200:
-                    # We just want to confirm that the report.json has been created. We will extract it later
-                    # when we call for the tar ball
-                    resp.close()
-                # TODO: if fmt is acceptable and resp.status_code is 200, then we should write. not if else. if else,
-                #  then raise?
-                else:
+                elif resp.status_code == 200:
                     for chunk in resp.iter_content(chunk_size=8192):
                         temp_report.write(chunk)
         except requests.exceptions.Timeout:
@@ -637,19 +579,16 @@ class Cuckoo(ServiceBase):
                 raise Exception(msg)
 
         try:
-            if fmt == "json":
-                report_data = "exists"
-            else:
-                # Setting the pointer in the temp file
-                temp_report.seek(0)
-                # Reading as bytes
-                report_data = temp_report.read()
+            # Setting the pointer in the temp file
+            temp_report.seek(0)
+            # Reading as bytes
+            report_data = temp_report.read()
         finally:
             # Removing the temp file
             temp_report.close()
 
         # TODO: report_data = b'{}' and b'""' evaluates to true, so that should be added to this check
-        if not report_data or report_data == '':
+        if report_data in [None, "", b""]:
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
             raise Exception("Empty report data")
@@ -676,7 +615,7 @@ class Cuckoo(ServiceBase):
         pcap_data: Optional[bytes] = None
         if resp.status_code != 200:
             if resp.status_code == 404:
-                self.log.error(f"Task or pcap not found for task: {cuckoo_task.id}")
+                self.log.error(f"Task or pcap not found for task {cuckoo_task.id}")
             else:
                 self.log.error(f"Failed to query pcap for task {cuckoo_task.id}. Status code: {resp.status_code}")
         else:
@@ -705,7 +644,7 @@ class Cuckoo(ServiceBase):
             if resp.status_code == 404:
                 # Just because the query returns 404 doesn't mean the task doesn't exist, it just hasn't been
                 # added to the DB yet
-                self.log.warning(f"Task not found for task: {cuckoo_task.id}")
+                self.log.warning(f"Task not found for task {cuckoo_task.id}")
                 task_dict = {"task": {"status": TASK_MISSING}, "id": cuckoo_task.id}
             else:
                 self.log.error(f"Failed to query task {cuckoo_task.id}. Status code: {resp.status_code}")
@@ -738,7 +677,7 @@ class Cuckoo(ServiceBase):
         elif resp.status_code != 200:
             self.log.error(f"Failed to delete task {cuckoo_task.id}. Status code: {resp.status_code}")
         else:
-            self.log.debug(f"Deleted task: {cuckoo_task.id}.")
+            self.log.debug(f"Deleted task {cuckoo_task.id}.")
             if cuckoo_task:
                 cuckoo_task.id = None
 
@@ -853,7 +792,7 @@ class Cuckoo(ServiceBase):
                     for item in json.loads(section.body):
                         fh.write(item["original"] + "\n")
                 fh.close()
-                self.log.debug(f"Adding extracted file {ps1_file_name}")
+                self.log.debug(f"Adding extracted file for task {task_id}: {ps1_file_name}")
                 artefact = {
                     "name": ps1_file_name,
                     "path": ps1_path,
@@ -897,7 +836,7 @@ class Cuckoo(ServiceBase):
                 "to_be_extracted": True
             }
             self.artefact_list.append(artefact)
-            self.log.debug(f"Adding extracted file {pcap_file_name}")
+            self.log.debug(f"Adding extracted file for task {cuckoo_task.id}: {pcap_file_name}")
 
     def report_machine_info(self, machine_name: str, cuckoo_task: CuckooTask, parent_section: ResultSection) -> None:
         """
@@ -1285,7 +1224,12 @@ class Cuckoo(ServiceBase):
         self._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
         tar_obj = tarfile.open(tar_report_path)
 
-        report_json_path = self._add_json_as_supplementary_file(tar_obj, cuckoo_task)
+        try:
+            report_json_path = self._add_json_as_supplementary_file(tar_obj, cuckoo_task)
+        except MissingCuckooReportException:
+            report_json_path = None
+            parent_section.add_subsection(ResultSection("The Cuckoo JSON Report is missing!",
+                                                        body="Please alert your Cuckoo administrators."))
         if report_json_path:
             self._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
 
@@ -1324,7 +1268,7 @@ class Cuckoo(ServiceBase):
                 "to_be_extracted": False
             }
             self.artefact_list.append(artefact)
-            self.log.debug(f"Adding supplementary file {tar_file_name} for {cuckoo_task.id}")
+            self.log.debug(f"Adding supplementary file {tar_file_name} for task {cuckoo_task.id}")
         except Exception as e:
             self.log.exception(f"Unable to add tar of complete report for "
                                f"task {cuckoo_task.id} due to {e}")
@@ -1354,7 +1298,11 @@ class Cuckoo(ServiceBase):
                     "to_be_extracted": False
                 }
                 self.artefact_list.append(artefact)
-                self.log.debug(f"Adding supplementary file {report_name} for task ID {cuckoo_task.id}")
+                self.log.debug(f"Adding supplementary file {report_name} for task {cuckoo_task.id}")
+            else:
+                raise MissingCuckooReportException
+        except MissingCuckooReportException:
+            raise
         except Exception as e:
             self.log.exception(f"Unable to add report.json for task {cuckoo_task.id}. Exception: {e}")
         return report_json_path
@@ -1393,7 +1341,7 @@ class Cuckoo(ServiceBase):
                 self.log.warning('Unable to retrieve machine name from result.')
             else:
                 self.report_machine_info(machine_name, cuckoo_task, parent_section)
-            self.log.debug(f"Generating AL Result from Cuckoo results for task ID: {cuckoo_task.id}.")
+            self.log.debug(f"Generating AL Result from Cuckoo results for task {cuckoo_task.id}.")
             generate_al_result(cuckoo_task.report, parent_section, file_ext, self.config.get("random_ip_range"), self.routing)
         except RecoverableError as e:
             self.log.error(f"Recoverable error. Error message: {repr(e)}")
@@ -1453,7 +1401,7 @@ class Cuckoo(ServiceBase):
                 "to_be_extracted": True
             }
             self.artefact_list.append(artefact)
-            self.log.debug(f"Adding extracted file {encrypted_buffer_file}")
+            self.log.debug(f"Adding extracted file for task {task_id}: {encrypted_buffer_file}")
 
     def _extract_artefacts(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
         """
@@ -1496,7 +1444,7 @@ class Cuckoo(ServiceBase):
                     "to_be_extracted": to_be_extracted
                 }
                 self.artefact_list.append(artefact)
-                self.log.debug(f"Adding extracted file for task ID {task_id}: {file_name}")
+                self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
 
     def _extract_hollowshunter(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
         """
@@ -1528,7 +1476,7 @@ class Cuckoo(ServiceBase):
                     "to_be_extracted": to_be_extracted
                 }
                 self.artefact_list.append(artefact)
-                self.log.debug(f"Adding HollowsHunter file {file_name} for task ID {task_id}")
+                self.log.debug(f"Adding HollowsHunter file {file_name} for task {task_id}")
 
     def _safely_get_param(self, param: str) -> Optional[Any]:
         """
