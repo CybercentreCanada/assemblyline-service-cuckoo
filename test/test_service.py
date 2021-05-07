@@ -1223,6 +1223,7 @@ class TestCuckooMain:
                 "simulate_user": False,
                 "deep_scan": False,
                 "package": "",
+                "dump_memory": False,
             },
             {
                 "analysis_timeout": 1,
@@ -1237,7 +1238,8 @@ class TestCuckooMain:
                 "sysmon_enabled": True,
                 "simulate_user": True,
                 "deep_scan": True,
-                "package": "doc"
+                "package": "doc",
+                "dump_memory": True,
             }
         ]
     )
@@ -1261,6 +1263,7 @@ class TestCuckooMain:
         sysmon_enabled = params["sysmon_enabled"]
         simulate_user = params["simulate_user"]
         package = params["package"]
+        dump_memory = params["dump_memory"]
         if timeout:
             correct_kwargs['enforce_timeout'] = True
             correct_kwargs['timeout'] = timeout
@@ -1298,6 +1301,9 @@ class TestCuckooMain:
 
         cuckoo_class_instance.request = dummy_request_class(**params)
         cuckoo_class_instance.request.deep_scan = deep_scan
+        cuckoo_class_instance.config["machinery_supports_memory_dumps"] = True
+        if dump_memory:
+            correct_kwargs["memory"] = True
         cuckoo_class_instance._set_task_parameters(kwargs, file_ext, parent_section)
         assert kwargs == correct_kwargs
 
@@ -1390,6 +1396,8 @@ class TestCuckooMain:
         from cuckoo.cuckoo_main import Cuckoo, CuckooTask
         from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, 'query_report', return_value=tar_report)
+        mocker.patch.object(Cuckoo, '_extract_console_output', return_value=None)
+        mocker.patch.object(Cuckoo, '_extract_encrypted_buffers', return_value=None)
         mocker.patch.object(Cuckoo, 'check_dropped', return_value=None)
         mocker.patch.object(Cuckoo, 'check_powershell', return_value=None)
         mocker.patch.object(Cuckoo, '_unpack_tar', return_value=None)
@@ -1417,7 +1425,6 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, "_add_tar_ball_as_supplementary_file")
         mocker.patch.object(Cuckoo, "_add_json_as_supplementary_file", return_value=True)
         mocker.patch.object(Cuckoo, "_build_report")
-        mocker.patch.object(Cuckoo, "_extract_console_output")
         mocker.patch.object(Cuckoo, "_extract_hollowshunter")
         mocker.patch.object(Cuckoo, "_extract_artefacts")
         mocker.patch("cuckoo.cuckoo_main.tarfile.open", return_value=dummy_tar_class())
@@ -1574,6 +1581,7 @@ class TestCuckooMain:
         tarball_file_map = {
             "buffer": "Extracted buffer",
             "extracted": "Cuckoo extracted file",
+            "memory": "Memory artefact",
             "shots": "Screenshots from Cuckoo analysis",
             "sum": "All traffic from TCPDUMP and PolarProxy",
             "sysmon/sysmon.evtx": "Sysmon Logging Captured",

@@ -200,7 +200,7 @@ class Cuckoo(ServiceBase):
             del host["api_key"]
         self.hosts = self.config["remote_host_details"]["hosts"]
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
-        self.timeout = 120  # arbitrary number, not too big, not too small
+        self.timeout = self.config.get("rest_timeout", 120)
         self.max_report_size = self.config.get('max_report_size', 275000000)
         self.allowed_images = self.config.get("allowed_images", [])
         self.routing = self.config.get("routing", INETSIM)
@@ -990,8 +990,7 @@ class Cuckoo(ServiceBase):
             kwargs['enforce_timeout'] = False
             kwargs['timeout'] = self.config.get("default_analysis_timeout", ANALYSIS_TIMEOUT)
         arguments = self.request.get_param("arguments")
-        # dump_memory = request.get_param("dump_memory")  # TODO: cloud Cuckoo implementation does not have
-        #  dump_memory functionality
+        dump_memory = self.request.get_param("dump_memory")
         no_monitor = self.request.get_param("no_monitor")
         custom_options = self.request.get_param("custom_options")
         kwargs["clock"] = self.request.get_param("clock")
@@ -1010,9 +1009,10 @@ class Cuckoo(ServiceBase):
         if arguments:
             task_options.append(f"arguments={arguments}")
 
-        # if dump_memory: # TODO: cloud Cuckoo implementation does not have dump_memory functionality
-        #     # Full system dump and volatility scan
-        #     kwargs['memory'] = True
+        if self.config.get("machinery_supports_memory_dumps", False) and dump_memory:
+            kwargs["memory"] = True
+        elif dump_memory:
+            parent_section.add_subsection(ResultSection("Cuckoo machinery cannot generate memory dumps."))
 
         # TODO: This should be a boolean
         if no_monitor:
@@ -1196,11 +1196,15 @@ class Cuckoo(ServiceBase):
         self.log.debug(f"Generating cuckoo report tar.gz for {cuckoo_task.id}.")
 
         # Submit cuckoo analysis report archive as a supplementary file
+        # FYI: tweak https://github.com/cuckoosandbox/cuckoo/pull/2533, so that fmt="all" has the
+        # bz_format = "all": {"type": "-", "files": []}. This way you can retrieve the "memory.dmp" file via REST.
         tar_report = self.query_report(cuckoo_task, fmt='all', params={'tar': 'gz'})
         if tar_report is not None:
             self._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
 
         # Submit dropped files and pcap if available:
+        self._extract_console_output(cuckoo_task.id)
+        self._extract_encrypted_buffers(cuckoo_task.id)
         self.check_dropped(cuckoo_task, parent_section)
         self.check_powershell(cuckoo_task.id, parent_section)
         # self.check_pcap(cuckoo_task)
@@ -1233,9 +1237,6 @@ class Cuckoo(ServiceBase):
         # Check for any extra files in full report to add as extracted files
         # special 'supplementary' directory
         try:
-            # TODO: This doesn't need to happen with the tar obj open
-            self._extract_console_output(cuckoo_task.id)
-            self._extract_encrypted_buffers(cuckoo_task.id)
             self._extract_hollowshunter(tar_obj, cuckoo_task.id)
             self._extract_artefacts(tar_obj, cuckoo_task.id)
 
@@ -1411,7 +1412,7 @@ class Cuckoo(ServiceBase):
         tarball_file_map = {
             "buffer": "Extracted buffer",
             "extracted": "Cuckoo extracted file",
-            # There is an api option for this: https://cuckoo.readthedocs.io/en/latest/usage/api/#tasks-shots
+            "memory": "Memory artefact",
             "shots": "Screenshots from Cuckoo analysis",
             # "polarproxy": "HTTPS .pcap from PolarProxy capture",
             "sum": "All traffic from TCPDUMP and PolarProxy",
@@ -1420,7 +1421,7 @@ class Cuckoo(ServiceBase):
         }
 
         # Get the max size for extract files, used a few times after this
-        max_extracted_size = self.config['max_file_size']
+        max_extracted_size = self.config.get('max_file_size', 80000000)
         tar_obj_members = [x.name for x in tar_obj.getmembers() if
                            x.isfile() and x.size < max_extracted_size]
         task_dir = os.path.join(self.working_directory, f"{task_id}")

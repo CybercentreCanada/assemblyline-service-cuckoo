@@ -38,6 +38,8 @@ config:
   dedup_similar_percent: 40
   max_dll_exports_exec: 5
   default_analysis_timeout: 150
+  machinery_supports_memory_dumps: false
+  rest_timeout: 120
 
   # Docker Container Limit
   max_report_size: 275000000
@@ -64,11 +66,10 @@ submission_params:
     type: str
     value: ""
 
-# TODO: cloud Cuckoo implementation does not have dump_memory functionality
-#  - default: false
-#    name: dump_memory
-#    type: bool
-#    value: false
+  - default: false
+    name: dump_memory
+    type: bool
+    value: false
 
   - default: false
     name: no_monitor
