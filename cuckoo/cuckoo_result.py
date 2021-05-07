@@ -758,11 +758,11 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
     for protocol, network_calls in flows.items():
         if len(network_calls) <= 0:
             continue
-        elif len(network_calls) > 50:
+        elif len(network_calls) > UNIQUE_IP_LIMIT/2:
             network_calls_made_to_unique_ips: List[Dict[str, Any]] = []
             # Collapsing network calls into calls made to unique IP+port combos
             for network_call in network_calls:
-                if len(network_calls_made_to_unique_ips) >= 100:
+                if len(network_calls_made_to_unique_ips) >= UNIQUE_IP_LIMIT:
                     # BAIL! Too many to put in a table
                     too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
                     too_many_unique_ips_sec.body = f"The number of TCP calls displayed has been capped " \
@@ -796,12 +796,9 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
             }
             if dst in resolved_ips.keys():
                 network_flow["domain"] = resolved_ips[dst]["domain"]
-                process_name = resolved_ips[dst].get("process_name")
-                if process_name:
-                    network_flow["image"] = process_name  # this may or may now exist in DNS
+                network_flow["image"] = resolved_ips[dst].get("process_name")
+                if network_flow["image"]:
                     network_flow["pid"] = resolved_ips[dst]["process_id"]
-                else:
-                    network_flow["image"] = process_name
             network_flows_table.append(network_flow)
     return network_flows_table, netflows_sec
 

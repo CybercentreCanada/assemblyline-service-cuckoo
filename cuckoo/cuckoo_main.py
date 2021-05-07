@@ -360,7 +360,6 @@ class Cuckoo(ServiceBase):
         This method contains the submitting, polling, and report retrieving logic
         :param file_content: The content of the file to be submitted
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
-        :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: None
         """
         try:
@@ -458,7 +457,6 @@ class Cuckoo(ServiceBase):
         """
         This method polls the Cuckoo server for the status of the task, doing so until a report has been generated
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
-        :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: A string representing the status
         """
         task_info = self.query_task(cuckoo_task)
@@ -553,8 +551,6 @@ class Cuckoo(ServiceBase):
                     for chunk in resp.iter_content(chunk_size=8192):
                         temp_report.write(chunk)
         except requests.exceptions.Timeout:
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
             raise CuckooTimeoutException(f"Cuckoo ({cuckoo_task.base_url}) timed out after {self.timeout}s while "
                                          f"trying to query the report for task {cuckoo_task.id}")
         except requests.ConnectionError:

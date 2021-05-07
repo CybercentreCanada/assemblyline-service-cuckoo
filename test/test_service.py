@@ -458,6 +458,10 @@ class TestCuckooMain:
             # Cover that code!
             cuckoo_class_instance.execute(service_request)
 
+        with mocker.patch.object(Cuckoo, "_handle_specific_machine", return_value=(True, True)):
+            # Cover that code!
+            cuckoo_class_instance.execute(service_request)
+
         with mocker.patch.object(Cuckoo, "_handle_specific_machine", return_value=(False, False)):
             with mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(True, {})):
                 # Cover that code!
@@ -468,6 +472,14 @@ class TestCuckooMain:
             cuckoo_class_instance.execute(service_request)
 
         with mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(True, {"blah": ["blah"], "blahblah": ["blah"]})):
+            # Cover that code!
+            cuckoo_class_instance.execute(service_request)
+
+        with mocker.patch.object(Cuckoo, "_handle_specific_platform", return_value=(True, {"blah": []})):
+            # Cover that code!
+            cuckoo_class_instance.execute(service_request)
+
+        with mocker.patch.object(Cuckoo, "_handle_specific_platform", return_value=(True, {"blah": ["blah"]})):
             # Cover that code!
             cuckoo_class_instance.execute(service_request)
 
@@ -505,6 +517,9 @@ class TestCuckooMain:
             with pytest.raises(RecoverableError):
                 cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
 
+        with mocker.patch.object(Cuckoo, "_is_invalid_analysis_timeout", return_value=True):
+            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
+
     @staticmethod
     @pytest.mark.parametrize(
         "task_id, poll_started_status, poll_report_status",
@@ -513,11 +528,6 @@ class TestCuckooMain:
             (1, None, None),
             (1, "blah", None),
             (1, "missing", None),
-            (1, "stopped", None),
-            (1, "invalid_json_report", None),
-            (1, "report_too_big", None),
-            (1, "service_container_disconnected", None),
-            (1, "missing_report", None),
             (1, "analysis_failed", None),
             (1, "started", None),
             (1, "started", "blah"),
@@ -535,13 +545,11 @@ class TestCuckooMain:
             SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, CuckooTask
         from retrying import RetryError
         from assemblyline.common.exceptions import RecoverableError
-        from assemblyline_v4_service.common.result import ResultSection
         all_statuses = [TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG,
                         SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED]
-        file_content = "blah"
+        file_content = b"blah"
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
-        parent_section = ResultSection("blah")
 
         mocker.patch.object(Cuckoo, "submit_file", return_value=task_id)
         mocker.patch.object(Cuckoo, "delete_task", return_value=True)
@@ -555,26 +563,26 @@ class TestCuckooMain:
             mocker.patch.object(Cuckoo, "poll_report", side_effect=RetryError("blah"))
 
         if task_id is None:
-            cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+            cuckoo_class_instance.submit(file_content, cuckoo_task)
             assert cuckoo_task.id is None
             mocker.patch.object(Cuckoo, "submit_file", side_effect=Exception)
             cuckoo_task.id = 1
             with pytest.raises(Exception):
-                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
-        elif poll_started_status is None or (poll_started_status in [TASK_MISSING, TASK_STOPPED, MISSING_REPORT] and poll_report_status is None) or (poll_report_status in [TASK_MISSING, TASK_STOPPED, MISSING_REPORT] and poll_started_status == TASK_STARTED):
+                cuckoo_class_instance.submit(file_content, cuckoo_task)
+        elif poll_started_status is None or (poll_started_status == TASK_MISSING and poll_report_status is None) or (poll_report_status == TASK_MISSING and poll_started_status == TASK_STARTED):
             with pytest.raises(RecoverableError):
-                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
-        elif ((poll_started_status in [INVALID_JSON, REPORT_TOO_BIG] or poll_started_status not in all_statuses) and poll_report_status is None) or (poll_report_status in [INVALID_JSON, REPORT_TOO_BIG] and poll_started_status == TASK_STARTED):
-            cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+                cuckoo_class_instance.submit(file_content, cuckoo_task)
+        elif poll_started_status not in all_statuses and poll_report_status is None:
+            cuckoo_class_instance.submit(file_content, cuckoo_task)
             assert cuckoo_task.id == task_id
-        elif (poll_started_status in [SERVICE_CONTAINER_DISCONNECTED, ANALYSIS_FAILED] and poll_report_status is None) or (poll_report_status in [SERVICE_CONTAINER_DISCONNECTED, ANALYSIS_FAILED] and poll_started_status == TASK_STARTED):
+        elif (poll_started_status == ANALYSIS_FAILED and poll_report_status is None) or (poll_report_status == ANALYSIS_FAILED and poll_started_status == TASK_STARTED):
             with pytest.raises(Exception):
-                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+                cuckoo_class_instance.submit(file_content, cuckoo_task)
         elif poll_report_status is None:
             with pytest.raises(RecoverableError):
-                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+                cuckoo_class_instance.submit(file_content, cuckoo_task)
         elif poll_started_status and poll_report_status:
-            cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+            cuckoo_class_instance.submit(file_content, cuckoo_task)
             assert cuckoo_task.id == task_id
 
     @staticmethod
@@ -643,78 +651,37 @@ class TestCuckooMain:
         ]
     )
     def test_poll_report(return_value, cuckoo_class_instance, dummy_json_doc_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, MissingCuckooReportException, JSONDecodeError, ReportSizeExceeded,\
-            TASK_MISSING, ANALYSIS_FAILED, TASK_COMPLETED, TASK_REPORTED, MISSING_REPORT, \
-            INVALID_JSON, REPORT_TOO_BIG, SERVICE_CONTAINER_DISCONNECTED, CuckooTask
-        from assemblyline_v4_service.common.result import ResultSection
+        from cuckoo.cuckoo_main import Cuckoo, TASK_MISSING, ANALYSIS_FAILED, TASK_COMPLETED, TASK_REPORTED, CuckooTask
         from retrying import RetryError
 
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
-        parent_section = ResultSection("blah")
 
         # Mocking the time.sleep method that Retry uses, since decorators are loaded and immutable following module import
         with mocker.patch("time.sleep", side_effect=lambda _: None):
             # Mocking the Cuckoo.query_task method results since we only care about the output
             with mocker.patch.object(Cuckoo, 'query_task', return_value=return_value):
                 if return_value is None or return_value == {}:
-                    test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
+                    test_result = cuckoo_class_instance.poll_report(cuckoo_task)
                     assert TASK_MISSING == test_result
                 elif return_value["id"] != cuckoo_task.id:
                     with pytest.raises(RetryError):
-                        cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
+                        cuckoo_class_instance.poll_report(cuckoo_task)
                 elif "fail" in return_value["status"]:
-                    test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
+                    test_result = cuckoo_class_instance.poll_report(cuckoo_task)
                     assert ANALYSIS_FAILED == test_result
                 elif return_value["status"] == TASK_COMPLETED:
                     with pytest.raises(RetryError):
-                        cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
+                        cuckoo_class_instance.poll_report(cuckoo_task)
                 elif return_value["status"] == TASK_REPORTED:
                     # Mocking the Cuckoo.query_report method results since we only care about the output
                     with mocker.patch.object(Cuckoo, 'query_report', return_value=return_value):
-                        test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
+                        test_result = cuckoo_class_instance.poll_report(cuckoo_task)
                         assert return_value["status"] == test_result
-                    side_effects = [MissingCuckooReportException, JSONDecodeError, ReportSizeExceeded, Exception]
-                    for side_effect in side_effects:
-                        parent_section = ResultSection("blah")
-                        # Mocking the Cuckoo.query_report method results since we only care about what exception is raised
-                        if side_effect == JSONDecodeError:
-                            exc = side_effect("blah", dummy_json_doc_class_instance, 1)
-                        else:
-                            exc = side_effect("blah")
-                        with mocker.patch.object(Cuckoo, 'query_report', side_effect=exc):
-                            if side_effect == MissingCuckooReportException:
-                                test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
-                                assert MISSING_REPORT == test_result
-                            elif side_effect == JSONDecodeError:
-                                correct_result_section = ResultSection("blah")
-                                invalid_json_sec = ResultSection(title_text='Invalid JSON Report Generated')
-                                invalid_json_sec.add_line("Exception converting Cuckoo report "
-                                                          "HTTP response into JSON. The unparsed files have been attached. The error "
-                                                          "is found below:")
-                                invalid_json_sec.add_line("blah: line 1 column 1 (char 1)")
-                                correct_result_section.add_subsection(invalid_json_sec)
-                                test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
-                                assert INVALID_JSON == test_result
-                                assert check_section_equality(parent_section, correct_result_section)
-                            elif side_effect == ReportSizeExceeded:
-                                correct_result_section = ResultSection("blah")
-                                report_too_big_sec = ResultSection(title_text="Report Size is Too Large")
-                                report_too_big_sec.add_line(
-                                    "Successful query of report. However, the size of the report that was "
-                                    "generated was too large, and the Cuckoo service container may have crashed.")
-                                report_too_big_sec.add_line("blah")
-                                correct_result_section.add_subsection(report_too_big_sec)
-                                test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
-                                assert REPORT_TOO_BIG == test_result
-                                assert check_section_equality(parent_section, correct_result_section)
-                            elif side_effect == Exception:
-                                test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
-                                assert SERVICE_CONTAINER_DISCONNECTED == test_result
                 else:
                     with pytest.raises(RetryError):
-                        cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
+                        cuckoo_class_instance.poll_report(cuckoo_task)
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -806,7 +773,7 @@ class TestCuckooMain:
                     with pytest.raises(Exception):
                         cuckoo_class_instance.query_report(cuckoo_task, "json", params)
                 else:
-                    m.get(cuckoo_task.query_report_url % task_id + '/' + fmt, headers=headers,
+                    m.get((cuckoo_task.query_report_url + '/' + fmt) % task_id, headers=headers,
                           json=report_data, status_code=status_code)
                     if int(headers["Content-Length"]) > cuckoo_class_instance.max_report_size:
                         with pytest.raises(ReportSizeExceeded):
@@ -823,10 +790,7 @@ class TestCuckooMain:
                                 cuckoo_class_instance.query_report(cuckoo_task, fmt, params)
                         else:
                             test_result = cuckoo_class_instance.query_report(cuckoo_task, fmt, params)
-                            if fmt == "json" and status_code == 200:
-                                correct_result = "exists"
-                                assert correct_result == test_result
-                            elif status_code == 200:
+                            if status_code == 200:
                                 correct_result = f"{report_data}".encode()
                                 assert correct_result == test_result
 
@@ -956,7 +920,7 @@ class TestCuckooMain:
     @pytest.mark.parametrize("status_code", [200, 500, None])
     def test_query_machines(status_code, cuckoo_class_instance):
         from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo_main import CuckooHostsUnavailable, CuckooTimeoutException, CUCKOO_API_QUERY_MACHINES
+        from cuckoo.cuckoo_main import CuckooHostsUnavailable, CUCKOO_API_QUERY_MACHINES
 
         # Prerequisites before we can mock query_machines response
         cuckoo_class_instance.hosts = [{"ip": "1.1.1.1", "port": 8000, "auth_header": {"blah": "blah"}}]
@@ -987,7 +951,7 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_check_dropped(sample, cuckoo_class_instance, mocker):
-        from assemblyline_v4_service.common.task import Task, MaxExtractedExceeded
+        from assemblyline_v4_service.common.task import Task
         from assemblyline.odm.messages.task import Task as ServiceTask
         from assemblyline_v4_service.common.request import ServiceRequest
         from assemblyline_v4_service.common.result import ResultSection
@@ -1441,10 +1405,10 @@ class TestCuckooMain:
 
     @staticmethod
     def test_unpack_tar(cuckoo_class_instance, cuckoo_task_class, dummy_tar_class, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, CuckooTask
+        from cuckoo.cuckoo_main import Cuckoo, CuckooTask, MissingCuckooReportException
         from assemblyline_v4_service.common.result import ResultSection
 
-        tar_report = "blah"
+        tar_report = b"blah"
         file_ext = "blah"
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
@@ -1461,10 +1425,15 @@ class TestCuckooMain:
         cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
         assert True
 
+        with mocker.patch.object(Cuckoo, "_add_json_as_supplementary_file", side_effect=MissingCuckooReportException):
+            cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
+            assert True
+
         # Exception test for _extract_console_output or _extract_hollowshunter or _extract_artefacts
-        mocker.patch.object(Cuckoo, "_extract_console_output", side_effect=Exception)
-        cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
-        assert True
+        with mocker.patch.object(Cuckoo, "_extract_console_output", side_effect=Exception):
+            mocker.patch.object(Cuckoo, "_add_json_as_supplementary_file", return_value=True)
+            cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
+            assert True
 
     @staticmethod
     def test_add_tar_ball_as_supplementary_file(cuckoo_class_instance, dummy_request_class, mocker):
@@ -1493,7 +1462,7 @@ class TestCuckooMain:
 
     @staticmethod
     def test_add_json_as_supplementary_file(cuckoo_class_instance, dummy_request_class, dummy_tar_class, mocker):
-        from cuckoo.cuckoo_main import CuckooTask
+        from cuckoo.cuckoo_main import CuckooTask, MissingCuckooReportException
 
         json_file_name = "report.json"
         json_report_path = f"{cuckoo_class_instance.working_directory}/1/reports/{json_file_name}"
@@ -1511,6 +1480,10 @@ class TestCuckooMain:
         assert report_json_path == json_report_path
 
         cuckoo_class_instance.artefact_list = []
+
+        with mocker.patch.object(dummy_tar_class, 'getnames', return_value=[]):
+            with pytest.raises(MissingCuckooReportException):
+                cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
 
         mocker.patch.object(dummy_tar_class, 'getnames', side_effect=Exception())
         report_json_path = cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
@@ -1697,6 +1670,7 @@ class TestCuckooMain:
             ("True", [{"machines": [{"name": "True"}]}], (True, True), None),
             ("True:True", [{"machines": [{"name": "True"}]}], (True, True), None),
             ("True:True", [{"ip": "True", "machines": [{"name": "True"}]}, {"ip": "True", "machines": []}], (True, True), None),
+            ("flag", [{"ip": "True", "machines": [{"name": "True"}]}, {"ip": "True", "machines": []}], (True, True), None),
         ]
     )
     def test_handle_specific_machine(machine_requested, hosts, correct_result, correct_body, cuckoo_class_instance, dummy_result_class_instance, mocker):
@@ -1706,6 +1680,11 @@ class TestCuckooMain:
         kwargs = dict()
         cuckoo_class_instance.hosts = hosts
         cuckoo_class_instance.file_res = dummy_result_class_instance
+        if machine_requested == "flag":
+            with pytest.raises(ValueError):
+                cuckoo_class_instance._handle_specific_machine(kwargs)
+            return
+
         assert cuckoo_class_instance._handle_specific_machine(kwargs) == correct_result
         if correct_body:
             correct_result_section = ResultSection(title_text='Requested Machine Does Not Exist')
@@ -1809,6 +1788,7 @@ class TestCuckooMain:
         [
             ([("blah1", 1), ("blah2", 2)], {'blah1': 1, 'blah2': 2}),
             ([("blah1", 1), ("blah1", 2)], {'blah1': 1}),
+            ([("blah1", 1), ("blah2", 2), ("blah3", 3)], {'blah1': 1, 'blah2': 2, 'blah3': 3}),
         ]
     )
     def test_get_subsection_heuristic_map(title_heur_tuples, correct_section_heur_map, cuckoo_class_instance):
@@ -1818,7 +1798,10 @@ class TestCuckooMain:
             subsection = ResultSection(title)
             sub_heur = Heuristic(heur_id)
             subsection.heuristic = sub_heur
-            subsections.append(subsection)
+            if title == "blah3":
+                subsections[0].add_subsection(subsection)
+            else:
+                subsections.append(subsection)
         actual_section_heur_map = {}
         cuckoo_class_instance._get_subsection_heuristic_map(subsections, actual_section_heur_map)
         assert actual_section_heur_map == correct_section_heur_map
@@ -2322,6 +2305,67 @@ class TestCuckooResult:
         pass
 
     @staticmethod
+    @pytest.mark.parametrize("dns_calls, process_map, routing, expected_return",
+        [
+            ([], {}, "", {}),
+            ([{"answers": []}], {}, "", {}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "", {'answer': {'domain': 'request'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "INetSim", {'answer': {'domain': 'request'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "PTR"}], {}, "INetSim", {}),
+            ([{"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa", "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer'}}),
+            ([{"answers": [{"data": "10.10.10.10"}], "request": "answer", "type": "A"}, {"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa", "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer'}}),
+            ([{"answers": [{"data": "answer"}], "request": "ya:ba:da:ba:do:oo.ip6.arpa", "type": "PTR"}], {}, "Internet", {}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"network_calls": [{"blah": {"hostname": "blah"}}]}}, "", {'answer': {'domain': 'request'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"blah": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"getaddrinfo": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectA": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"GetAddrInfoW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
+            ([{"answers": []}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {}),
+        ]
+    )
+    def test_get_dns_map(dns_calls, process_map, routing, expected_return):
+        from cuckoo.cuckoo_result import _get_dns_map
+        assert _get_dns_map(dns_calls, process_map, routing) == expected_return
+
+    @staticmethod
+    @pytest.mark.parametrize("resolved_ips, flows, expected_return",
+        [
+            ({}, {}, ([], "")),
+            ({}, {"udp": []}, ([], "")),
+            ({}, {"udp": [{"dst": "blah", "src": "1.1.1.1", "time": "blah", "dport": "blah"}]}, ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None, 'protocol': 'udp', 'src_ip': None, 'src_port': None, 'timestamp': 'blah'}], "")),
+            ({}, {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]}, ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None, 'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}], "")),
+            ({"blah": {"domain": "blah"}}, {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]}, ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': None, 'pid': None, 'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}], "")),
+            ({"blah": {"domain": "blah", "process_name": "blah", "process_id": "blah"}}, {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]}, ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': "blah", 'pid': "blah", 'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}], "")),
+            ({}, {}, ([], "flag"))
+        ]
+    )
+    def test_get_low_level_flows(resolved_ips, flows, expected_return):
+        from cuckoo.cuckoo_result import _get_low_level_flows
+        from assemblyline_v4_service.common.result import ResultSection
+        expected_network_flows_table, expected_netflows_sec_body = expected_return
+        correct_netflows_sec = ResultSection(title_text="Network Flows")
+        if expected_netflows_sec_body == "flag":
+            too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
+            too_many_unique_ips_sec.body = f"The number of TCP calls displayed has been capped " \
+                                           f"at 100. The full results can be found " \
+                                           f"in cuckoo_traffic.pcap"
+            correct_netflows_sec.add_subsection(too_many_unique_ips_sec)
+            flows = {"udp": []}
+            expected_network_flows_table = []
+            for i in range(101):
+                flows["udp"].append({"dst": "blah", "src": "1.1.1.1", "dport": f"blah{i}", "time": "blah"})
+                expected_network_flows_table.append({"protocol": "udp", "domain": None, "dest_ip": "blah",
+                                                     "src_ip": None, "src_port": None, "dest_port": f"blah{i}",
+                                                     "timestamp": "blah", "image": None, "pid": None, "guid": None})
+            expected_network_flows_table = expected_network_flows_table[:100]
+
+        network_flows_table, netflows_sec = _get_low_level_flows(resolved_ips, flows)
+        assert network_flows_table == expected_network_flows_table
+        assert check_section_equality(netflows_sec, correct_netflows_sec)
+
+    @staticmethod
     def test_write_encrypted_buffers_to_file():
         from os import remove
         from assemblyline_v4_service.common.result import ResultSection
@@ -2374,10 +2418,10 @@ class TestCuckooResult:
     @staticmethod
     @pytest.mark.parametrize("curtain, process_map",
     [
-        ({}, {"blah": "blah"}),
-        ({"1": {"events": [{"command": {"original": "blah", "altered": "blah"}}], "behaviors": ["blah"]}}, {"blah": "blah"}),
-        ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {"blah": "blah"}),
-        ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {"1": {"name": "blah.exe"}}),
+        ({}, {0: {"blah": "blah"}}),
+        ({"1": {"events": [{"command": {"original": "blah", "altered": "blah"}}], "behaviors": ["blah"]}}, {0: {"blah": "blah"}}),
+        ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {0: {"blah": "blah"}}),
+        ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {1: {"name": "blah.exe"}}),
     ])
     def test_process_curtain(curtain, process_map):
         from cuckoo.cuckoo_result import process_curtain
