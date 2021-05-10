@@ -302,6 +302,9 @@ heuristics:
     score: 250
     signature_score_map:
       dead_host: 10  # This signature ranges from 2-8 -> 100-1000
+      network_icmp: 10
+      network_http_post: 10
+      network_http: 10
     filetype: '*'
     description: Communicates with a server controlled by a malicious actor.
 
@@ -491,7 +494,7 @@ heuristics:
 
   - heur_id: 1002
     name: HTTP/HTTPS detected
-    score: 100
+    score: 10
     filetype: '*'
     description: Cuckoo detected HTTP/HTTPS requests
 
@@ -503,13 +506,13 @@ heuristics:
 
   - heur_id: 1004
     name: TCP/UDP Detected
-    score: 100
+    score: 10
     filetype: '*'
     description: Cuckoo detected traffic made over TCP/UDP
 
   - heur_id: 1005
     name: Non-HTTP Traffic over HTTP ports
-    score: 500
+    score: 10
     filetype: '*'
     description: Cuckoo detected non-HTTP traffic being made over HTTP ports (80, 443)
 
