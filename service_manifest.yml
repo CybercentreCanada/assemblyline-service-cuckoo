@@ -51,6 +51,14 @@ submission_params:
     type: int
     value: 0
 
+  # value = auto + all + allowed_images
+  # This has the third-highest precedence when submitting a file
+  - default: ""
+    name: specific_image
+    type: list
+    value: ""
+    list: []
+
   - default: ""
     name: dll_function
     type: str
@@ -101,14 +109,6 @@ submission_params:
     name: simulate_user
     type: bool
     value: true
-
-  # value = auto + all + allowed_images
-  # This has the third-highest precedence when submitting a file
-  - default: ""
-    name: specific_image
-    type: list
-    value: ""
-    list: []
 
   # The maximum total size of all files uploaded per analysis
   - default: 134217728
@@ -521,6 +521,12 @@ heuristics:
     score: 500
     filetype: '*'
     description: Cuckoo detected an encrypted buffer being transferred through a network call
+
+  - heur_id: 1007
+    name: Suspicious User Agent
+    score: 1000
+    filetype: '*'
+    description: Cuckoo detected a suspicious user agent used for HTTP calls
 
   - heur_id: 9999
     name: Unknown

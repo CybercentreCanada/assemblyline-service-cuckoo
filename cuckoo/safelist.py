@@ -36,9 +36,12 @@ SAFELIST_COMMANDS = [
     r'C:\\Windows\\system32\\wbem\\WmiApSrv\.exe',
     r'C:\\Windows\\system32\\sc\.exe start wuauserv',
     r'"C:\\windows\\system32\\SearchProtocolHost\.exe" Global\\UsGthrFltPipeMssGthrPipe_S-1-5-21-451555073-2684619755-382164121-5006_ Global\\UsGthrCtrlFltPipeMssGthrPipe_S-1-5-21-451555073-2684619755-382164121-5006 1 -2147483646 "Software\\Microsoft\\Windows Search" "Mozilla/4\.0 (compatible; MSIE 6\.0; Windows NT; MS Search 4\.0 Robot)" "C:\\ProgramData\\Microsoft\\Search\\Data\\Temp\\usgthrsvc" "DownLevelDaemon" "1"',
+    r'taskhost\.exe \$\(Arg0\)',
     # If an error is raised, WerFault will pop up and WerMgr will try to upload it
-    r'C:\\Windows\\system32\\WerFault\.exe -u -p [0-9]{3,5} -s [0-9]{3,5}',
+    r'C:\\Windows\\system32\\WerFault\.exe (-u -p [0-9]{3,5} -s [0-9]{3,5}|-pss -s [0-9]{3,5} -p [0-9]{3,5} -ip [0-9]{3,5})',
     r'C:\\Windows\\system32\\wermgr\.exe -upload',
+    # NET
+    r'C:\\Windows\\Microsoft\.NET\\Framework64\\v.*\\mscorsvw\.exe -StartupEvent [0-9]{3} -InterruptEvent [0-9] -NGENProcess [0-9]{2}[a-z} -Pipe [0-9]{3} -Comment "NGen Worker Process"',
     # Sysmon
     r'\\\?\?\\C:\\Windows\\system32\\conhost\.exe',
     r'\\\?\?\\C:\\Windows\\system32\\conhost\.exe ".*"',
@@ -78,15 +81,16 @@ SAFELIST_DOMAINS = [
     r'client\.wns\.windows\.com$', r'(www\.)?go\.microsoft\.com$', r'js\.microsoft\.com$', r'ajax\.microsoft\.com$',
     r'ieonline\.microsoft\.com$', r'dns\.msftncsi\.com$', r'ocsp\.msocsp\.com$', r'fs\.microsoft\.com$',
     r'www\.msftconnecttest\.com$', r'www\.msftncsi\.com$', r'iecvlist\.microsoft\.com$', r'r20swj13mr\.microsoft\.com$',
-    r'(([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\.msedge\.net$', r'displaycatalog\.md\.mp\.microsoft\.com$',
-    r'officeclient\.microsoft\.com$',
+    r'(([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\.msedge\.net$', r'displaycatalog(\.md)?\.mp\.microsoft\.com$',
+    r'officeclient\.microsoft\.com$', r'ow1\.res\.office365\.com$', r'fp-(as-nocache|vp)\.azureedge\.net$',
+    r'outlookmobile-office365-tas\.msedge\.net$',
     # Windows
-    r'settings-win\.data\.microsoft\.com$', r'.*vortex-win\.data\.microsoft\.com$', r'.*\.windowsupdate\.com$',
+    r'settings(-win)?\.data\.microsoft\.com$', r'.*vortex-win\.data\.microsoft\.com$', r'.*\.windowsupdate\.com$',
     r'time\.(microsoft|windows)\.com$', r'.*\.windows\.com$', r'.*\.update\.microsoft\.com$',
     r'.*download\.microsoft\.com$', r'kms\.core\.windows\.net$', r'.*windows\.microsoft\.com$',
-    r'win10\.ipv6\.microsoft\.com$',
+    r'win10\.ipv6\.microsoft\.com$', f'activation-v2\.sls\.microsoft\.com$', r'msedge\.api\.cdp\.microsoft\.com$',
     # MSN
-    r'cdn\.content\.prod\.cms\.msn\.com$', r'(www\.)?msn\.com$', r'(www\.)?static-hp-eas\.s-msn\.com$',
+    r'cdn\.content\.prod\.cms\.msn\.com$', r'((www|arc)\.)?msn\.com$', r'(www\.)?static-hp-eas\.s-msn\.com$',
     r'img\.s-msn\.com$',
     # Bing
     r'((api|www|platform)\.)?bing\.com$',
@@ -298,30 +302,18 @@ SAFELIST_URIS = [
     r'https?://android\.googlesource\.com/toolchain/llvm-project',
     # XML
     r'https?://xmlpull\.org/v1/doc/features\.html(?:$|.*)', r'https?://schemas\.openxmlformats\.org(?:$|/.*)',
-    r'https?://schemas\.openxmlformats\.org/officeDocument/2006/relationships/(image|attachedTemplate|header|footnotes|fontTable|customXml|endnotes|theme|settings|webSettings|glossaryDocument|numbering|footer|styles)',
-    r'https?://schemas\.openxmlformats\.org/drawingml/2006/(main|wordprocessingDrawing)',
-    r'https?://schemas\.openxmlformats\.org/package/2006/relationships',
-    r'https?://schemas\.openxmlformats\.org/markup-compatibility/2006',
-    r'https?://schemas\.openxmlformats\.org/officeDocument/2006/(relationships|math)',
-    r'https?://schemas\.openxmlformats\.org/word/2010/wordprocessingShape',
-    r'https?://schemas\.openxmlformats\.org/wordprocessingml/2006/main',
     # Microsoft
-    r'https?://schemas\.microsoft\.com(?:$|/.*)', r'https?://(www\.)?go\.microsoft\.com*',
-    r'https?://displaycatalog\.md\.mp\.microsoft\.com*', r'https?://officeclient\.microsoft\.com*',
+    r'https?://schemas\.microsoft\.com(?:$|/.*)', r'https?://(www\.)?go\.microsoft\.com(?:$|/.*)',
+    r'https?://displaycatalog(\.md)?\.mp\.microsoft\.com(?:$|/.*)', r'https?://officeclient\.microsoft\.com(?:$|/.*)',
+    r'https?://activation-v2\.sls\.microsoft\.com(?:$|/.*)',
     # Windows
-    r'https?://ctldl\.windowsupdate\.com/.*',
+    r'https?://ctldl\.windowsupdate\.com(?:$|/.*)',
     # Ubuntu
-    r'https?://ca\.archive\.ubuntu\.com/.*',
+    r'https?://ca\.archive\.ubuntu\.com(?:$|/.*)',
     # Office
-    r'https?://schemas\.microsoft\.com/office/word/2010/(wordml|wordprocessingCanvas|wordprocessingInk|wordprocessingGroup|wordprocessingDrawing)',
-    r'https?://schemas\.microsoft\.com/office/word/(2012|2006)/wordml',
-    r'https?://schemas\.microsoft\.com/office/word/2015/wordml/symex',
-    r'https?://schemas\.microsoft\.com/office/drawing/2014/chartex',
-    r'https?://schemas\.microsoft\.com/office/drawing/2015/9/8/chartex',
+    r'https?://schemas\.microsoft\.com(?:$|/.*)',
     # Verisign
-    r'https?://www\.verisign\.com/(rpa0|rpa|cps0)', r'https?://ocsp\.verisign\.com', r'https?://crl\.verisign\.com/.*',
-    r'https?://logo\.verisign\.com/vslogo\.gif04', r'https?://crl\.verisign\.com/pca3-g5\.crl04',
-    r'https?://csc3-2010-crl\.verisign\.com/CSC3-2010\.crl0D', r'https?://csc3-2010-aia\.verisign\.com/CSC3-2010\.cer0',
+    r'https?://(www|oscp|crl|logo|csc3-2010-(crl|aia))\.verisign\.com(?:$|/.*)',
     # Azure
     r'https?://wpad\..*/wpad\.dat',
     # Digicert

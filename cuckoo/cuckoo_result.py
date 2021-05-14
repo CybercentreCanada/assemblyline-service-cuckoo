@@ -44,6 +44,7 @@ SILENT_IOCS = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_pr
 INETSIM = "INetSim"
 DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
 BUFFER_API_CALLS = ["send"]
+SUSPICIOUS_USER_AGENTS = ["Microsoft BITS"]
 
 # noinspection PyBroadException
 # TODO: break this into smaller methods
@@ -637,6 +638,8 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     if len(req_table) > 0:
         http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS")
         remote_file_access_sec = ResultSection(title_text="Access Remote File")
+        suspicious_user_agent_sec = ResultSection(title_text="Suspicious User Agent(s)")
+        sus_user_agents_used = []
         http_sec.set_heuristic(1002)
         for http_call in req_table:
             http_sec.add_tag("network.protocol", http_call["protocol"])
@@ -662,6 +665,16 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                         if not remote_file_access_sec.heuristic:
                             remote_file_access_sec.set_heuristic(1003)
             # TODO: tag user-agent
+            if any((http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
+                   or sus_user_agent in http_call["request"]
+                   for sus_user_agent in SUSPICIOUS_USER_AGENTS):
+                if suspicious_user_agent_sec.heuristic is None:
+                    suspicious_user_agent_sec.set_heuristic(1007)
+                sus_user_agent_used = next((sus_user_agent for sus_user_agent in SUSPICIOUS_USER_AGENTS
+                                            if (http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
+                                            or sus_user_agent in http_call["request"]), None)
+                if sus_user_agent_used not in sus_user_agents_used:
+                    sus_user_agents_used.append(sus_user_agent_used)
             # now remove path, uri, port, user-agent from the final output
             del http_call['path']
             del http_call['uri']
@@ -673,6 +686,9 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         http_sec.body_format = BODY_FORMAT.TABLE
         if remote_file_access_sec.heuristic:
             http_sec.add_subsection(remote_file_access_sec)
+        if suspicious_user_agent_sec.heuristic:
+            suspicious_user_agent_sec.body = ' | '.join(sus_user_agents_used)
+            http_sec.add_subsection(suspicious_user_agent_sec)
         network_res.add_subsection(http_sec)
     else:
         _process_non_http_traffic_over_http(network_res, unique_netflows)
