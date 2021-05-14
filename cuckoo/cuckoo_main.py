@@ -397,7 +397,8 @@ class Cuckoo(ServiceBase):
         if status is None:
             err_msg = "Timed out while waiting for Cuckoo to analyze file."
         elif status == TASK_MISSING:
-            err_msg = "Task went missing while waiting for Cuckoo to analyze file."
+            err_msg = f"Task {cuckoo_task.id} went missing while waiting for Cuckoo to analyze file."
+            cuckoo_task.id = None
         elif status == ANALYSIS_FAILED:
             raise Exception(f"The analysis of #{cuckoo_task.id} has failed. This is most likely because a non-native "
                             f"file type was attempted to be detonated. Example: .dll on a Linux VM.")
