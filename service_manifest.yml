@@ -64,6 +64,36 @@ submission_params:
     type: str
     value: ""
 
+  - default: false
+    name: dump_memory
+    type: bool
+    value: false
+
+  - default: true
+    name: force_sleepskip
+    type: bool
+    value: true
+
+  - default: false
+    name: no_monitor
+    type: bool
+    value: false
+
+  - default: true
+    name: simulate_user
+    type: bool
+    value: true
+
+  - default: true
+    name: sysmon_enabled
+    type: bool
+    value: true
+
+  - default: false
+    name: take_screenshots
+    type: bool
+    value: false
+
   - default: ""
     name: arguments
     type: str
@@ -74,52 +104,9 @@ submission_params:
     type: str
     value: ""
 
-  - default: false
-    name: dump_memory
-    type: bool
-    value: false
-
-  - default: false
-    name: no_monitor
-    type: bool
-    value: false
-
   # format %m-%d-%Y %H:%M:%S
   - default: ""
     name: clock
-    type: str
-    value: ""
-
-  - default: true
-    name: force_sleepskip
-    type: bool
-    value: true
-
-  - default: false
-    name: take_screenshots
-    type: bool
-    value: false
-
-  - default: true
-    name: sysmon_enabled
-    type: bool
-    value: true
-
-  - default: true
-    name: simulate_user
-    type: bool
-    value: true
-
-  # The maximum total size of all files uploaded per analysis
-  - default: 134217728
-    name: max_total_size_of_uploaded_files
-    type: int
-    value: 134217728
-
-  # Used for development, when you want to send a file to a specific machine on a specific host. String format is
-  # "<host-ip>:<machine-name>" if more than one host exists. If only one host exists, then format can be either "<host-ip>:<machine-name>" or "<machine-name>"
-  - default: ""
-    name: specific_machine
     type: str
     value: ""
 
@@ -128,11 +115,18 @@ submission_params:
     type: str
     value: ""
 
-  - default: INetSim
-    name: routing
-    type: list
-    value: INetSim
-    list: ["INetSim"]
+  # Used for development, when you want to send a file to a specific machine on a specific host. String format is
+  # "<host-ip>:<machine-name>" if more than one host exists. If only one host exists, then format can be either "<host-ip>:<machine-name>" or "<machine-name>"
+  - default: ""
+    name: specific_machine
+    type: str
+    value: ""
+
+  # The maximum total size of all files uploaded per analysis
+  - default: 134217728
+    name: max_total_size_of_uploaded_files
+    type: int
+    value: 134217728
 
   # If you don't care about the version of the operating system that you get, as long as it matches the platform, use this
   # This has the second-highest precedence when submitting a file
@@ -141,6 +135,12 @@ submission_params:
     type: list
     value: "none"
     list: ["none", "windows", "linux"]
+
+  - default: INetSim
+    name: routing
+    type: list
+    value: INetSim
+    list: [ "INetSim" ]
 
 heuristics:
   - heur_id: 1
@@ -524,7 +524,7 @@ heuristics:
 
   - heur_id: 1007
     name: Suspicious User Agent
-    score: 1000
+    score: 500
     filetype: '*'
     description: Cuckoo detected a suspicious user agent used for HTTP calls
 
