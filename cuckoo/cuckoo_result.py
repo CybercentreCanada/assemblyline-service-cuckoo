@@ -924,10 +924,7 @@ def convert_sysmon_processes(sysmon: Optional[List[Dict[str, Any]]] = None,
             "timestamp": None,
         }
         event_data = event["EventData"]
-        for data in event_data["Data"]:
-            name = data["@Name"]
-            text = data.get("#text")
-
+        for name, text in event_data.items():
             if name == "ProcessId":
                 ontology_process["pid"] = int(text)
             elif name == "ParentProcessId":
