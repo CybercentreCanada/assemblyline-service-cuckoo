@@ -488,7 +488,7 @@ class TestCuckooMain:
     def test_general_flow(cuckoo_class_instance, dummy_request_class, mocker):
         from assemblyline_v4_service.common.result import ResultSection
         from assemblyline.common.exceptions import RecoverableError
-        from cuckoo.cuckoo_main import Cuckoo
+        from cuckoo.cuckoo_main import Cuckoo, AnalysisTimeoutExceeded
 
         hosts = []
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
@@ -513,6 +513,9 @@ class TestCuckooMain:
         with mocker.patch.object(Cuckoo, "submit", side_effect=Exception("blah")):
             with pytest.raises(Exception):
                 cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
+
+        with mocker.patch.object(Cuckoo, "submit", side_effect=AnalysisTimeoutExceeded("blah")):
+            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=RecoverableError("blah")):
             with pytest.raises(RecoverableError):
@@ -543,7 +546,8 @@ class TestCuckooMain:
     )
     def test_submit(task_id, poll_started_status, poll_report_status, cuckoo_class_instance, mocker):
         from cuckoo.cuckoo_main import Cuckoo, TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG, \
-            SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT, CuckooTask
+            SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT, CuckooTask, \
+            AnalysisTimeoutExceeded
         from retrying import RetryError
         from assemblyline.common.exceptions import RecoverableError
         from assemblyline_v4_service.common.result import ResultSection
@@ -574,7 +578,8 @@ class TestCuckooMain:
             with pytest.raises(Exception):
                 cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
         elif poll_started_status is None or (poll_started_status == TASK_STARTED and poll_report_status is None):
-            cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+            with pytest.raises(AnalysisTimeoutExceeded):
+                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
             correct_sec = ResultSection("Assemblyline task timeout exceeded.",
                                          body=f"The Cuckoo task {cuckoo_task.id} took longer than the "
                                               f"Assemblyline's task timeout would allow.\nThis is usually due to "
