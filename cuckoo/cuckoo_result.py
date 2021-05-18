@@ -107,7 +107,7 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
     if sigs:
         target = api_report.get("target", {})
         target_file = target.get("file", {})
-        target_filename = target_file.get("name")
+        target_filename = target_file.get("name", "missing_name")
         is_process_martian = process_signatures(sigs, al_result, validated_random_ip_range, target_filename, process_map,
                                                 info["id"], signatures)
 
@@ -747,7 +747,7 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
     for process, process_details in process_map.items():
         for network_call in process_details["network_calls"]:
             dns = next((network_call[api_call] for api_call in DNS_API_CALLS if api_call in network_call), {})
-            if dns != {} and dns["hostname"]:
+            if dns != {} and dns.get("hostname"):
                 ip_mapped_to_host = next((ip for ip, details in resolved_ips.items()
                                           if details["domain"] == dns["hostname"]), None)
                 if not ip_mapped_to_host:
