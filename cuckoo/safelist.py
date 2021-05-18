@@ -50,6 +50,7 @@ SAFELIST_COMMANDS = [
     r'C:\\windows\\system32\\SearchIndexer\.exe \/Embedding',
     r'C:\\Windows\\System32\\wevtutil\.exe query-events microsoft-windows-powershell/operational /rd:true /e:root /format:xml /uni:true',
     r'C:\\Windows\\System32\\wevtutil\.exe query-events microsoft-windows-sysmon/operational /format:xml /e:Events',
+    r'C:\\Windows\\system32\\AUDIODG\.EXE 0x6e8',
 ]
 
 # These domains may be present due to benign activity on the host
@@ -77,7 +78,7 @@ SAFELIST_DOMAINS = [
     r'dns\.msftncsi\.com$', r'www\.msftncsi\.com$', r'ipv6\.msftncsi\.com$', r'crl\.microsoft\.com$',
     r'(www|go)\.microsoft\.com$', r'isatap\..*\.microsoft\.com$', r'tile-service\.weather\.microsoft\.com$',
     r'.*\.prod\.do\.dsp\.mp\.microsoft\.com$', r'(login|g)\.live\.com$', r'nexus\.officeapps\.live\.com$',
-    r'.*\.events\.data\.microsoft\.com$', r'wdcp\.microsoft\.com$', r'fe3\.delivery\.mp\.microsoft\.com$',
+    r'.*\.events\.data\.microsoft\.com$', r'wdcp\.microsoft\.com$', r'fe3(cr)?\.delivery\.mp\.microsoft\.com$',
     r'client\.wns\.windows\.com$', r'(www\.)?go\.microsoft\.com$', r'js\.microsoft\.com$', r'ajax\.microsoft\.com$',
     r'ieonline\.microsoft\.com$', r'dns\.msftncsi\.com$', r'ocsp\.msocsp\.com$', r'fs\.microsoft\.com$',
     r'www\.msftconnecttest\.com$', r'www\.msftncsi\.com$', r'iecvlist\.microsoft\.com$', r'r20swj13mr\.microsoft\.com$',
@@ -306,6 +307,7 @@ SAFELIST_URIS = [
     r'https?://schemas\.microsoft\.com(?:$|/.*)', r'https?://(www\.)?go\.microsoft\.com(?:$|/.*)',
     r'https?://displaycatalog(\.md)?\.mp\.microsoft\.com(?:$|/.*)', r'https?://officeclient\.microsoft\.com(?:$|/.*)',
     r'https?://activation-v2\.sls\.microsoft\.com(?:$|/.*)',
+    r'https?://fe3(cr)?\.delivery\.mp\.microsoft\.com(?:$|/.*)',
     # Windows
     r'https?://ctldl\.windowsupdate\.com(?:$|/.*)',
     # Ubuntu

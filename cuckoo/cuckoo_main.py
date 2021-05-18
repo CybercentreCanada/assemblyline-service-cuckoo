@@ -82,6 +82,7 @@ TASK_STARTING = "starting"
 TASK_COMPLETED = "completed"
 TASK_REPORTED = "reported"
 ANALYSIS_FAILED = "analysis_failed"
+ANALYSIS_EXCEEDED_TIMEOUT = "analysis_exceeded_timeout"
 
 
 class CuckooTimeoutException(Exception):
@@ -101,11 +102,6 @@ class CuckooProcessingException(Exception):
 
 class CuckooVMBusyException(Exception):
     """Exception class for busy VMs"""
-    pass
-
-
-class MaxFileSizeExceeded(Exception):
-    """Exception class for files that are too large"""
     pass
 
 
@@ -333,7 +329,7 @@ class Cuckoo(ServiceBase):
         cuckoo_task = CuckooTask(self.file_name, host_to_use, **kwargs)
 
         try:
-            self.submit(self.request.file_contents, cuckoo_task)
+            self.submit(self.request.file_contents, cuckoo_task, parent_section)
 
             if cuckoo_task.id:
                 self._generate_report(file_ext, cuckoo_task, parent_section)
@@ -341,10 +337,6 @@ class Cuckoo(ServiceBase):
                 raise Exception(f"Task ID is None. File failed to be submitted to the Cuckoo nest at "
                                 f"{host_to_use['ip']}.")
 
-        except RecoverableError:
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
-            raise
         except Exception as e:
             self.log.error(repr(e))
             if cuckoo_task and cuckoo_task.id is not None:
@@ -355,11 +347,12 @@ class Cuckoo(ServiceBase):
         if cuckoo_task and cuckoo_task.id is not None:
             self.delete_task(cuckoo_task)
 
-    def submit(self, file_content: bytes, cuckoo_task: CuckooTask) -> None:
+    def submit(self, file_content: bytes, cuckoo_task: CuckooTask, parent_section: ResultSection) -> None:
         """
         This method contains the submitting, polling, and report retrieving logic
         :param file_content: The content of the file to be submitted
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
+        :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: None
         """
         try:
@@ -371,12 +364,8 @@ class Cuckoo(ServiceBase):
             else:
                 cuckoo_task.id = task_id
         except Exception as e:
-            err_msg = f"Error submitting to Cuckoo: {safe_str(e)}"
-            self.log.error(err_msg)
-            # TODO: could this ever happen?
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
-            raise Exception(err_msg)
+            self.log.error(f"Error submitting to Cuckoo: {safe_str(e)}")
+            raise
 
         self.log.debug(f"Submission succeeded. File: {cuckoo_task.file} -- Task {cuckoo_task.id}")
 
@@ -384,30 +373,32 @@ class Cuckoo(ServiceBase):
             status: Optional[str] = self.poll_started(cuckoo_task)
         except RetryError:
             self.log.error(f"VM startup timed out or {cuckoo_task.id} was never added to the Cuckoo DB.")
-            status: Optional[str] = None
+            status = ANALYSIS_EXCEEDED_TIMEOUT
 
         if status == TASK_STARTED:
             try:
                 status = self.poll_report(cuckoo_task)
             except RetryError:
                 self.log.error("Max retries exceeded for report status.")
-                status = None
+                status = ANALYSIS_EXCEEDED_TIMEOUT
 
-        err_msg: Optional[str] = None
-        if status is None:
-            err_msg = "Timed out while waiting for Cuckoo to analyze file."
+        if status == ANALYSIS_EXCEEDED_TIMEOUT:
+            # Add a subsection detailing what's happening and then moving on
+            task_timeout_sec = ResultSection("Assemblyline task timeout exceeded.",
+                                             body=f"The Cuckoo task {cuckoo_task.id} took longer than the "
+                                                  f"Assemblyline's task timeout would allow.\nThis is usually due to "
+                                                  f"an issue on Cuckoo's machinery end. Contact the Cuckoo "
+                                                  f"administrator for details.")
+            parent_section.add_subsection(task_timeout_sec)
+            cuckoo_task.id = None
         elif status == TASK_MISSING:
             err_msg = f"Task {cuckoo_task.id} went missing while waiting for Cuckoo to analyze file."
             cuckoo_task.id = None
+            self.log.error(err_msg)
+            raise RecoverableError(err_msg)
         elif status == ANALYSIS_FAILED:
             raise Exception(f"The analysis of #{cuckoo_task.id} has failed. This is most likely because a non-native "
                             f"file type was attempted to be detonated. Example: .dll on a Linux VM.")
-
-        if err_msg:
-            self.log.error(f"Error is: {err_msg}")
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
-            raise RecoverableError(err_msg)
 
     def stop(self) -> None:
         # Need to kill the container; we're about to go down..
@@ -498,13 +489,9 @@ class Cuckoo(ServiceBase):
             resp = self.session.post(cuckoo_task.submit_url, files=files, data=cuckoo_task,
                                      headers=cuckoo_task.auth_header, timeout=self.timeout)
         except requests.exceptions.Timeout:
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
             raise CuckooTimeoutException(f"Cuckoo ({cuckoo_task.base_url}) timed out after {self.timeout}s while "
                                          f"trying to submit a file {cuckoo_task.file}")
         except requests.ConnectionError:
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
             raise Exception(f"Unable to reach the Cuckoo nest while trying to submit a file {cuckoo_task.file}")
         if resp.status_code != 200:
             self.log.error(f"Failed to submit file {cuckoo_task.file}. Status code: {resp.status_code}")
@@ -562,8 +549,6 @@ class Cuckoo(ServiceBase):
                 self.log.error(f"Task or report not found for task {cuckoo_task.id}.")
                 # most common cause of getting to here seems to be odd/non-ascii filenames, where the cuckoo agent
                 # inside the VM dies
-                if cuckoo_task and cuckoo_task.id is not None:
-                    self.delete_task(cuckoo_task)
                 raise MissingCuckooReportException("Task or report not found")
             elif resp.status_code == 413:
                 msg = f"Cuckoo report (type={fmt}) size is {int(resp.headers['Content-Length'])} for task " \
@@ -587,9 +572,7 @@ class Cuckoo(ServiceBase):
 
         # TODO: report_data = b'{}' and b'""' evaluates to true, so that should be added to this check
         if report_data in [None, "", b""]:
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
-            raise Exception("Empty report data")
+            raise Exception(f"Empty {fmt} report data for task {cuckoo_task.id}")
 
         return report_data
 
@@ -604,8 +587,6 @@ class Cuckoo(ServiceBase):
             resp = self.session.get(cuckoo_task.query_pcap_url % cuckoo_task.id, headers=cuckoo_task.auth_header,
                                     timeout=self.timeout)
         except requests.exceptions.Timeout:
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
             raise CuckooTimeoutException(f"Cuckoo ({cuckoo_task.base_url}) timed out after {self.timeout}s while "
                                          f"trying to query the pcap for task {cuckoo_task.id}")
         except requests.ConnectionError:
@@ -631,8 +612,6 @@ class Cuckoo(ServiceBase):
             resp = self.session.get(cuckoo_task.query_task_url % cuckoo_task.id, headers=cuckoo_task.auth_header,
                                     timeout=self.timeout)
         except requests.exceptions.Timeout:
-            if cuckoo_task and cuckoo_task.id is not None:
-                self.delete_task(cuckoo_task)
             raise CuckooTimeoutException(f"({cuckoo_task.base_url}) timed out after {self.timeout}s while "
                                          f"trying to query the task {cuckoo_task.id}")
         except requests.ConnectionError:
