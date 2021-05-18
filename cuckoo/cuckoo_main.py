@@ -115,6 +115,11 @@ class CuckooHostsUnavailable(Exception):
     pass
 
 
+class AnalysisTimeoutExceeded(Exception):
+    """Exception class for when Cuckoo is not able to complete analysis before the service times out"""
+    pass
+
+
 def _exclude_chain_ex(ex) -> bool:
     """Use this with some of the @retry decorators to only retry if the exception
     ISN'T a RecoverableException or NonRecoverableException"""
@@ -336,7 +341,8 @@ class Cuckoo(ServiceBase):
             else:
                 raise Exception(f"Task ID is None. File failed to be submitted to the Cuckoo nest at "
                                 f"{host_to_use['ip']}.")
-
+        except AnalysisTimeoutExceeded:
+            pass
         except Exception as e:
             self.log.error(repr(e))
             if cuckoo_task and cuckoo_task.id is not None:
@@ -391,6 +397,7 @@ class Cuckoo(ServiceBase):
                                                   f"administrator for details.")
             parent_section.add_subsection(task_timeout_sec)
             cuckoo_task.id = None
+            raise AnalysisTimeoutExceeded()
         elif status == TASK_MISSING:
             err_msg = f"Task {cuckoo_task.id} went missing while waiting for Cuckoo to analyze file."
             cuckoo_task.id = None
