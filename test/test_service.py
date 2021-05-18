@@ -297,7 +297,7 @@ class TestModule:
     def test_status_enumeration_constants(cuckoo_class_instance):
         from cuckoo.cuckoo_main import TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG, \
             SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, TASK_STARTED, TASK_STARTING, TASK_COMPLETED, TASK_REPORTED, \
-            ANALYSIS_FAILED
+            ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT
         assert TASK_MISSING == "missing"
         assert TASK_STOPPED == "stopped"
         assert INVALID_JSON == "invalid_json_report"
@@ -309,6 +309,7 @@ class TestModule:
         assert TASK_COMPLETED == "completed"
         assert TASK_REPORTED == "reported"
         assert ANALYSIS_FAILED == "analysis_failed"
+        assert ANALYSIS_EXCEEDED_TIMEOUT == "analysis_exceeded_timeout"
 
     @staticmethod
     def test_exclude_chain_ex(cuckoo_class_instance):
@@ -542,14 +543,17 @@ class TestCuckooMain:
     )
     def test_submit(task_id, poll_started_status, poll_report_status, cuckoo_class_instance, mocker):
         from cuckoo.cuckoo_main import Cuckoo, TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG, \
-            SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, CuckooTask
+            SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT, CuckooTask
         from retrying import RetryError
         from assemblyline.common.exceptions import RecoverableError
+        from assemblyline_v4_service.common.result import ResultSection
         all_statuses = [TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG,
-                        SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED]
+                        SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT]
         file_content = b"blah"
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
+        cuckoo_task.id = task_id
+        parent_section = ResultSection("blah")
 
         mocker.patch.object(Cuckoo, "submit_file", return_value=task_id)
         mocker.patch.object(Cuckoo, "delete_task", return_value=True)
@@ -563,26 +567,30 @@ class TestCuckooMain:
             mocker.patch.object(Cuckoo, "poll_report", side_effect=RetryError("blah"))
 
         if task_id is None:
-            cuckoo_class_instance.submit(file_content, cuckoo_task)
+            cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
             assert cuckoo_task.id is None
             mocker.patch.object(Cuckoo, "submit_file", side_effect=Exception)
             cuckoo_task.id = 1
             with pytest.raises(Exception):
-                cuckoo_class_instance.submit(file_content, cuckoo_task)
-        elif poll_started_status is None or (poll_started_status == TASK_MISSING and poll_report_status is None) or (poll_report_status == TASK_MISSING and poll_started_status == TASK_STARTED):
+                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+        elif poll_started_status is None or (poll_started_status == TASK_STARTED and poll_report_status is None):
+            cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+            correct_sec = ResultSection("Assemblyline task timeout exceeded.",
+                                         body=f"The Cuckoo task {cuckoo_task.id} took longer than the "
+                                              f"Assemblyline's task timeout would allow.\nThis is usually due to "
+                                              f"an issue on Cuckoo's machinery end. Contact the Cuckoo "
+                                              f"administrator for details.")
+            check_section_equality(parent_section.subsections[0], correct_sec)
+            assert cuckoo_task.id is None
+        elif (poll_started_status == TASK_MISSING and poll_report_status is None) or (poll_started_status == TASK_STARTED and poll_report_status == TASK_MISSING):
             with pytest.raises(RecoverableError):
-                cuckoo_class_instance.submit(file_content, cuckoo_task)
-        elif poll_started_status not in all_statuses and poll_report_status is None:
-            cuckoo_class_instance.submit(file_content, cuckoo_task)
-            assert cuckoo_task.id == task_id
+                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+            assert cuckoo_task.id is None
         elif (poll_started_status == ANALYSIS_FAILED and poll_report_status is None) or (poll_report_status == ANALYSIS_FAILED and poll_started_status == TASK_STARTED):
             with pytest.raises(Exception):
-                cuckoo_class_instance.submit(file_content, cuckoo_task)
-        elif poll_report_status is None:
-            with pytest.raises(RecoverableError):
-                cuckoo_class_instance.submit(file_content, cuckoo_task)
-        elif poll_started_status and poll_report_status:
-            cuckoo_class_instance.submit(file_content, cuckoo_task)
+                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+        elif poll_started_status not in all_statuses or (poll_started_status and poll_report_status):
+            cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
             assert cuckoo_task.id == task_id
 
     @staticmethod
@@ -3388,7 +3396,8 @@ class TestSafelist:
             'microsoft-windows-powershell/operational /rd:true /e:root /format:xml '
             '/uni:true',
             'C:\\\\Windows\\\\System32\\\\wevtutil\\.exe query-events '
-            'microsoft-windows-sysmon/operational /format:xml /e:Events'
+            'microsoft-windows-sysmon/operational /format:xml /e:Events',
+            'C:\\\\Windows\\\\system32\\\\AUDIODG\\.EXE 0x6e8'
         ]
         assert SAFELIST_DOMAINS == [
             '.*\\.adobe\\.com$',
@@ -3419,7 +3428,7 @@ class TestSafelist:
             'nexus\\.officeapps\\.live\\.com$',
             '.*\\.events\\.data\\.microsoft\\.com$',
             'wdcp\\.microsoft\\.com$',
-            'fe3\\.delivery\\.mp\\.microsoft\\.com$',
+            'fe3(cr)?\\.delivery\\.mp\\.microsoft\\.com$',
             'client\\.wns\\.windows\\.com$',
             '(www\\.)?go\\.microsoft\\.com$',
             'js\\.microsoft\\.com$',
@@ -3557,6 +3566,7 @@ class TestSafelist:
             'https?://displaycatalog(\\.md)?\\.mp\\.microsoft\\.com(?:$|/.*)',
             'https?://officeclient\\.microsoft\\.com(?:$|/.*)',
             'https?://activation-v2\\.sls\\.microsoft\\.com(?:$|/.*)',
+            'https?://fe3(cr)?\\.delivery\\.mp\\.microsoft\\.com(?:$|/.*)',
             'https?://ctldl\\.windowsupdate\\.com(?:$|/.*)',
             'https?://ca\\.archive\\.ubuntu\\.com(?:$|/.*)',
             'https?://schemas\\.microsoft\\.com(?:$|/.*)',
