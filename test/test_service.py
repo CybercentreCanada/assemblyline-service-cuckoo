@@ -3006,7 +3006,6 @@ class TestSignatures:
             "process_interest": "Injection",
             "athena_url": "Trojan",
             "modifies_zoneid": "Stealth",
-            "infostealer_mail": "Infostealer",
             "antivm_generic_services": "Anti-vm",
             "disables_windowsupdate": "Persistence",
             "begseabugtd_mutexes": "Trojan",
@@ -3306,7 +3305,8 @@ class TestSignatures:
           'mutex_winscp', 'sharing_rghost', 'exp_3322_dom', 'mirc_file', 'vir_napolar',
           'vertex_url', 'has_pdb', "process_martian", 'rat_teamviewer', 'antiav_detectfile', 'antiav_detectreg',
           'api_hammering', 'raises_exception', 'antivm_memory_available', 'recon_fingerprint',
-          'application_raises_exception', 'modifies_certificates', 'modifies_proxy_wpad', 'stack_pivot_shellcode_apis'
+          'application_raises_exception', 'modifies_certificates', 'modifies_proxy_wpad', 'stack_pivot_shellcode_apis',
+          "infostealer_mail"
         ]
 
     @staticmethod
