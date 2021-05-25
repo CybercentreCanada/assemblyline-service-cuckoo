@@ -84,7 +84,7 @@ SAFELIST_DOMAINS = [
     r'www\.msftconnecttest\.com$', r'www\.msftncsi\.com$', r'iecvlist\.microsoft\.com$', r'r20swj13mr\.microsoft\.com$',
     r'(([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\.msedge\.net$', r'displaycatalog(\.md)?\.mp\.microsoft\.com$',
     r'officeclient\.microsoft\.com$', r'ow1\.res\.office365\.com$', r'fp-(as-nocache|vp)\.azureedge\.net$',
-    r'outlookmobile-office365-tas\.msedge\.net$',
+    r'outlookmobile-office365-tas\.msedge\.net$', r'config\.messenger\.msn\.com$',
     # Windows
     r'settings(-win)?\.data\.microsoft\.com$', r'.*vortex-win\.data\.microsoft\.com$', r'.*\.windowsupdate\.com$',
     r'time\.(microsoft|windows)\.com$', r'.*\.windows\.com$', r'.*\.update\.microsoft\.com$',
@@ -308,6 +308,7 @@ SAFELIST_URIS = [
     r'https?://displaycatalog(\.md)?\.mp\.microsoft\.com(?:$|/.*)', r'https?://officeclient\.microsoft\.com(?:$|/.*)',
     r'https?://activation-v2\.sls\.microsoft\.com(?:$|/.*)',
     r'https?://fe3(cr)?\.delivery\.mp\.microsoft\.com(?:$|/.*)',
+    r'https?://config\.messenger\.msn\.com(?:$|/.*)',
     # Windows
     r'https?://ctldl\.windowsupdate\.com(?:$|/.*)',
     # Ubuntu

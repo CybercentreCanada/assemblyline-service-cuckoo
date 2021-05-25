@@ -243,8 +243,7 @@ def build_limited_calls_section(parent_result_section: ResultSection, processes:
         limited_calls_section.body_format = BODY_FORMAT.TABLE
         descr = f"For the sake of service processing, the number of the following " \
                 f"API calls has been reduced in the report.json. The cause of large volumes of specific API calls is " \
-                f"most likely related to the anti-sandbox technique known as API Hammering. For more information, " \
-                f"look to the api_hammering signature."
+                f"most likely related to the anti-sandbox technique known as API Hammering."
         limited_calls_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
         parent_result_section.add_subsection(limited_calls_section)
 
@@ -413,7 +412,7 @@ def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: Result
             elif mark["type"] == "call" and process_name is not None and len(process_names) == 0:
                 sig_res.add_line(f'\tProcess Name: {safe_str(process_name)}')
                 process_names.append(process_name)
-                _tag_and_describe_call_signature(sig_name, mark, sig_res)
+                _tag_and_describe_call_signature(sig_name, mark, sig_res, process_map)
                 # Displaying the injected process
                 if get_signature_category(sig_name) == "Injection":
                     injected_process = mark["call"].get("arguments", {}).get("process_identifier")
@@ -1313,9 +1312,11 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
         url_pieces = urlparse(http_string[1])
         if url_pieces.path not in SKIPPED_PATHS and re.match(FULL_URI, http_string[1]):
             sig_res.add_tag("network.dynamic.uri", safe_str(http_string[1]))
-            sig_res.add_line(f'\tIOC: {ioc}')
+            sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
     elif signature_name == "persistence_autorun":
         sig_res.add_tag("dynamic.autorun_location", ioc)
+    elif signature_name == "process_interest":
+        sig_res.add_line(f'\tIOC: {safe_str(ioc)} is a {mark["category"].replace("process: ", "")}.')
     elif signature_name in SILENT_IOCS:
         # Nothing to see here, just avoiding printing out the IOC line in the result body
         pass
@@ -1325,9 +1326,7 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
         else:
             # If process ID in ioc, replace with process name
             for key in process_map:
-                if str(key) in ioc and signature_name != "application_raises_exception":
-                    # Despite incorrect spelling of the signature name, the ioc that is raised does not need
-                    # changing for applcation_raises_exception. All other signatures do.
+                if str(key) in ioc:
                     ioc = ioc.replace(str(key), process_map[key]["name"])
                     break
         sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
@@ -1338,12 +1337,14 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
         sig_res.add_tag("dynamic.process.command_line", ioc)
 
 
-def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultSection) -> None:
+def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultSection,
+                                     process_map: Dict[int, Dict[str, Any]]) -> None:
     """
     This method adds the appropriate tags and descriptions for "call" signatures
     :param signature_name: The name of the signature
     :param mark: The indicator that Cuckoo has returned for why the signature has been raised
     :param sig_res: A ResultSection containing details about the signature
+    :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :return: None
     """
     if signature_name == "creates_hidden_file":
@@ -1354,11 +1355,21 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         oldfilepath = mark["call"].get("arguments", {}).get("oldfilepath")
         newfilepath = mark["call"].get("arguments", {}).get("newfilepath")
         if oldfilepath and newfilepath:
-            sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}, New file path: {safe_str(newfilepath)}')
+            sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}\n\tNew file path: {safe_str(newfilepath)}')
+            sig_res.add_tag("dynamic.process.file_name", oldfilepath)
+            sig_res.add_tag("dynamic.process.file_name", newfilepath)
+        elif oldfilepath and newfilepath == "":
+            sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}\n\tNew file path: File deleted itself')
+            sig_res.add_tag("dynamic.process.file_name", oldfilepath)
     elif signature_name == "creates_service":
         service_name = mark["call"].get("arguments", {}).get("service_name")
         if service_name:
             sig_res.add_line(f'\tNew service name: {safe_str(service_name)}')
+    elif signature_name == "terminates_remote_process":
+        terminated_pid = mark["call"].get("arguments", {}).get("process_identifier")
+        terminated_process_name = process_map.get(terminated_pid, {}).get("name")
+        if terminated_process_name:
+            sig_res.add_line(f'\tTerminated Remote Process: {terminated_process_name}')
 
 
 def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netflows: List[Dict[str, Any]]) -> None:
