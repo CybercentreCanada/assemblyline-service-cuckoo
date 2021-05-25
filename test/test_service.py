@@ -1976,8 +1976,7 @@ class TestCuckooResult:
             correct_result_section.body = correct_body
             descr = f"For the sake of service processing, the number of the following " \
                     f"API calls has been reduced in the report.json. The cause of large volumes of specific API calls is " \
-                    f"most likely related to the anti-sandbox technique known as API Hammering. For more information, look " \
-                    f"to the api_hammering signature."
+                    f"most likely related to the anti-sandbox technique known as API Hammering."
             correct_result_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
             assert check_section_equality(actual_result_section.subsections[0], correct_result_section)
         else:
@@ -2269,9 +2268,9 @@ class TestCuckooResult:
             ("p2p_cnc", {"ioc": "blah", "category": "blah"}, {}, {"network.dynamic.ip": ["blah"]}, '\tIOC: blah'),
             ("blah", {"ioc": "1", "category": "blah"}, {}, {}, '\tIOC: 1'),
             ("blah", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: blah'),
-            ("application_raises_exception", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: 1'),
             ("blah", {"ioc": "blah", "category": "file"}, {}, {"dynamic.process.file_name": ["blah"]}, '\tIOC: blah'),
             ("blah", {"ioc": "blah", "category": "cmdline"}, {}, {"dynamic.process.command_line": ["blah"]}, '\tIOC: blah'),
+            ("process_interest", {"ioc": "blah", "category": "process: super bad file"}, {}, {}, '\tIOC: blah is a super bad file.'),
         ]
     )
     def test_tag_and_describe_ioc_signature(signature_name, mark, process_map, expected_tags, expected_body):
@@ -2291,9 +2290,11 @@ class TestCuckooResult:
             ("creates_hidden_file", {"call": {"arguments": {}}}, {}, None),
             ("creates_hidden_file", {"call": {"arguments": {"filepath": "blah"}}}, {"dynamic.process.file_name": ["blah"]}, None),
             ("moves_self", {"call": {"arguments": {}}}, {}, None),
-            ("moves_self", {"call": {"arguments": {"oldfilepath": "blah", "newfilepath": "blah"}}}, {}, '\tOld file path: blah, New file path: blah'),
+            ("moves_self", {"call": {"arguments": {"oldfilepath": "blah1", "newfilepath": "blah2"}}}, {"dynamic.process.file_name": ["blah1", "blah2"]}, '\tOld file path: blah1\n\tNew file path: blah2'),
+            ("moves_self", {"call": {"arguments": {"oldfilepath": "blah", "newfilepath": ""}}}, {"dynamic.process.file_name": ["blah"]}, '\tOld file path: blah\n\tNew file path: File deleted itself'),
             ("creates_service", {"call": {"arguments": {}}}, {}, None),
             ("creates_service", {"call": {"arguments": {"service_name": "blah"}}}, {}, '\tNew service name: blah'),
+            ("terminates_remote_process", {"call": {"arguments": {"process_identifier": 1}}}, {}, '\tTerminated Remote Process: blah'),
         ]
     )
     def test_tag_and_describe_call_signature(signature_name, mark, expected_tags, expected_body):
@@ -2301,7 +2302,8 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _tag_and_describe_call_signature
         expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
         actual_result = ResultSection("blah")
-        _tag_and_describe_call_signature(signature_name, mark, actual_result)
+        process_map = {1 : {"name": "blah"}}
+        _tag_and_describe_call_signature(signature_name, mark, actual_result, process_map)
         assert check_section_equality(actual_result, expected_result)
 
     @staticmethod
@@ -2619,12 +2621,10 @@ class TestSignatures:
             "im_btb": "IM",
             "blackenergy_mutexes": "Rootkit",
             "browser_startpage": "Adware",
-            "modifies_certificates": "Infostealer",
             "has_wmi": "WMI",
             "suspicious_write_exe": "Downloader",
             "dnsserver_dynamic": "DynDNS",
             "betabot_url": "BOT",
-            "stack_pivot_shellcode_apis": "Rop",
             "fraudtool_fakerean": "Fraud",
             "urlshortcn_checkip": "URLshort",
             "antiemu_wine": "Anti-emulation",
@@ -2739,7 +2739,6 @@ class TestSignatures:
             "dep_stack_bypass": "Exploit",
             "powershell_unicorn": "PowerShell",
             "application_queried_private_information": "Suspicious Android API",
-            "antiav_detectfile": "Anti-antivirus",
             "antivm_disk_size": "Anti-vm",
             "gaelicum": "Worm",
             "cloud_mediafire": "Cloud",
@@ -2817,7 +2816,7 @@ class TestSignatures:
             "network_icmp": "C2",
             "antisandbox_restart": "Anti-sandbox",
             "reads_user_agent": "Stealth",
-            "suspicious_process": "Packer",
+            "suspicious_process": "Suspicious Execution Chain",
             "banking_mutexes": "Banker",
             "decebal_mutexes": "Point-of-sale",
             "infostealer_derusbi_files": "Infostealer",
@@ -2841,10 +2840,8 @@ class TestSignatures:
             "dyreza": "Banker",
             "infostealer_browser": "Infostealer",
             "ddos_eclipse_mutexes": "BOT",
-            "application_raises_exception": "Exploit",
             "powershell_download": "PowerShell",
             "application_queried_installed_apps": "Suspicious Android API",
-            "antiav_detectreg": "Anti-antivirus",
             "antivm_generic_disk": "Anti-vm",
             "puce_mutexes": "Worm",
             "office_vuln_guid": "Suspicious Office",
@@ -2859,7 +2856,6 @@ class TestSignatures:
             "dridex_behavior": "Banker",
             "sharpstealer_url": "Infostealer",
             "bot_russkill": "BOT",
-            "raises_exception": "Exploit",
             "powershell_request": "PowerShell",
             "application_aborted_broadcast_receiver": "Suspicious Android API",
             "stops_service": "Anti-antivirus",
@@ -2877,7 +2873,6 @@ class TestSignatures:
             "rovnix": "Banker",
             "pwdump_file": "Infostealer",
             "bot_athenahttp": "BOT",
-            "recon_fingerprint": "Exploit",
             "application_deleted_app": "Suspicious Android API",
             "av_detect_china_key": "Anti-antivirus",
             "antivm_virtualpc_window": "Anti-vm",
@@ -3010,7 +3005,6 @@ class TestSignatures:
             "adds_user_admin": "Persistence",
             "process_interest": "Injection",
             "athena_url": "Trojan",
-            "rat_teamviewer": "RAT",
             "modifies_zoneid": "Stealth",
             "infostealer_mail": "Infostealer",
             "antivm_generic_services": "Anti-vm",
@@ -3018,7 +3012,6 @@ class TestSignatures:
             "begseabugtd_mutexes": "Trojan",
             "rat_jewdo": "RAT",
             "modifies_proxy_autoconfig": "Infostealer",
-            "antivm_memory_available": "Anti-vm",
             "creates_exe": "Persistence",
             "carberp_mutex": "Trojan",
             "rat_blackice": "RAT",
@@ -3026,7 +3019,6 @@ class TestSignatures:
             "antivm_vbox_window": "Anti-vm",
             "upatretd_mutexes": "Trojan",
             "rat_adzok": "RAT",
-            "modifies_proxy_wpad": "Infostealer",
             "antivm_vmware_in_instruction": "Anti-vm",
             "rat_pasta": "RAT",
             "isrstealer_url": "Infostealer",
@@ -3112,7 +3104,6 @@ class TestSignatures:
             "process_needed": "Suspicious Execution Chain",
             "winmgmts_process_create": "WMI",
             "dll_load_uncommon_file_types": "Suspicious DLL",
-            "api_hammering": "Anti-sandbox"
         }
 
         assert CUCKOO_SIGNATURE_CATEGORIES == {
@@ -3313,7 +3304,9 @@ class TestSignatures:
           'powershell_di', 'powerfun', 'powershell_dfsp', 'powershell_c2dns',
           'powershell_unicorn', 'spreading_autoruninf', 'sniffer_winpcap',
           'mutex_winscp', 'sharing_rghost', 'exp_3322_dom', 'mirc_file', 'vir_napolar',
-          'vertex_url', 'has_pdb', "process_martian"
+          'vertex_url', 'has_pdb', "process_martian", 'rat_teamviewer', 'antiav_detectfile', 'antiav_detectreg',
+          'api_hammering', 'raises_exception', 'antivm_memory_available', 'recon_fingerprint',
+          'application_raises_exception', 'modifies_certificates', 'modifies_proxy_wpad', 'stack_pivot_shellcode_apis'
         ]
 
     @staticmethod
@@ -3452,6 +3445,7 @@ class TestSafelist:
             'ow1\\.res\\.office365\\.com$',
             'fp-(as-nocache|vp)\\.azureedge\\.net$',
             'outlookmobile-office365-tas\\.msedge\\.net$',
+            'config\\.messenger\\.msn\\.com$',
             'settings(-win)?\\.data\\.microsoft\\.com$',
             '.*vortex-win\\.data\\.microsoft\\.com$',
             '.*\\.windowsupdate\\.com$',
@@ -3572,6 +3566,7 @@ class TestSafelist:
             'https?://officeclient\\.microsoft\\.com(?:$|/.*)',
             'https?://activation-v2\\.sls\\.microsoft\\.com(?:$|/.*)',
             'https?://fe3(cr)?\\.delivery\\.mp\\.microsoft\\.com(?:$|/.*)',
+            'https?://config\\.messenger\\.msn\\.com(?:$|/.*)',
             'https?://ctldl\\.windowsupdate\\.com(?:$|/.*)',
             'https?://ca\\.archive\\.ubuntu\\.com(?:$|/.*)',
             'https?://schemas\\.microsoft\\.com(?:$|/.*)',

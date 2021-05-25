@@ -147,6 +147,8 @@ heuristics:
     attack_id: [T1190, T1212, T1082, T1211, T1068]
     name: Exploit
     score: 250
+    signature_score_map:
+      queries_programs: 10
     filetype: '*'
     description: Exploits an known software vulnerability or security flaw.
 
@@ -155,7 +157,7 @@ heuristics:
     name: PowerShell
     score: 500
     signature_score_map:
-      suspicious_powershell: 500  # This signature is a 3 -> 250
+      suspicious_powershell: 250
     filetype: '*'
     description: Leverages Powershell to attack Windows operating systems.
 
@@ -198,6 +200,8 @@ heuristics:
     attack_id: [T1518.001, T1562.001]
     name: Anti-antivirus
     score: 250
+    signature_score_map:
+      antiav_servicestop: 25
     filetype: '*'
     description: Attempts to conceal itself from detection by anti-virus.
 
@@ -205,6 +209,10 @@ heuristics:
     attack_id: [T1497, T1007]
     name: Anti-vm
     score: 250
+    signature_score_map:
+      antivm_generic_cpu: 10
+      antivm_generic_disk: 100
+      antivm_vbox_keys: 100
     filetype: '*'
     description: Attempts to detect if it is being run in virtualized environment.
 
@@ -237,6 +245,8 @@ heuristics:
   - heur_id: 14
     name: Suspicious Office
     score: 100
+    signature_score_map:
+      creates_doc: 10
     filetype: '*'
     description: Makes API calls not consistent with expected/standard behaviour
 
@@ -255,6 +265,8 @@ heuristics:
       creates_shortcut: 10
       creates_exe: 10
       persistence_ads: 10
+      deletes_executed_files: 100
+      privilege_luid_check: 10
     filetype: '*'
     description: Technique used to maintain presence in system(s) across interruptions that could cut off access.
 
@@ -265,6 +277,7 @@ heuristics:
     signature_score_map:
       allocates_rwx: 10
       hollowshunter_pe: 500
+      injection_resumethread: 100
     filetype: '*'
     description: Hide executable code in another process or within the malicious process after unpacking iteself.
 
@@ -305,6 +318,7 @@ heuristics:
       network_icmp: 10
       network_http_post: 10
       network_http: 10
+      multiple_useragents: 100
     filetype: '*'
     description: Communicates with a server controlled by a malicious actor.
 
@@ -312,6 +326,8 @@ heuristics:
     attack_id: [T1090, T1090.003]
     name: Tor
     score: 250
+    signature_score_map:
+      network_torgateway: 500
     filetype: '*'
     description: Installs/Leverages Tor to enable anonymous communication.
 
@@ -327,6 +343,7 @@ heuristics:
     score: 250
     signature_score_map:
       antisandbox_idletime: 10
+      antisandbox_foregroundwindows: 10
     filetype: '*'
     description: Attempts to detect if it is in a sandbox.
 
@@ -334,6 +351,8 @@ heuristics:
     attack_id: [T1036, T1564.001, T1070]
     name: Stealth
     score: 250
+    signature_score_map:
+      reads_user_agent: 10
     filetype: '*'
     description: Leverages/modifies internal processes and settings to conceal itself.
 
@@ -482,7 +501,7 @@ heuristics:
 
   - heur_id: 1000
     name: Domain detected
-    score: 100
+    score: 10
     filetype: '*'
     description: Cuckoo detected Domains
 
@@ -500,7 +519,7 @@ heuristics:
 
   - heur_id: 1003
     name: Access Remote File
-    score: 100
+    score: 10
     filetype: '*'
     description: Cuckoo detected an attempt to access a remote file
 
