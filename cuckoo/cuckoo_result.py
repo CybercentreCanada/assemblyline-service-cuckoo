@@ -43,6 +43,7 @@ SILENT_IOCS = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_pr
 
 INETSIM = "INetSim"
 DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
+HTTP_API_CALLS = ["send", "InternetConnectW", "InternetConnectA"]
 BUFFER_API_CALLS = ["send"]
 SUSPICIOUS_USER_AGENTS = ["Microsoft BITS"]
 
@@ -589,50 +590,13 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         network_res.add_subsection(netflows_sec)
 
     # HTTP/HTTPS section
-    req_table: List[Dict[str, Any]] = []
-    http_protocols = ["http", "https", "http_ex", "https_ex"]
-    for protocol in http_protocols:
-        http_calls = [x for x in network.get(protocol, [])]
-        if len(http_calls) <= 0:
-            continue
-        for http_call in http_calls:
-            host = http_call["host"]
-            if "ex" in protocol:
-                path = http_call["uri"]
-                if host in path:
-                    path = path.split(host)[1]
-                request = http_call["request"]
-                port = http_call["dport"]
-                uri = http_call["protocol"] + "://" + host + path
-                proto = http_call["protocol"]
-            else:
-                path = http_call["path"]
-                request = http_call["data"]
-                port = http_call["port"]
-                uri = http_call["uri"]
-                proto = protocol
-            if slist_check_ip(host) or slist_check_domain(host) or slist_check_uri(uri):
-                continue
-            req = {
-                "protocol": proto,
-                "host": host,  # Note: will be removed, we just need it for tagging
-                "port": port,  # Note: will be removed, we just need it for tagging
-                "path": path,  # Note: will be removed, we just need it for tagging
-                "user-agent": http_call.get("user-agent"),  # Note: will be removed, we just need it for tagging
-                "request": request,
-                "process_name": None,
-                "uri": uri,  # Note: will be removed, we just need it for tagging
-                "method": http_call["method"]  # Note: will be removed, need it to check if a remote file was accessed
-            }
-            for process in process_map:
-                process_details = process_map[process]
-                for network_call in process_details["network_calls"]:
-                    send = network_call.get("send", {}) or network_call.get("InternetConnectW", {}) or \
-                           network_call.get("InternetConnectA", {})
-                    if send != {} and (send.get("service", 0) == 3 or send.get("buffer", "") == request):
-                        req["process_name"] = process_details["name"] + " (" + str(process) + ")"
-            if req not in req_table:
-                req_table.append(req)
+    http_level_flows = {
+        "http": network.get("http", []),
+        "https": network.get("https", []),
+        "http_ex": network.get("http_ex", []),
+        "https_ex": network.get("https_ex", []),
+    }
+    req_table = _process_http_calls(http_level_flows, process_map)
 
     if len(req_table) > 0:
         http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS")
@@ -816,6 +780,50 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
                     network_flow["pid"] = resolved_ips[dst]["process_id"]
             network_flows_table.append(network_flow)
     return network_flows_table, netflows_sec
+
+
+def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]], process_map: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    req_table: List[Dict[str, Any]] = []
+    for protocol, http_calls in http_level_flows.items():
+        if len(http_calls) <= 0:
+            continue
+        for http_call in http_calls:
+            host = http_call["host"]
+            if "ex" in protocol:
+                path = http_call["uri"]
+                if host in path:
+                    path = path.split(host)[1]
+                request = http_call["request"]
+                port = http_call["dport"]
+                uri = f"{http_call['protocol']}://{host}{path}"
+                proto = http_call["protocol"]
+            else:
+                path = http_call["path"]
+                request = http_call["data"]
+                port = http_call["port"]
+                uri = http_call["uri"]
+                proto = protocol
+            if slist_check_ip(host) or slist_check_domain(host) or slist_check_uri(uri):
+                continue
+            req = {
+                "protocol": proto,
+                "host": host,  # Note: will be removed, we just need it for tagging
+                "port": port,  # Note: will be removed, we just need it for tagging
+                "path": path,  # Note: will be removed, we just need it for tagging
+                "user-agent": http_call.get("user-agent"),  # Note: will be removed, we just need it for tagging
+                "request": request,
+                "process_name": None,
+                "uri": uri,  # Note: will be removed, we just need it for tagging
+                "method": http_call["method"]  # Note: will be removed, need it to check if a remote file was accessed
+            }
+            for process, process_details in process_map.items():
+                for network_call in process_details["network_calls"]:
+                    send = next((network_call[api_call] for api_call in HTTP_API_CALLS if api_call in network_call), {})
+                    if send != {} and (send.get("service", 0) == 3 or send.get("buffer", "") == request):
+                        req["process_name"] = f"{process_details['name']} ({str(process)})"
+            if req not in req_table:
+                req_table.append(req)
+    return req_table
 
 
 def process_all_events(parent_result_section: ResultSection, events: Optional[List[Dict]] = None) -> None:
