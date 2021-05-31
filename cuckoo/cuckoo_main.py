@@ -120,6 +120,11 @@ class AnalysisTimeoutExceeded(Exception):
     pass
 
 
+class AnalysisFailed(Exception):
+    """Exception class for when Cuckoo is not able to analyze the task"""
+    pass
+
+
 def _exclude_chain_ex(ex) -> bool:
     """Use this with some of the @retry decorators to only retry if the exception
     ISN'T a RecoverableException or NonRecoverableException"""
@@ -343,6 +348,8 @@ class Cuckoo(ServiceBase):
                                 f"{host_to_use['ip']}.")
         except AnalysisTimeoutExceeded:
             pass
+        except AnalysisFailed:
+            pass
         except Exception as e:
             self.log.error(repr(e))
             if cuckoo_task and cuckoo_task.id is not None:
@@ -404,8 +411,14 @@ class Cuckoo(ServiceBase):
             self.log.error(err_msg)
             raise RecoverableError(err_msg)
         elif status == ANALYSIS_FAILED:
-            raise Exception(f"The analysis of #{cuckoo_task.id} has failed. This is most likely because a non-native "
-                            f"file type was attempted to be detonated. Example: .dll on a Linux VM.")
+            # Add a subsection detailing what's happening and then moving on
+            analysis_failed_sec = ResultSection("Cuckoo Analysis Failed.",
+                                                body=f"The analysis of Cuckoo task {cuckoo_task.id} has failed. This "
+                                                     f"is most likely because a non-native file type was attempted to "
+                                                     f"be detonated. Example: .dll on a Linux VM. Contact the Cuckoo "
+                                                     f"administrator for details.")
+            parent_section.add_subsection(analysis_failed_sec)
+            raise AnalysisFailed()
 
     def stop(self) -> None:
         # Need to kill the container; we're about to go down..
