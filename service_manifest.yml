@@ -318,6 +318,7 @@ heuristics:
       network_icmp: 10
       network_http_post: 10
       network_http: 10
+      network_cnc_http: 200
       multiple_useragents: 100
     filetype: '*'
     description: Communicates with a server controlled by a malicious actor.
