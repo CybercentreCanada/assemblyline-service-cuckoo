@@ -2078,6 +2078,7 @@ class TestCuckooResult:
             ("blah", [{"name": "blah", "markcount": 1, "severity": 1, "marks": [{"type": "call", "pid": "1"}]}], "192.0.2.0/24", "", {1: {"name": "blah"}}, 'No description for signature.', False),
             ("injection_explorer", [{"name": "injection_explorer", "markcount": 1, "severity": 1, "marks": [{"type": "call", "pid": 2, "call": {"arguments": {"process_identifier": 1}}}]}], "192.0.2.0/24", "", {2: {"name": "blah1"}, 1: {"name": "blah2"}}, 'No description for signature.\n\tProcess Name: blah1\n\tInjected Process: blah2', False),
             ("process_interest", [{"name": "process_interest", "markcount": 1, "severity": 1, "marks": [{"type": "call", "pid": 2, "call": {"arguments": {"process_identifier": 1}}}]}], "192.0.2.0/24", "", {2: {"name": "blah"}, 1: {"name": "blah"}}, None, False),
+            ("network_cnc_http", [{"name": "network_cnc_http", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 127.0.0.1"}]}, {"name": "network_http", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 127.0.0.1"}]}], "192.0.2.0/24", "", {2: {"name": "blah"}, 1: {"name": "blah"}}, None, False),
         ]
     )
     def test_process_signatures(sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian):
