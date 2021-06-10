@@ -553,7 +553,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             protocol_res_sec.add_tag("network.protocol", network_flow["protocol"])
 
             domain = network_flow["domain"]
-            if domain is not None and not contains_safelisted_value(domain):  # and not is_ip(domain):
+            if domain is not None and not contains_safelisted_value(domain) and re.match(DOMAIN_REGEX, domain):
                 dns_res_sec.add_tag("network.dynamic.domain", domain)
 
             dest_ip = network_flow["dest_ip"]
@@ -616,7 +616,8 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                 http_sec.add_tag("network.dynamic.ip", host)
             else:
                 if path not in skipped_paths:
-                    http_sec.add_tag("network.dynamic.domain", host)
+                    if re.match(DOMAIN_REGEX, host):
+                        http_sec.add_tag("network.dynamic.domain", host)
                     if re.match(FULL_URI, http_call["uri"]):
                         http_sec.add_tag("network.dynamic.uri", http_call["uri"])
             http_sec.add_tag("network.port", http_call["port"])
@@ -625,7 +626,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                 # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
                 if http_call["method"] == "GET":
                     split_path = path.rsplit("/", 1)
-                    if len(split_path) > 1 and re.search(r'[^\\]*\.(\w+)$', split_path[-1]):
+                    if len(split_path) > 1 and re.search(r'[^\\]*\.(\w+)$', split_path[-1]) and re.match(FULL_URI, http_call["uri"]):
                         remote_file_access_sec.add_tag("network.dynamic.uri", http_call["uri"])
                         if not remote_file_access_sec.heuristic:
                             remote_file_access_sec.set_heuristic(1003)
@@ -860,7 +861,8 @@ def process_all_events(parent_result_section: ResultSection, events: Optional[Li
             })
         elif isinstance(event, ProcessEvent):
             events_section.add_tag("dynamic.process.command_line", event.command_line)
-            events_section.add_tag("dynamic.process.file_name", event.image)
+            if event.image:
+                events_section.add_tag("dynamic.process.file_name", event.image)
             event_table.append({
                 "timestamp": datetime.datetime.fromtimestamp(event.timestamp).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                 "process_name": f"{event.image} ({event.pid})",
@@ -1279,7 +1281,8 @@ def _tag_and_describe_generic_signature(signature_name: str, mark: Dict[str, Any
         if not contains_safelisted_value(http_string[1]):
             sig_res.add_line(f'\tFun fact: {safe_str(mark["suspicious_features"])}')
             sig_res.add_line(f'\tIOC: {safe_str(mark["suspicious_request"])}')
-            sig_res.add_tag("network.dynamic.uri", http_string[1])
+            if re.match(FULL_URI, http_string[1]):
+                sig_res.add_tag("network.dynamic.uri", http_string[1])
     elif signature_name == "nolookup_communication":
         if not contains_safelisted_value(mark["host"]) and ip_address(mark["host"]) not in inetsim_network:
             sig_res.add_tag("network.dynamic.ip", mark["host"])
@@ -1341,7 +1344,7 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
                     break
         sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
 
-    if mark["category"] == "file" and signature_name != "ransomware_mass_file_delete":
+    if mark["category"] == "file" and signature_name != "ransomware_mass_file_delete" and ioc:
         sig_res.add_tag("dynamic.process.file_name", ioc)
     elif mark["category"] == "cmdline":
         sig_res.add_tag("dynamic.process.command_line", ioc)
@@ -1396,7 +1399,8 @@ def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netfl
         if netflow["dest_port"] in [443, 80]:
             non_http_list.append(netflow)
             non_http_traffic_result_section.add_tag("network.dynamic.ip", safe_str(netflow["dest_ip"]))
-            non_http_traffic_result_section.add_tag("network.dynamic.domain", safe_str(netflow["domain"]))
+            if re.match(DOMAIN_REGEX, netflow["domain"]):
+                non_http_traffic_result_section.add_tag("network.dynamic.domain", safe_str(netflow["domain"]))
             non_http_traffic_result_section.add_tag("network.port", safe_str(netflow["dest_port"]))
     if len(non_http_list) > 0:
         non_http_traffic_result_section.set_heuristic(1005)

@@ -2430,12 +2430,12 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _process_non_http_traffic_over_http
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
         test_parent_section = ResultSection("blah")
-        network_flows = [{"dest_port": 80, "dest_ip": "127.0.0.1", "domain": "blah"}, {"dest_port": 443, "dest_ip": "127.0.0.2", "domain": "blah2"}]
+        network_flows = [{"dest_port": 80, "dest_ip": "127.0.0.1", "domain": "blah.blah"}, {"dest_port": 443, "dest_ip": "127.0.0.2", "domain": "blah2.blah"}]
         correct_result_section = ResultSection("Non-HTTP Traffic over HTTP Ports")
         correct_result_section.set_heuristic(1005)
         correct_result_section.tags = {
             "network.dynamic.ip": ["127.0.0.1", "127.0.0.2"],
-            "network.dynamic.domain": ["blah", "blah2"],
+            "network.dynamic.domain": ["blah.blah", "blah2.blah"],
             "network.port": [80, 443],
         }
         correct_result_section.body_format = BODY_FORMAT.TABLE
