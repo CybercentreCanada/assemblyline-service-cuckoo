@@ -41,6 +41,7 @@ CUCKOO_API_QUERY_REPORT = "tasks/report/%s"
 CUCKOO_API_QUERY_PCAP = "pcap/get/%s"
 CUCKOO_API_QUERY_MACHINES = "machines/list"
 CUCKOO_API_QUERY_HOST = "cuckoo/status"
+CUCKOO_API_REBOOT_TASK = "tasks/reboot/%s"
 
 CUCKOO_POLL_DELAY = 5
 GUEST_VM_START_TIMEOUT = 360  # Give the VM at least 6 minutes to start up
@@ -159,6 +160,7 @@ class CuckooTask(dict):
         self.query_report_url = f"{self.base_url}/{CUCKOO_API_QUERY_REPORT}"
         self.query_pcap_url = f"{self.base_url}/{CUCKOO_API_QUERY_PCAP}"
         self.query_machines_url = f"{self.base_url}/{CUCKOO_API_QUERY_MACHINES}"
+        self.reboot_task_url = f"{self.base_url}/{CUCKOO_API_REBOOT_TASK}"
 
 
 class SubmissionThread(Thread):
@@ -314,7 +316,7 @@ class Cuckoo(ServiceBase):
                 self._get_subsection_heuristic_map(section.subsections, section_heur_map)
 
     def _general_flow(self, kwargs: Dict[str, Any], file_ext: str, parent_section: ResultSection,
-                      hosts: List[Dict[str, Any]]) -> None:
+                      hosts: List[Dict[str, Any]], reboot: bool = False, parent_task_id: int = 0) -> None:
         """
         This method contains the general flow of a task: submitting a file to Cuckoo and generating an Assemblyline
         report
@@ -323,18 +325,28 @@ class Cuckoo(ServiceBase):
         :param file_ext: The file extension of the file to be submitted
         :param parent_section: The overarching result section detailing what image this task is being sent to
         :param hosts: The hosts that the file could be sent to
+        :param reboot: A boolean representing if we want to reboot the sample post initial analysis
+        :param parent_task_id: The ID of the parent task which the reboot analysis will be based on
         :return: None
         """
-        if self._is_invalid_analysis_timeout(parent_section):
+        if self._is_invalid_analysis_timeout(parent_section, reboot):
             return
 
-        self._set_task_parameters(kwargs, file_ext, parent_section)
+        if reboot:
+            host_to_use = hosts[0]
+            parent_section = ResultSection(f"Reboot Analysis: {parent_section.title_text}")
+            self.file_res.add_section(parent_section)
+        else:
+            self._set_task_parameters(kwargs, file_ext, parent_section)
+            host_to_use = self._determine_host_to_use(hosts)
 
-        host_to_use = self._determine_host_to_use(hosts)
         cuckoo_task = CuckooTask(self.file_name, host_to_use, **kwargs)
 
+        if parent_task_id:
+            cuckoo_task.id = parent_task_id
+
         try:
-            self.submit(self.request.file_contents, cuckoo_task, parent_section)
+            self.submit(self.request.file_contents, cuckoo_task, parent_section, reboot)
 
             if cuckoo_task.id:
                 self._generate_report(file_ext, cuckoo_task, parent_section)
@@ -349,29 +361,48 @@ class Cuckoo(ServiceBase):
                 self.delete_task(cuckoo_task)
             raise
 
+        # If first submission, reboot is always false
+        if not reboot and self.config.get("reboot_supported", False):
+            reboot = self._determine_if_reboot_required(parent_section)
+            if reboot:
+                self._general_flow(kwargs, file_ext, parent_section, [host_to_use], reboot, cuckoo_task.id)
+
         # Delete and exit
         if cuckoo_task and cuckoo_task.id is not None:
             self.delete_task(cuckoo_task)
 
-    def submit(self, file_content: bytes, cuckoo_task: CuckooTask, parent_section: ResultSection) -> None:
+    def submit(self, file_content: bytes, cuckoo_task: CuckooTask, parent_section: ResultSection,
+               reboot: bool = False) -> None:
         """
         This method contains the submitting, polling, and report retrieving logic
         :param file_content: The content of the file to be submitted
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
         :param parent_section: The overarching result section detailing what image this task is being sent to
+        :param reboot: A boolean indicating that we will be resubmitting a task for reboot analysis
         :return: None
         """
-        try:
-            """ Submits a new file to Cuckoo for analysis """
-            task_id = self.submit_file(file_content, cuckoo_task)
-            if not task_id:
-                self.log.error("Failed to get task for submitted file.")
+        if not reboot:
+            try:
+                """ Submits a new file to Cuckoo for analysis """
+                task_id = self.submit_file(file_content, cuckoo_task)
+                if not task_id:
+                    self.log.error("Failed to get task for submitted file.")
+                    return
+                else:
+                    cuckoo_task.id = task_id
+            except Exception as e:
+                self.log.error(f"Error submitting to Cuckoo: {safe_str(e)}")
+                raise
+        else:
+            resp = self.session.get(cuckoo_task.reboot_task_url % cuckoo_task.id, headers=cuckoo_task.auth_header,
+                                    timeout=self.timeout)
+            if resp.status_code != 200:
+                self.log.warning("Reboot selected, but task could not be rebooted. Moving on...")
                 return
             else:
-                cuckoo_task.id = task_id
-        except Exception as e:
-            self.log.error(f"Error submitting to Cuckoo: {safe_str(e)}")
-            raise
+                reboot_resp = resp.json()
+                cuckoo_task.id = reboot_resp["reboot_id"]
+                self.log.debug(f"Reboot selected, task {reboot_resp['task_id']} marked for reboot {reboot_resp['reboot_id']}.")
 
         self.log.debug(f"Submission succeeded. File: {cuckoo_task.file} -- Task {cuckoo_task.id}")
 
@@ -409,7 +440,7 @@ class Cuckoo(ServiceBase):
 
     def stop(self) -> None:
         # Need to kill the container; we're about to go down..
-        self.log.info("Service is being stopped; removing all running containers and metadata..")
+        self.log.debug("Service is being stopped; removing all running containers and metadata..")
 
     @retry(wait_fixed=CUCKOO_POLL_DELAY * 1000,
            stop_max_attempt_number=(GUEST_VM_START_TIMEOUT/CUCKOO_POLL_DELAY),
@@ -938,7 +969,7 @@ class Cuckoo(ServiceBase):
             if submitted_ext not in SUPPORTED_EXTENSIONS:
                 # This is the case where the submitted file was NOT identified, and  the provided extension
                 # isn't in the list of extensions that we explicitly support.
-                self.log.info("Cuckoo is exiting because it doesn't support the provided file type.")
+                self.log.debug("Cuckoo is exiting because it doesn't support the provided file type.")
                 return ""
             else:
                 if submitted_ext == "bin":
@@ -947,7 +978,7 @@ class Cuckoo(ServiceBase):
                 file_ext = '.' + submitted_ext
         else:
             # This is unknown without an extension that we accept/recognize.. no scan!
-            self.log.info(f"The file type of '{self.request.file_type}' could "
+            self.log.debug(f"The file type of '{self.request.file_type}' could "
                           f"not be identified. Tag extension: {tag_extension}")
             return ""
 
@@ -1642,13 +1673,18 @@ class Cuckoo(ServiceBase):
 
         raise CuckooVMBusyException(f"No host available for submission between {[host['ip'] for host in hosts]}")
 
-    def _is_invalid_analysis_timeout(self, parent_section: ResultSection) -> bool:
+    def _is_invalid_analysis_timeout(self, parent_section: ResultSection, reboot: bool = False) -> bool:
         """
         This method determines if the requested analysis timeout is valid
         :param parent_section: The overarching result section detailing what image this task is being sent to
+        :param reboot: A boolean representing if we want to reboot the sample post initial analysis
         :return: A boolean representing if the analysis timeout is invalid
         """
         requested_timeout = int(self.request.get_param("analysis_timeout"))
+        # If we are considering rebooting, we want to ensure that the service won't time out before we're done. The
+        # assumption here is that the reboot will take approximately the same time as the initial submission
+        if reboot:
+            requested_timeout *= 2
         service_timeout = int(self.service_attributes["timeout"])
         if requested_timeout > service_timeout:
             invalid_timeout_res_sec = ResultSection("Invalid Analysis Timeout Requested",
@@ -1661,6 +1697,12 @@ class Cuckoo(ServiceBase):
         return False
 
     def _get_subsection_heuristic_map(self, subsections: List[ResultSection], section_heur_map: Dict[str, int]) -> None:
+        """
+        This method uses recursion to eliminate duplicate heuristics
+        :param subsections: The subsections which we will iterate through, searching for heuristics
+        :param section_heur_map: The heuristic map which is used for heuristic deduplication
+        :return: None
+        """
         for subsection in subsections:
             if subsection.heuristic:
                 if subsection.title_text in section_heur_map:
@@ -1671,6 +1713,26 @@ class Cuckoo(ServiceBase):
                     section_heur_map[subsection.title_text] = subsection.heuristic.heur_id
             if subsection.subsections:
                 self._get_subsection_heuristic_map(subsection.subsections, section_heur_map)
+
+    def _determine_if_reboot_required(self, parent_section) -> bool:
+        """
+        This method determines if we should create a reboot task for the original task
+        :param parent_section: The overarching result section detailing what image this task is being sent to
+        :return: A boolean indicating if we should create a reboot task
+        """
+        # If the user has requested a reboot analysis, then make it happen
+        reboot = self._safely_get_param("reboot")
+        if reboot:
+            return True
+
+        # If a sample has raised a signature that would indicate that it will behave differently upon reboot,
+        # then make it happen
+        for subsection in parent_section.subsections:
+            if subsection.title_text == "Signatures":
+                for subsubsection in subsection.subsections:
+                    if any(item in subsubsection.title_text for item in ["persistence_autorun", "creates_service"]):
+                        return True
+        return False
 
 
 def generate_random_words(num_words: int) -> str:
