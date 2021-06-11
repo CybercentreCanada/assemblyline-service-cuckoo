@@ -1869,8 +1869,6 @@ class TestCuckooMain:
             assert cuckoo_class_instance._determine_if_reboot_required(parent_section) is result
 
 
-
-
 class TestCuckooResult:
     @classmethod
     def setup_class(cls):
