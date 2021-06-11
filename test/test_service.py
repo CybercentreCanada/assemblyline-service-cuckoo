@@ -485,7 +485,7 @@ class TestCuckooMain:
             cuckoo_class_instance.execute(service_request)
 
     @staticmethod
-    def test_general_flow(cuckoo_class_instance, dummy_request_class, mocker):
+    def test_general_flow(cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
         from assemblyline_v4_service.common.result import ResultSection
         from assemblyline.common.exceptions import RecoverableError
         from cuckoo.cuckoo_main import Cuckoo, AnalysisTimeoutExceeded
@@ -502,6 +502,7 @@ class TestCuckooMain:
         cuckoo_class_instance.file_name = "blah"
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance.request.file_contents = "blah"
+        cuckoo_class_instance.file_res = dummy_result_class_instance
 
         kwargs = dict()
         file_ext = "blah"
@@ -509,6 +510,10 @@ class TestCuckooMain:
         # Purely for code coverage
         with pytest.raises(Exception):
             cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
+
+        # Reboot coverage
+        cuckoo_class_instance.config["reboot_supported"] = True
+        cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, [{"auth_header": "blah", "ip": "blah", "port": "blah"}], True, 1)
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=Exception("blah")):
             with pytest.raises(Exception):
@@ -542,6 +547,7 @@ class TestCuckooMain:
             (1, "started", "service_container_disconnected"),
             (1, "started", "missing_report"),
             (1, "started", "analysis_failed"),
+            (1, "started", "reboot"),
         ]
     )
     def test_submit(task_id, poll_started_status, poll_report_status, cuckoo_class_instance, mocker):
@@ -554,7 +560,8 @@ class TestCuckooMain:
         all_statuses = [TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG,
                         SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT]
         file_content = b"blah"
-        host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
+        host_to_use = {"auth_header": {"blah": "blah"}, "ip": "1.1.1.1", "port": 8000}
+        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = task_id
         parent_section = ResultSection("blah")
@@ -594,6 +601,18 @@ class TestCuckooMain:
         elif (poll_started_status == ANALYSIS_FAILED and poll_report_status is None) or (poll_report_status == ANALYSIS_FAILED and poll_started_status == TASK_STARTED):
             with pytest.raises(Exception):
                 cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
+        elif poll_report_status == "reboot":
+            from requests import Session
+            cuckoo_class_instance.session = Session()
+            with requests_mock.Mocker() as m:
+                m.get(cuckoo_task.reboot_task_url % task_id, status_code=404)
+                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section, True)
+                assert cuckoo_task.id == task_id
+
+                m.get(cuckoo_task.reboot_task_url % task_id, status_code=200, json={"reboot_id": 2, "task_id": task_id})
+                cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section, True)
+                assert cuckoo_task.id == 2
+
         elif poll_started_status not in all_statuses or (poll_started_status and poll_report_status):
             cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
             assert cuckoo_task.id == task_id
@@ -1803,6 +1822,9 @@ class TestCuckooMain:
         cuckoo_class_instance.request = dummy_request_class(analysis_timeout=900)
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is True
         assert check_section_equality(correct_subsection, parent_section.subsections[0])
+        # Reboot test
+        cuckoo_class_instance.request = dummy_request_class(analysis_timeout=150)
+        assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section, True) is False
 
     @staticmethod
     @pytest.mark.parametrize("title_heur_tuples, correct_section_heur_map",
@@ -1828,6 +1850,25 @@ class TestCuckooMain:
         assert actual_section_heur_map == correct_section_heur_map
         if len(correct_section_heur_map) == 1:
             assert subsections[1].heuristic is None
+
+    @staticmethod
+    def test_determine_if_reboot_required(cuckoo_class_instance, dummy_request_class):
+        from assemblyline_v4_service.common.result import ResultSection
+        parent_section = ResultSection("blah")
+        assert cuckoo_class_instance._determine_if_reboot_required(parent_section) is False
+
+        cuckoo_class_instance.request = dummy_request_class(reboot=True)
+        assert cuckoo_class_instance._determine_if_reboot_required(parent_section) is True
+
+        cuckoo_class_instance.request = dummy_request_class(reboot=False)
+        signature_section = ResultSection("Signatures")
+        for sig, result in [("persistence_autorun", True), ("creates_service", True), ("blah", False)]:
+            signature_subsection = ResultSection(sig)
+            signature_section.subsections = [signature_subsection]
+            parent_section.subsections = [signature_section]
+            assert cuckoo_class_instance._determine_if_reboot_required(parent_section) is result
+
+
 
 
 class TestCuckooResult:

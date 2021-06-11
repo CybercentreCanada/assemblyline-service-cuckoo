@@ -40,6 +40,7 @@ config:
   default_analysis_timeout: 150
   machinery_supports_memory_dumps: false
   rest_timeout: 120
+  reboot_supported: false
 
   # Docker Container Limit
   max_report_size: 275000000
@@ -91,6 +92,13 @@ submission_params:
 
   - default: false
     name: take_screenshots
+    type: bool
+    value: false
+
+  # This is a development option, as users can select it without understanding what it is for and then double
+  # processing time
+  - default: false
+    name: reboot
     type: bool
     value: false
 
