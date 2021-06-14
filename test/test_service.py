@@ -1242,7 +1242,7 @@ class TestCuckooMain:
         "params",
         [
             {
-                "analysis_timeout": 0,
+                "analysis_timeout_in_seconds": 0,
                 "dll_function": "",
                 "arguments": "",
                 "no_monitor": False,
@@ -1258,7 +1258,7 @@ class TestCuckooMain:
                 "dump_memory": False,
             },
             {
-                "analysis_timeout": 1,
+                "analysis_timeout_in_seconds": 1,
                 "dll_function": "",
                 "arguments": "blah",
                 "no_monitor": True,
@@ -1284,7 +1284,7 @@ class TestCuckooMain:
         correct_kwargs = dict()
         file_ext = ""
 
-        timeout = params["analysis_timeout"]
+        timeout = params["analysis_timeout_in_seconds"]
         arguments = params["arguments"]
         no_monitor = params["no_monitor"]
         custom_options = params["custom_options"]
@@ -1810,7 +1810,7 @@ class TestCuckooMain:
     @staticmethod
     def test_is_invalid_analysis_timeout(cuckoo_class_instance, dummy_request_class):
         from assemblyline_v4_service.common.result import ResultSection
-        cuckoo_class_instance.request = dummy_request_class(analysis_timeout=150)
+        cuckoo_class_instance.request = dummy_request_class(analysis_timeout_in_seconds=150)
         parent_section = ResultSection("blah")
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is False
 
@@ -1819,11 +1819,11 @@ class TestCuckooMain:
                                             body="The analysis timeout requested was 900, which exceeds the time that "
                                                  "Assemblyline will run the service (800). Choose an analysis timeout "
                                                  "value < 800 and submit the file again.")
-        cuckoo_class_instance.request = dummy_request_class(analysis_timeout=900)
+        cuckoo_class_instance.request = dummy_request_class(analysis_timeout_in_seconds=900)
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is True
         assert check_section_equality(correct_subsection, parent_section.subsections[0])
         # Reboot test
-        cuckoo_class_instance.request = dummy_request_class(analysis_timeout=150)
+        cuckoo_class_instance.request = dummy_request_class(analysis_timeout_in_seconds=150)
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section, True) is False
 
     @staticmethod

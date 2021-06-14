@@ -208,7 +208,7 @@ class Cuckoo(ServiceBase):
             del host["api_key"]
         self.hosts = self.config["remote_host_details"]["hosts"]
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
-        self.timeout = self.config.get("rest_timeout", 120)
+        self.timeout = self.config.get("rest_timeout_in_seconds", 120)
         self.max_report_size = self.config.get('max_report_size', 275000000)
         self.allowed_images = self.config.get("allowed_images", [])
         self.routing = self.config.get("routing", INETSIM)
@@ -1012,14 +1012,14 @@ class Cuckoo(ServiceBase):
         task_options: List[str] = []
 
         # Parse user args
-        timeout = self.request.get_param("analysis_timeout")
+        timeout = self.request.get_param("analysis_timeout_in_seconds")
         # If user specifies the timeout, then enforce it
         if timeout:
             kwargs['enforce_timeout'] = True
             kwargs['timeout'] = timeout
         else:
             kwargs['enforce_timeout'] = False
-            kwargs['timeout'] = self.config.get("default_analysis_timeout", ANALYSIS_TIMEOUT)
+            kwargs['timeout'] = self.config.get("default_analysis_timeout_in_seconds", ANALYSIS_TIMEOUT)
         arguments = self.request.get_param("arguments")
         dump_memory = self.request.get_param("dump_memory")
         no_monitor = self.request.get_param("no_monitor")
@@ -1693,7 +1693,7 @@ class Cuckoo(ServiceBase):
         :param reboot: A boolean representing if we want to reboot the sample post initial analysis
         :return: A boolean representing if the analysis timeout is invalid
         """
-        requested_timeout = int(self.request.get_param("analysis_timeout"))
+        requested_timeout = int(self.request.get_param("analysis_timeout_in_seconds"))
         # If we are considering rebooting, we want to ensure that the service won't time out before we're done. The
         # assumption here is that the reboot will take approximately the same time as the initial submission
         if reboot:

@@ -37,9 +37,9 @@ config:
   # Cuckoo Service specifications
   dedup_similar_percent: 40
   max_dll_exports_exec: 5
-  default_analysis_timeout: 150
+  default_analysis_timeout_in_seconds: 150
   machinery_supports_memory_dumps: false
-  rest_timeout: 120
+  rest_timeout_in_seconds: 120
   reboot_supported: false
 
   # Docker Container Limit
@@ -48,7 +48,7 @@ config:
 submission_params:
   # Cuckoo analysis specifications
   - default: 0
-    name: analysis_timeout
+    name: analysis_timeout_in_seconds
     type: int
     value: 0
 
