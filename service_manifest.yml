@@ -41,6 +41,11 @@ config:
   machinery_supports_memory_dumps: false
   rest_timeout_in_seconds: 120
   reboot_supported: false
+  # This is used if the "auto" specific image will select multiple images and you want to override it with less images
+  auto_architecture:
+    win:
+      x64: []
+      x86: []
 
   # Docker Container Limit
   max_report_size: 275000000

@@ -1521,27 +1521,40 @@ class Cuckoo(ServiceBase):
         return param_value
 
     @staticmethod
-    def _determine_relevant_images(file_type: str, possible_images: List[str]) -> List[str]:
+    def _determine_relevant_images(file_type: str, possible_images: List[str],
+                                   auto_architecture: Dict[str, Dict[str, List]]) -> List[str]:
         """
         This method determines the relevant images that a file should be sent to based on its type
         :param file_type: The type of file to be submitted
         :param possible_images: A list of images available
+        :param auto_architecture: A dictionary indicating an override to relevant images selected
         :return: A list of images that the file should be sent to
         """
         images_to_send_file_to: List[str] = []
+        if auto_architecture == {}:
+            auto_architecture = {
+                WINDOWS_IMAGE_PREFIX: {x64_IMAGE_SUFFIX: [], x86_IMAGE_SUFFIX: []},
+                LINUX_IMAGE_PREFIX: {x64_IMAGE_SUFFIX: [], x86_IMAGE_SUFFIX: []},
+            }
         # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
+        # TODO: add support for sending files to either x86 or x64 Linux images
+        # TODO: also add support for overriding auto architecture
         if file_type in LINUX_FILES:
             images_to_send_file_to.extend([image for image in possible_images if LINUX_IMAGE_PREFIX in image])
 
         # If 32-bit file meant to run on Windows is submitted, make sure it runs on a 32-bit Windows operating system
         if file_type in WINDOWS_x86_FILES:
-            images_to_send_file_to.extend([image for image in possible_images if
-                                           all(item in image for item in [WINDOWS_IMAGE_PREFIX, x86_IMAGE_SUFFIX])])
+            temp_images = [image for image in possible_images if all(item in image for item in [WINDOWS_IMAGE_PREFIX, x86_IMAGE_SUFFIX])]
+            if len(auto_architecture[WINDOWS_IMAGE_PREFIX][x86_IMAGE_SUFFIX]) > 0:
+                temp_images = [image for image in temp_images if image in auto_architecture[WINDOWS_IMAGE_PREFIX][x86_IMAGE_SUFFIX]]
+            images_to_send_file_to.extend(temp_images)
 
-        # If 64-bit Windows file is submitted, then send it to a 64-bit Windows image
+        # If 64-bit Windows file is submitted, then send it to the recommended 64-bit Windows image(s)
         if not any(file_type in file_list for file_list in [LINUX_FILES, WINDOWS_x86_FILES]):
-            images_to_send_file_to.extend([image for image in possible_images if
-                                           all(item in image for item in [WINDOWS_IMAGE_PREFIX, x64_IMAGE_SUFFIX])])
+            temp_images = [image for image in possible_images if all(item in image for item in [WINDOWS_IMAGE_PREFIX, x64_IMAGE_SUFFIX])]
+            if len(auto_architecture[WINDOWS_IMAGE_PREFIX][x64_IMAGE_SUFFIX]) > 0:
+                temp_images = [image for image in temp_images if image in auto_architecture[WINDOWS_IMAGE_PREFIX][x64_IMAGE_SUFFIX]]
+            images_to_send_file_to.extend(temp_images)
         return images_to_send_file_to
 
     def _handle_specific_machine(self, kwargs: Dict[str, Any]) -> (bool, bool):
@@ -1634,7 +1647,8 @@ class Cuckoo(ServiceBase):
         if specific_image:
             image_requested = True
             if specific_image == RELEVANT_IMAGE_TAG:
-                relevant_images_list = self._determine_relevant_images(self.request.file_type, self.allowed_images)
+                relevant_images_list = self._determine_relevant_images(self.request.file_type, self.allowed_images,
+                                                                       self.config.get("auto_architecture", {}))
                 for relevant_image in relevant_images_list:
                     self._set_hosts_that_contain_image(relevant_image, relevant_images)
             elif specific_image == ALL_IMAGES_TAG:
