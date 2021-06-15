@@ -276,8 +276,9 @@ class TestModule:
 
     @staticmethod
     def test_file_constants(cuckoo_class_instance):
-        from cuckoo.cuckoo_main import LINUX_FILES, WINDOWS_x86_FILES
-        assert set(LINUX_FILES) == {"executable/linux/elf64", "executable/linux/elf32", "executable/linux/so64", "executable/linux/so32"}
+        from cuckoo.cuckoo_main import LINUX_x86_FILES, LINUX_x64_FILES, WINDOWS_x86_FILES
+        assert set(LINUX_x86_FILES) == {"executable/linux/elf32", "executable/linux/so32"}
+        assert set(LINUX_x64_FILES) == {"executable/linux/elf64", "executable/linux/so64"}
         assert set(WINDOWS_x86_FILES) == {'executable/windows/pe32', 'executable/windows/dll32'}
 
     @staticmethod
@@ -1680,7 +1681,8 @@ class TestCuckooMain:
             ("blah", ["blah"], {}, []),
             ("blah", ["winblahx64"], {}, ["winblahx64"]),
             ("executable/linux/elf32", [], {}, []),
-            ("executable/linux/elf32", ["ubblah"], {}, ["ubblah"]),
+            ("executable/linux/elf32", ["ubblahx86"], {}, ["ubblahx86"]),
+            ("executable/linux/elf32", ["ubblahx64"], {"ub": {"x86": ["ubblahx64"]}}, ["ubblahx64"]),
             ("executable/windows/pe32", ["winblahx86"], {}, ["winblahx86"]),
             ("executable/windows/pe32", ["winblahx86", "winblahblahx86"], {"win": {"x86": ["winblahblahx86"]}}, ["winblahblahx86"]),
             ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {"win": {"x64": ["winblahx64"]}}, ["winblahx64"]),
