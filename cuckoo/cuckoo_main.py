@@ -60,7 +60,8 @@ LINUX_PLATFORM = "linux"
 MACHINE_NAME_REGEX = f"(?:{'|'.join([LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX])})(.*)" \
                      f"(?:{'|'.join([x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX])})"
 
-LINUX_FILES = [file_type for file_type in RECOGNIZED_TYPES if "linux" in file_type]
+LINUX_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["linux", "32"])]
+LINUX_x64_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["linux", "64"])]
 WINDOWS_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["windows", "32"])]
 
 SUPPORTED_EXTENSIONS = [
@@ -1536,25 +1537,27 @@ class Cuckoo(ServiceBase):
                 WINDOWS_IMAGE_PREFIX: {x64_IMAGE_SUFFIX: [], x86_IMAGE_SUFFIX: []},
                 LINUX_IMAGE_PREFIX: {x64_IMAGE_SUFFIX: [], x86_IMAGE_SUFFIX: []},
             }
-        # If ubuntu file is submitted, make sure it is run in an Ubuntu VM
-        # TODO: add support for sending files to either x86 or x64 Linux images
-        # TODO: also add support for overriding auto architecture
-        if file_type in LINUX_FILES:
-            images_to_send_file_to.extend([image for image in possible_images if LINUX_IMAGE_PREFIX in image])
+        if file_type in LINUX_x64_FILES:
+            platform = LINUX_IMAGE_PREFIX
+            arch = x64_IMAGE_SUFFIX
+        elif file_type in LINUX_x86_FILES:
+            platform = LINUX_IMAGE_PREFIX
+            arch = x86_IMAGE_SUFFIX
+        elif file_type in WINDOWS_x86_FILES:
+            platform = WINDOWS_IMAGE_PREFIX
+            arch = x86_IMAGE_SUFFIX
+        else:
+            # If any other file is submitted than what is listed below, then send it to a 64-bit Windows image
+            platform = WINDOWS_IMAGE_PREFIX
+            arch = x64_IMAGE_SUFFIX
 
-        # If 32-bit file meant to run on Windows is submitted, make sure it runs on a 32-bit Windows operating system
-        if file_type in WINDOWS_x86_FILES:
-            temp_images = [image for image in possible_images if all(item in image for item in [WINDOWS_IMAGE_PREFIX, x86_IMAGE_SUFFIX])]
-            if len(auto_architecture[WINDOWS_IMAGE_PREFIX][x86_IMAGE_SUFFIX]) > 0:
-                temp_images = [image for image in temp_images if image in auto_architecture[WINDOWS_IMAGE_PREFIX][x86_IMAGE_SUFFIX]]
-            images_to_send_file_to.extend(temp_images)
-
-        # If 64-bit Windows file is submitted, then send it to the recommended 64-bit Windows image(s)
-        if not any(file_type in file_list for file_list in [LINUX_FILES, WINDOWS_x86_FILES]):
-            temp_images = [image for image in possible_images if all(item in image for item in [WINDOWS_IMAGE_PREFIX, x64_IMAGE_SUFFIX])]
-            if len(auto_architecture[WINDOWS_IMAGE_PREFIX][x64_IMAGE_SUFFIX]) > 0:
-                temp_images = [image for image in temp_images if image in auto_architecture[WINDOWS_IMAGE_PREFIX][x64_IMAGE_SUFFIX]]
-            images_to_send_file_to.extend(temp_images)
+        if len(auto_architecture[platform][arch]) > 0:
+            temp_images = [image for image in auto_architecture[platform][arch]
+                           if image in possible_images]
+        else:
+            temp_images = [image for image in possible_images
+                           if all(item in image for item in [platform, arch])]
+        images_to_send_file_to.extend(temp_images)
         return images_to_send_file_to
 
     def _handle_specific_machine(self, kwargs: Dict[str, Any]) -> (bool, bool):
