@@ -1674,18 +1674,20 @@ class TestCuckooMain:
         assert cuckoo_class_instance._safely_get_param(param) == correct_value
 
     @staticmethod
-    @pytest.mark.parametrize("file_type, possible_images, correct_result",
+    @pytest.mark.parametrize("file_type, possible_images, auto_architecture, correct_result",
         [
-            ("blah", [], []),
-            ("blah", ["blah"], []),
-            ("blah", ["winblahx64"], ["winblahx64"]),
-            ("executable/linux/elf32", [], []),
-            ("executable/linux/elf32", ["ubblah"], ["ubblah"]),
-            ("executable/windows/pe32", ["winblahx86"], ["winblahx86"]),
+            ("blah", [], {}, []),
+            ("blah", ["blah"], {}, []),
+            ("blah", ["winblahx64"], {}, ["winblahx64"]),
+            ("executable/linux/elf32", [], {}, []),
+            ("executable/linux/elf32", ["ubblah"], {}, ["ubblah"]),
+            ("executable/windows/pe32", ["winblahx86"], {}, ["winblahx86"]),
+            ("executable/windows/pe32", ["winblahx86", "winblahblahx86"], {"win": {"x86": ["winblahblahx86"]}}, ["winblahblahx86"]),
+            ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {"win": {"x64": ["winblahx64"]}}, ["winblahx64"]),
         ]
     )
-    def test_determine_relevant_images(file_type, possible_images, correct_result, cuckoo_class_instance):
-        assert cuckoo_class_instance._determine_relevant_images(file_type, possible_images) == correct_result
+    def test_determine_relevant_images(file_type, possible_images, correct_result, auto_architecture, cuckoo_class_instance):
+        assert cuckoo_class_instance._determine_relevant_images(file_type, possible_images, auto_architecture) == correct_result
 
     @staticmethod
     @pytest.mark.parametrize("machines, allowed_images, correct_result",
