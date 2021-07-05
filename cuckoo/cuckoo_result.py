@@ -1399,7 +1399,7 @@ def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netfl
         if netflow["dest_port"] in [443, 80]:
             non_http_list.append(netflow)
             non_http_traffic_result_section.add_tag("network.dynamic.ip", safe_str(netflow["dest_ip"]))
-            if re.match(DOMAIN_REGEX, netflow["domain"]):
+            if netflow["domain"] and re.match(DOMAIN_REGEX, netflow["domain"]):
                 non_http_traffic_result_section.add_tag("network.dynamic.domain", safe_str(netflow["domain"]))
             non_http_traffic_result_section.add_tag("network.port", safe_str(netflow["dest_port"]))
     if len(non_http_list) > 0:
