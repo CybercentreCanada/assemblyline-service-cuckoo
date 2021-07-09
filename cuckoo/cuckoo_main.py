@@ -309,7 +309,7 @@ class Cuckoo(ServiceBase):
             self._general_flow(kwargs, file_ext, parent_section, hosts)
 
         # Adding sandbox artefacts using the SandboxOntology helper class
-        SandboxOntology.handle_artefacts(self.artefact_list, self.request)
+        self.file_res.add_section(SandboxOntology.handle_artefacts(self.artefact_list, self.request))
 
         # Remove empty sections
         for section in self.file_res.sections[:]:
