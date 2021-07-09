@@ -46,6 +46,9 @@ config:
     win:
       x64: []
       x86: []
+    ub:
+      x64: []
+      x86: []
 
   # Docker Container Limit
   max_report_size: 275000000
