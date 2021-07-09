@@ -3373,7 +3373,7 @@ class TestSignatures:
           'vertex_url', 'has_pdb', "process_martian", 'rat_teamviewer', 'antiav_detectfile', 'antiav_detectreg',
           'api_hammering', 'raises_exception', 'antivm_memory_available', 'recon_fingerprint',
           'application_raises_exception', 'modifies_certificates', 'modifies_proxy_wpad', 'stack_pivot_shellcode_apis',
-          "infostealer_mail"
+          "infostealer_mail", "locates_browser"
         ]
 
     @staticmethod
