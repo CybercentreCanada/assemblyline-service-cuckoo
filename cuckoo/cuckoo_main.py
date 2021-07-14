@@ -230,6 +230,9 @@ class Cuckoo(ServiceBase):
         # Poorly name var to track keyword arguments to pass into cuckoo's 'submit' function
         kwargs: Dict[str, Any] = {}
 
+        # Remove leftover files in the /tmp dir from previous executions
+        self._cleanup_leftovers()
+
         # File name related methods
         self.file_name = os.path.basename(request.task.file_name)
         self._decode_mime_encoded_file_name()
@@ -1765,6 +1768,18 @@ class Cuckoo(ServiceBase):
                     if any(item in subsubsection.title_text for item in ["persistence_autorun", "creates_service"]):
                         return True
         return False
+
+    @staticmethod
+    def _cleanup_leftovers() -> None:
+        """
+        This method cleans up any leftover files that were written to the /tmp dir by previous runs
+        :return: None
+        """
+        temp_dir = "/tmp"
+        for file in os.listdir(temp_dir):
+            file_path = os.path.join(temp_dir, file)
+            if any(leftover_file_name in file_path for leftover_file_name in ["_console_output", "_encrypted_buffer_"]):
+                os.remove(file_path)
 
 
 def generate_random_words(num_words: int) -> str:
