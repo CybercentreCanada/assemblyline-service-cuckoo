@@ -502,20 +502,6 @@ heuristics:
     filetype: '*'
     description: Attempts to load DLL that is inconsistent with expected/standard behaviour.
 
-# Note: Heuristic is not currently used
-  - heur_id: 998
-    name: SMS Activity
-    score: 100
-    filetype: '*'
-    description: Cuckoo detected SMS activity.
-
-# Note: Heuristic is not currently used
-  - heur_id: 999
-    name: Crypto Keys
-    score: 100
-    filetype: '*'
-    description: Cuckoo detected Crypto Keys.
-
   - heur_id: 1000
     name: Domain detected
     score: 10
@@ -563,6 +549,12 @@ heuristics:
     score: 500
     filetype: '*'
     description: Cuckoo detected a suspicious user agent used for HTTP calls
+
+  - heur_id: 1008
+    name: AntiVirus Hit
+    score: 1000
+    filetype: '*'
+    description: AntiVirus hit. File is infected.
 
   - heur_id: 9999
     name: Unknown
