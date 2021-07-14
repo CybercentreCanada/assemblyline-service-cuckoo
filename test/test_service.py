@@ -2675,7 +2675,7 @@ class TestSignatures:
             "js_anti_analysis": "Anti-analysis",
             "pdf_javascript": "Suspicious PDF API",
             "application_sent_sms_messages": "Suspicious Android API",
-            "android_antivirus_virustotal": "Anti-antivirus",
+            "android_antivirus_virustotal": "AntiVirus Hit",
             "antivm_vmware_keys": "Anti-vm",
             "antidbg_devices": "Anti-Debug",
             "worm_phorpiex": "Worm",
@@ -2718,7 +2718,7 @@ class TestSignatures:
             "antianalysis_detectfile": "Anti-analysis",
             "pdf_attachments": "Suspicious PDF API",
             "application_using_the_camera": "Suspicious Android API",
-            "antivirus_virustotal": "Anti-antivirus",
+            "antivirus_virustotal": "AntiVirus Hit",
             "antivm_generic_ide": "Anti-vm",
             "antidbg_windows": "Anti-Debug",
             "worm_psyokym": "Worm",
@@ -3370,7 +3370,11 @@ class TestSignatures:
           "Suspicious DLL": {
             "id": 46,
             "description": "Attempts to load DLL that is inconsistent with expected/standard behaviour."
-          }
+          },
+          "AntiVirus Hit": {
+             "id": 1008,
+             "description": "AntiVirus hit. File is infected."
+           }
         }
 
         assert CUCKOO_DROPPED_SIGNATURES == [
