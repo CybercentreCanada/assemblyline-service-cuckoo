@@ -861,6 +861,7 @@ def process_all_events(parent_result_section: ResultSection, events: Optional[Li
             })
         elif isinstance(event, ProcessEvent):
             events_section.add_tag("dynamic.process.command_line", event.command_line)
+            _extract_iocs_from_text_blob(event.command_line, events_section)
             if event.image:
                 events_section.add_tag("dynamic.process.file_name", event.image)
             event_table.append({
@@ -989,9 +990,6 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
     """
     buffer_res = ResultSection(title_text="Decrypted Buffers", body_format=BODY_FORMAT.TABLE)
     buffer_body = []
-    unique_ips: Set[str] = set()
-    unique_domains: Set[str] = set()
-    unique_uris: Set[str] = set()
 
     for process in process_map:
         buffer_calls = process_map[process]["decrypted_buffers"]
@@ -1005,24 +1003,9 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
                 buffer = call["OutputDebugStringA"]["string"]
             if not buffer:
                 continue
-            ips = set(re.findall(IP_REGEX, buffer))
-            # There is overlap here between regular expressions, so we want to isolate domains that are not ips
-            domains = set(re.findall(DOMAIN_REGEX, buffer)) - ips
-            uris = set(re.findall(URL_REGEX, buffer))
-            unique_ips = unique_ips.union(ips)
-            unique_domains = unique_domains.union(domains)
-            unique_uris = unique_uris.union(uris)
+            _extract_iocs_from_text_blob(buffer, buffer_res)
             if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
                 buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
-    for ip in unique_ips:
-        safe_ip = safe_str(ip)
-        buffer_res.add_tag("network.static.ip", safe_ip)
-    for domain in unique_domains:
-        safe_domain = safe_str(domain)
-        buffer_res.add_tag("network.static.domain", safe_domain)
-    for uri in unique_uris:
-        safe_uri = safe_str(uri)
-        buffer_res.add_tag("network.static.uri", safe_uri)
     if len(buffer_body) > 0:
         buffer_res.body = json.dumps(buffer_body)
         parent_result_section.add_subsection(buffer_res)
@@ -1348,6 +1331,7 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
         sig_res.add_tag("dynamic.process.file_name", ioc)
     elif mark["category"] == "cmdline":
         sig_res.add_tag("dynamic.process.command_line", ioc)
+        _extract_iocs_from_text_blob(ioc, sig_res)
 
 
 def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultSection,
@@ -1421,3 +1405,26 @@ def _remove_network_http_noise(sigs: List[Dict[str, Any]]) -> List[Dict[str, Any
         return [sig for sig in sigs if sig["name"] != "network_http"]
     else:
         return sigs
+
+
+def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection) -> None:
+    """
+    This method searches for domains, IPs and URIs used in blobs of text and tags them
+    :param blob: The blob of text that we will be searching through
+    :param result_section: The result section that that tags will be added to
+    :return: None
+    """
+    ips = set(re.findall(IP_REGEX, blob))
+    # There is overlap here between regular expressions, so we want to isolate domains that are not ips
+    domains = set(re.findall(DOMAIN_REGEX, blob)) - ips
+    uris = set(re.findall(URL_REGEX, blob))
+
+    for ip in ips:
+        safe_ip = safe_str(ip)
+        result_section.add_tag("network.static.ip", safe_ip)
+    for domain in domains:
+        safe_domain = safe_str(domain)
+        result_section.add_tag("network.static.domain", safe_domain)
+    for uri in uris:
+        safe_uri = safe_str(uri)
+        result_section.add_tag("network.static.uri", safe_uri)
