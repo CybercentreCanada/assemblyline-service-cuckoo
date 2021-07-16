@@ -2662,6 +2662,35 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import get_process_map
         assert get_process_map(processes) == correct_process_map
 
+    @staticmethod
+    @pytest.mark.parametrize("sigs, correct_sigs",
+        [
+            ([], []),
+            ([{"name": "network_cnc_http"}], [{"name": "network_cnc_http"}]),
+            ([{"name": "network_cnc_http"}, {"name": "network_http"}], [{"name": "network_cnc_http"}]),
+        ]
+    )
+    def test_remove_network_http_noise(sigs, correct_sigs):
+        from cuckoo.cuckoo_result import _remove_network_http_noise
+        assert _remove_network_http_noise(sigs) == correct_sigs
+
+    @staticmethod
+    @pytest.mark.parametrize("blob, correct_tags",
+        [
+            ("", {}),
+            ("192.168.100.1", {'network.static.domain': ['192.168.100.'], 'network.static.ip': ['192.168.100.1'], 'network.static.uri': ['192.168.100.1']}),
+            ("blah.blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['blah.blah']}),
+            ("https://blah.blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['https://blah.blah']}),
+            ("https://blah.blah/blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['https://blah.blah']}),
+        ]
+    )
+    def test_extract_iocs_from_text_blob(blob, correct_tags):
+        from cuckoo.cuckoo_result import _extract_iocs_from_text_blob
+        from assemblyline_v4_service.common.result import ResultSection
+        test_result_section = ResultSection("blah")
+        _extract_iocs_from_text_blob(blob, test_result_section)
+        assert test_result_section.tags == correct_tags
+
 
 class TestSignatures:
     @staticmethod
