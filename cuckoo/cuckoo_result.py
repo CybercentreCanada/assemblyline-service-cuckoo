@@ -45,7 +45,15 @@ INETSIM = "INetSim"
 DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
 HTTP_API_CALLS = ["send", "InternetConnectW", "InternetConnectA"]
 BUFFER_API_CALLS = ["send"]
-SUSPICIOUS_USER_AGENTS = ["Microsoft BITS"]
+SUSPICIOUS_USER_AGENTS = [
+    "Microsoft BITS", "Microsoft Office Existence Discovery", "Microsoft-WebDAV-MiniRedir",
+    "Microsoft Office Protocol Discovery"
+]
+SUPPORTED_EXTENSIONS = [
+    'bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe', 'hta', 'htm', 'html',
+    'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt',
+    'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
+]
 
 # noinspection PyBroadException
 # TODO: break this into smaller methods
@@ -1414,6 +1422,7 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection) -> No
     :param result_section: The result section that that tags will be added to
     :return: None
     """
+    blob = blob.lower()
     ips = set(re.findall(IP_REGEX, blob))
     # There is overlap here between regular expressions, so we want to isolate domains that are not ips
     domains = set(re.findall(DOMAIN_REGEX, blob)) - ips
@@ -1423,8 +1432,13 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection) -> No
         safe_ip = safe_str(ip)
         result_section.add_tag("network.static.ip", safe_ip)
     for domain in domains:
+        # File names match the domain and URI regexes, so we need to avoid tagging them
+        if any(ext in domain.split(".")[-1] for ext in SUPPORTED_EXTENSIONS):
+            continue
         safe_domain = safe_str(domain)
         result_section.add_tag("network.static.domain", safe_domain)
     for uri in uris:
+        if any(ext in uri.split(".")[-1] for ext in SUPPORTED_EXTENSIONS):
+            continue
         safe_uri = safe_str(uri)
         result_section.add_tag("network.static.uri", safe_uri)
