@@ -2682,6 +2682,8 @@ class TestCuckooResult:
             ("blah.blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['blah.blah']}),
             ("https://blah.blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['https://blah.blah']}),
             ("https://blah.blah/blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['https://blah.blah']}),
+            ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", {}),
+            ("DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC", {}),
         ]
     )
     def test_extract_iocs_from_text_blob(blob, correct_tags):
