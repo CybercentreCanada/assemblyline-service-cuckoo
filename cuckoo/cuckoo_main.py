@@ -1787,10 +1787,10 @@ class Cuckoo(ServiceBase):
             if machine['name'] == machine_name:
                 machine_name_exists = True
                 break
-        self.log.info(f"Machine {machine_name} does not exist in {machines}.")
         if machine_name_exists:
             return machine
         else:
+            self.log.info(f"Machine {machine_name} does not exist in {machines}.")
             return None
 
 
