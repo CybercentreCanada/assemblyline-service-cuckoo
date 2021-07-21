@@ -874,17 +874,16 @@ class Cuckoo(ServiceBase):
         :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: None
         """
-        machine_name_exists = False
-        machine: Optional[Dict[str, Any]] = None
-        machines = [machine for host in self.hosts for machine in host["machines"]]
-        for machine in machines:
-            if machine['name'] == machine_name:
-                machine_name_exists = True
-                break
+        # The machines here are the machines that were loaded prior to the file being submitted.
+        machine = self._get_machine_by_name(machine_name)
 
-        if not machine_name_exists:
-            self.log.warning(f"Machine {machine_name} does not exist in {machines}")
-            return
+        if not machine:
+            self.query_machines()
+            # The machines here are the machines that are loaded post the file being analyzed.
+            machine = self._get_machine_by_name(machine_name)
+            # NOTE: There is still a possibility of the machine not existing at either point of time. So we will only try once.
+            if not machine:
+                return
 
         manager = cuckoo_task.report["info"]["machine"]["manager"]
         platform = machine["platform"]
@@ -1774,6 +1773,25 @@ class Cuckoo(ServiceBase):
             file_path = os.path.join(temp_dir, file)
             if any(leftover_file_name in file_path for leftover_file_name in ["_console_output", "_encrypted_buffer_"]):
                 os.remove(file_path)
+
+    def _get_machine_by_name(self, machine_name) -> Optional[Dict[str, Any]]:
+        """
+        This method grabs the machine info (if it exists) of a machine that matches the requested name
+        :param machine_name: The name of the machine that we want the information for
+        :return: The information about the requested machine
+        """
+        machine_name_exists = False
+        machine: Optional[Dict[str, Any]] = None
+        machines = [machine for host in self.hosts for machine in host["machines"]]
+        for machine in machines:
+            if machine['name'] == machine_name:
+                machine_name_exists = True
+                break
+        self.log.info(f"Machine {machine_name} does not exist in {machines}.")
+        if machine_name_exists:
+            return machine
+        else:
+            return None
 
 
 def generate_random_words(num_words: int) -> str:
