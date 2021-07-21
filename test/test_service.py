@@ -2622,9 +2622,9 @@ class TestCuckooResult:
             ({0: {"decrypted_buffers": [{"blah": "blah"}]}}, None, {}),
             ({0: {"decrypted_buffers": [{"CryptDecrypt": {"buffer": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', {}),
             ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', {}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}}, '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1'], 'network.static.uri': ['127.0.0.1']}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.blah"}}]}}, '[{"Decrypted Buffer": "blah.blah"}]', {'network.static.domain': ['blah.blah'], 'network.static.uri': ['blah.blah']}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}}, '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1'], 'network.static.uri': ['127.0.0.1:999']}),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}}, '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1']}),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.ca"}}]}}, '[{"Decrypted Buffer": "blah.ca"}]', {'network.static.domain': ['blah.ca']}),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}}, '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1']}),
         ]
     )
     def test_process_decrypted_buffers(process_map, correct_buffer_body, correct_tags):
@@ -2692,10 +2692,10 @@ class TestCuckooResult:
     @pytest.mark.parametrize("blob, correct_tags",
         [
             ("", {}),
-            ("192.168.100.1", {'network.static.domain': ['192.168.100.'], 'network.static.ip': ['192.168.100.1'], 'network.static.uri': ['192.168.100.1']}),
-            ("blah.blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['blah.blah']}),
-            ("https://blah.blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['https://blah.blah']}),
-            ("https://blah.blah/blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['https://blah.blah']}),
+            ("192.168.100.1", {'network.static.ip': ['192.168.100.1']}),
+            ("blah.ca", {'network.static.domain': ['blah.ca']}),
+            ("https://blah.ca", {'network.static.domain': ['blah.ca'], 'network.static.uri': ['https://blah.ca']}),
+            ("https://blah.ca/blah", {'network.static.domain': ['blah.ca'], 'network.static.uri': ['https://blah.ca']}),
             ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", {}),
             ("DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC", {}),
         ]

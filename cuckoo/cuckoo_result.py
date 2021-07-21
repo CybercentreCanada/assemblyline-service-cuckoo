@@ -3,9 +3,10 @@ from logging import getLogger
 import re
 import os
 import json
+from tld import get_tld
 from ipaddress import ip_address, ip_network, IPv4Network
 from urllib.parse import urlparse
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
@@ -1426,19 +1427,21 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection) -> No
     ips = set(re.findall(IP_REGEX, blob))
     # There is overlap here between regular expressions, so we want to isolate domains that are not ips
     domains = set(re.findall(DOMAIN_REGEX, blob)) - ips
-    uris = set(re.findall(URL_REGEX, blob))
+    # There is overlap here between regular expressions, so we want to isolate uris that are not domains
+    uris = set(re.findall(URL_REGEX, blob)) - domains
 
     for ip in ips:
         safe_ip = safe_str(ip)
         result_section.add_tag("network.static.ip", safe_ip)
     for domain in domains:
         # File names match the domain and URI regexes, so we need to avoid tagging them
-        if any(ext in domain.split(".")[-1] for ext in SUPPORTED_EXTENSIONS):
+        # Note that get_tld only takes URLs so we will prepend http:// to the domain to work around this
+        if not get_tld(f"http://{domain}", fail_silently=True):
             continue
         safe_domain = safe_str(domain)
         result_section.add_tag("network.static.domain", safe_domain)
     for uri in uris:
-        if any(ext in uri.split(".")[-1] for ext in SUPPORTED_EXTENSIONS):
+        if not get_tld(uri, fail_silently=True):
             continue
         safe_uri = safe_str(uri)
         result_section.add_tag("network.static.uri", safe_uri)
