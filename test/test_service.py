@@ -1090,7 +1090,7 @@ class TestCuckooMain:
             [{"name": "blah", "platform": "blah", "ip": "blah", "tags": ["blah", "blah"]}],
         ]
     )
-    def test_report_machine_info(machines, cuckoo_class_instance):
+    def test_report_machine_info(machines, cuckoo_class_instance, mocker):
         from cuckoo.cuckoo_main import CuckooTask
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
         from assemblyline.common.str_utils import safe_str
@@ -1100,6 +1100,7 @@ class TestCuckooMain:
         cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.report = {"info": {"machine": {"manager": "blah"}}}
         parent_section = ResultSection("blah")
+        mocker.patch.object(cuckoo_class_instance, "query_machines")
 
         machine_name_exists = False
         machine = None
@@ -1885,6 +1886,19 @@ class TestCuckooMain:
         cuckoo_class_instance._cleanup_leftovers()
         number_of_files_in_tmp_post_call = len(os.listdir(temp_dir))
         assert number_of_files_in_tmp_post_call == number_of_files_in_tmp_pre_call
+
+    @staticmethod
+    @pytest.mark.parametrize("name, hosts, expected_result",
+        [
+            ("blah", [{"machines": []}], None),
+            ("blah", [{"machines": [{"name": "blah"}]}], {"name": "blah"}),
+            ("blah", [{"machines": [{"name": "nah"}]}], None),
+        ]
+    )
+    def test_get_machine_by_name(name, hosts, expected_result, cuckoo_class_instance):
+        cuckoo_class_instance.hosts = hosts
+        test_result = cuckoo_class_instance._get_machine_by_name(name)
+        assert test_result == expected_result
 
 
 class TestCuckooResult:
