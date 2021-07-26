@@ -388,7 +388,7 @@ class TestCuckooMain:
         assert cuckoo_class_instance.timeout is None
         assert cuckoo_class_instance.max_report_size is None
         assert cuckoo_class_instance.allowed_images == []
-        assert cuckoo_class_instance.artefact_list is None
+        assert cuckoo_class_instance.artifact_list is None
         assert cuckoo_class_instance.hosts == []
 
     @staticmethod
@@ -1022,7 +1022,7 @@ class TestCuckooMain:
         task = Task(service_task)
         cuckoo_class_instance._task = task
         cuckoo_class_instance.request = ServiceRequest(task)
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
         parent_section = ResultSection("blah")
 
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
@@ -1038,9 +1038,9 @@ class TestCuckooMain:
 
         mocker.patch.object(Cuckoo, "query_report", return_value=s.getvalue())
         cuckoo_class_instance.check_dropped(cuckoo_task, parent_section)
-        assert cuckoo_class_instance.artefact_list[0]["name"] == f"1_{sample['filename']}"
-        assert cuckoo_class_instance.artefact_list[0]["description"] == 'Dropped file during Cuckoo analysis.'
-        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == True
+        assert cuckoo_class_instance.artifact_list[0]["name"] == f"1_{sample['filename']}"
+        assert cuckoo_class_instance.artifact_list[0]["description"] == 'Dropped file during Cuckoo analysis.'
+        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == True
 
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
@@ -1061,12 +1061,12 @@ class TestCuckooMain:
         task = Task(service_task)
         cuckoo_class_instance._task = task
         cuckoo_class_instance.request = ServiceRequest(task)
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
 
         cuckoo_class_instance.check_powershell(task_id, parent_section)
-        assert cuckoo_class_instance.artefact_list[0]["name"] == "1_powershell_logging.ps1"
-        assert cuckoo_class_instance.artefact_list[0]["description"] == 'Deobfuscated PowerShell script from Cuckoo analysis'
-        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == True
+        assert cuckoo_class_instance.artifact_list[0]["name"] == "1_powershell_logging.ps1"
+        assert cuckoo_class_instance.artifact_list[0]["description"] == 'Deobfuscated PowerShell script from Cuckoo analysis'
+        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == True
 
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
@@ -1086,13 +1086,13 @@ class TestCuckooMain:
         task = Task(service_task)
         cuckoo_class_instance._task = task
         cuckoo_class_instance.request = ServiceRequest(task)
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
 
         parent_section = ResultSection("blah")
         correct_subsection = ResultSection("blah")
         parent_section.add_subsection(correct_subsection)
         cuckoo_class_instance.check_pcap(cuckoo_task, parent_section)
-        assert cuckoo_class_instance.artefact_list == []
+        assert cuckoo_class_instance.artifact_list == []
 
         parent_section = ResultSection("blah")
         correct_subsection = ResultSection("Network Activity")
@@ -1100,9 +1100,9 @@ class TestCuckooMain:
 
         with mocker.patch.object(Cuckoo, "query_pcap", return_value=b"blah"):
             cuckoo_class_instance.check_pcap(cuckoo_task, parent_section)
-            assert cuckoo_class_instance.artefact_list[0]["name"] == f"{cuckoo_task.id}_cuckoo_traffic.pcap"
-            assert cuckoo_class_instance.artefact_list[0]["description"] == 'PCAP from Cuckoo analysis'
-            assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == True
+            assert cuckoo_class_instance.artifact_list[0]["name"] == f"{cuckoo_task.id}_cuckoo_traffic.pcap"
+            assert cuckoo_class_instance.artifact_list[0]["description"] == 'PCAP from Cuckoo analysis'
+            assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == True
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1429,20 +1429,20 @@ class TestCuckooMain:
             correct_kwargs["package"] = "dll_multi"
             correct_task_options = ['function=DllMain|DllRegisterServer']
             correct_result_section = ResultSection(
-                title_text="Executed multiple DLL exports",
-                body=f"Executed the following exports from the DLL: DllMain,DllRegisterServer"
+                title_text="Executed Multiple DLL Exports",
+                body=f"The following exports were executed: DllMain, DllRegisterServer"
             )
         else:
             PE = FakePE()
             correct_kwargs["package"] = "dll_multi"
             correct_task_options = ['function=#blah|blah|blah|blah2|blah3']
             correct_result_section = ResultSection(
-                title_text="Executed multiple DLL exports",
-                body=f"Executed the following exports from the DLL: #blah,blah,blah,blah2,blah3"
+                title_text="Executed Multiple DLL Exports",
+                body=f"The following exports were executed: #blah, blah, blah, blah2, blah3"
             )
             correct_result_section.add_line("There were 1 other exports: blah4")
 
-        mocker.patch.object(Cuckoo, '_create_PE_from_file_contents', return_value=PE)
+        mocker.patch.object(Cuckoo, '_create_pe_from_file_contents', return_value=PE)
         cuckoo_class_instance._parse_dll(kwargs, task_options, parent_section)
         assert kwargs == correct_kwargs
         assert task_options == correct_task_options
@@ -1484,7 +1484,7 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, "_add_json_as_supplementary_file", return_value=True)
         mocker.patch.object(Cuckoo, "_build_report")
         mocker.patch.object(Cuckoo, "_extract_hollowshunter")
-        mocker.patch.object(Cuckoo, "_extract_artefacts")
+        mocker.patch.object(Cuckoo, "_extract_artifacts")
         mocker.patch("cuckoo.cuckoo_main.tarfile.open", return_value=dummy_tar_class())
 
         cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
@@ -1494,7 +1494,7 @@ class TestCuckooMain:
             cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
             assert True
 
-        # Exception test for _extract_console_output or _extract_hollowshunter or _extract_artefacts
+        # Exception test for _extract_console_output or _extract_hollowshunter or _extract_artifacts
         with mocker.patch.object(Cuckoo, "_extract_console_output", side_effect=Exception):
             mocker.patch.object(Cuckoo, "_add_json_as_supplementary_file", return_value=True)
             cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
@@ -1508,14 +1508,14 @@ class TestCuckooMain:
         tar_report = b"blah"
         cuckoo_class_instance.request = dummy_request_class()
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
         cuckoo_class_instance._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
-        assert cuckoo_class_instance.artefact_list[0]["path"] == tar_report_path
-        assert cuckoo_class_instance.artefact_list[0]["name"] == tar_file_name
-        assert cuckoo_class_instance.artefact_list[0]["description"] == "Cuckoo Sandbox analysis report archive (tar.gz)"
-        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == False
+        assert cuckoo_class_instance.artifact_list[0]["path"] == tar_report_path
+        assert cuckoo_class_instance.artifact_list[0]["name"] == tar_file_name
+        assert cuckoo_class_instance.artifact_list[0]["description"] == "Cuckoo Sandbox analysis report archive (tar.gz)"
+        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == False
 
         cuckoo_class_instance.request.task.supplementary = []
 
@@ -1533,18 +1533,18 @@ class TestCuckooMain:
         json_report_path = f"{cuckoo_class_instance.working_directory}/1/reports/{json_file_name}"
         tar_obj = dummy_tar_class()
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
         report_json_path = cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
-        assert cuckoo_class_instance.artefact_list[0]["path"] == json_report_path
-        assert cuckoo_class_instance.artefact_list[0]["name"] == f"1_{json_file_name}"
-        assert cuckoo_class_instance.artefact_list[0]["description"] == "Cuckoo Sandbox report (json)"
-        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == False
+        assert cuckoo_class_instance.artifact_list[0]["path"] == json_report_path
+        assert cuckoo_class_instance.artifact_list[0]["name"] == f"1_{json_file_name}"
+        assert cuckoo_class_instance.artifact_list[0]["description"] == "Cuckoo Sandbox report (json)"
+        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == False
         assert report_json_path == json_report_path
 
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
 
         with mocker.patch.object(dummy_tar_class, 'getnames', return_value=[]):
             with pytest.raises(MissingCuckooReportException):
@@ -1552,7 +1552,7 @@ class TestCuckooMain:
 
         mocker.patch.object(dummy_tar_class, 'getnames', side_effect=Exception())
         report_json_path = cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
-        assert cuckoo_class_instance.artefact_list == []
+        assert cuckoo_class_instance.artifact_list == []
         assert report_json_path == ""
 
     @staticmethod
@@ -1618,65 +1618,65 @@ class TestCuckooMain:
     def test_extract_console_output(cuckoo_class_instance, dummy_request_class, mocker):
         mocker.patch('os.path.exists', return_value=True)
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
         task_id = 1
         cuckoo_class_instance._extract_console_output(task_id)
-        assert cuckoo_class_instance.artefact_list[0]["path"] == "/tmp/1_console_output.txt"
-        assert cuckoo_class_instance.artefact_list[0]["name"] == "1_console_output.txt"
-        assert cuckoo_class_instance.artefact_list[0]["description"] == "Console Output Observed"
-        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"] == False
+        assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/1_console_output.txt"
+        assert cuckoo_class_instance.artifact_list[0]["name"] == "1_console_output.txt"
+        assert cuckoo_class_instance.artifact_list[0]["description"] == "Console Output Observed"
+        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == False
 
     @staticmethod
     def test_extract_encrypted_buffers(cuckoo_class_instance, dummy_request_class, mocker):
         mocker.patch('os.listdir', return_value=["1_encrypted_buffer_0.txt"])
         mocker.patch('os.path.isfile', return_value=True)
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
         task_id = 1
         cuckoo_class_instance._extract_encrypted_buffers(task_id)
-        assert cuckoo_class_instance.artefact_list[0]["path"] == "/tmp/1_encrypted_buffer_0.txt"
-        assert cuckoo_class_instance.artefact_list[0]["name"] == "/tmp/1_encrypted_buffer_0.txt"
-        assert cuckoo_class_instance.artefact_list[0]["description"] == "Encrypted Buffer Observed in Network Traffic"
-        assert cuckoo_class_instance.artefact_list[0]["to_be_extracted"]
+        assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/1_encrypted_buffer_0.txt"
+        assert cuckoo_class_instance.artifact_list[0]["name"] == "/tmp/1_encrypted_buffer_0.txt"
+        assert cuckoo_class_instance.artifact_list[0]["description"] == "Encrypted Buffer Observed in Network Traffic"
+        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
     @staticmethod
-    def test_extract_artefacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
+    def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
 
         tarball_file_map = {
             "buffer": "Extracted buffer",
             "extracted": "Cuckoo extracted file",
-            "memory": "Memory artefact",
+            "memory": "Memory artifact",
             "shots": "Screenshots from Cuckoo analysis",
             "sum": "All traffic from TCPDUMP and PolarProxy",
             "sysmon/sysmon.evtx": "Sysmon Logging Captured",
             "supplementary": "Supplementary File"
         }
-        correct_artefact_list = []
+        correct_artifact_list = []
         tar_obj = dummy_tar_class()
         task_id = 1
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
         for key, val in tarball_file_map.items():
             correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{key}"
             dummy_tar_member = dummy_tar_member_class(key, 1)
             tar_obj.members.append(dummy_tar_member)
             if key in ["supplementary", "shots"]:
-                correct_artefact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": False})
+                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": False})
             else:
-                correct_artefact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": True})
+                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": True})
 
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_class_instance._extract_artefacts(tar_obj, task_id)
+        cuckoo_class_instance._extract_artifacts(tar_obj, task_id)
 
         all_extracted = True
-        for extracted in cuckoo_class_instance.artefact_list:
-            if extracted not in correct_artefact_list:
+        for extracted in cuckoo_class_instance.artifact_list:
+            if extracted not in correct_artifact_list:
                 all_extracted = False
                 break
         assert all_extracted
 
         all_supplementary = True
-        for supplementary in cuckoo_class_instance.artefact_list:
-            if supplementary not in correct_artefact_list:
+        for supplementary in cuckoo_class_instance.artifact_list:
+            if supplementary not in correct_artifact_list:
                 all_supplementary = False
                 break
         assert all_supplementary
@@ -1686,14 +1686,14 @@ class TestCuckooMain:
         cuckoo_class_instance.request = dummy_request_class()
         tar_obj = dummy_tar_class()
         task_id = 1
-        cuckoo_class_instance.artefact_list = []
+        cuckoo_class_instance.artifact_list = []
         cuckoo_class_instance._extract_hollowshunter(tar_obj, task_id)
 
-        assert cuckoo_class_instance.artefact_list[0] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_dump_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_dump_report.json', "description": 'HollowsHunter report (json)', "to_be_extracted": False}
-        assert cuckoo_class_instance.artefact_list[1] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_scan_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_scan_report.json', "description": 'HollowsHunter report (json)', "to_be_extracted": False}
-        assert cuckoo_class_instance.artefact_list[2] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.exe", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.exe', "description": 'HollowsHunter Dump', "to_be_extracted": True}
-        assert cuckoo_class_instance.artefact_list[3] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.shc", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.shc', "description": 'HollowsHunter Dump', "to_be_extracted": True}
-        assert cuckoo_class_instance.artefact_list[4] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.dll", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.dll', "description": 'HollowsHunter Dump', "to_be_extracted": True}
+        assert cuckoo_class_instance.artifact_list[0] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_dump_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_dump_report.json', "description": 'HollowsHunter report (json)', "to_be_extracted": False}
+        assert cuckoo_class_instance.artifact_list[1] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_scan_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_scan_report.json', "description": 'HollowsHunter report (json)', "to_be_extracted": False}
+        assert cuckoo_class_instance.artifact_list[2] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.exe", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.exe', "description": 'HollowsHunter Dump', "to_be_extracted": True}
+        assert cuckoo_class_instance.artifact_list[3] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.shc", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.shc', "description": 'HollowsHunter Dump', "to_be_extracted": True}
+        assert cuckoo_class_instance.artifact_list[4] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.dll", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.dll', "description": 'HollowsHunter Dump', "to_be_extracted": True}
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1971,11 +1971,11 @@ class TestCuckooResult:
             ({}, None),
             (
                     {"info": {"started": "blah", "ended": "blah", "duration": "blah", "id": "blah", "route": "blah", "version": "blah"}},
-                    '{"ID": "blah", "Duration": -1, "Routing": "blah", "Version": "blah"}',
+                    '{"Cuckoo Task ID": "blah", "Duration": -1, "Routing": "blah", "Cuckoo Version": "blah"}',
             ),
             (
                     {"info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}},
-                    '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
+                    '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'
             ),
             (
                     {"info": {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"}, "debug": "blah", "signatures": "blah", "network": "blah", "behavior": {"blah": "blah"}, "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
@@ -1983,15 +1983,15 @@ class TestCuckooResult:
             ),
             (
                     {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"summary": "blah"}},
-                    '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
+                    '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'
             ),
             (
                     {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"processtree": "blah"}},
-                    '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
+                    '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'
             ),
             (
                     {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"processes": "blah"}},
-                    '{"ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Version": "blah"}'
+                    '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'
             ),
         ]
     )
@@ -2019,7 +2019,7 @@ class TestCuckooResult:
         if api_report == {}:
             assert al_result.subsections == []
         elif api_report.get("behavior") == {"blah": "blah"}:
-            correct_result_section = ResultSection(title_text='Notes', body=f'No program available to execute a file with the following extension: {file_ext}')
+            correct_result_section = ResultSection(title_text='Sample Did Not Execute', body=f'No program available to execute a file with the following extension: {file_ext}')
             assert check_section_equality(al_result.subsections[1], correct_result_section)
         else:
             correct_result_section = ResultSection(title_text='Analysis Information', body_format=BODY_FORMAT.KEY_VALUE, body=correct_body)
@@ -2067,38 +2067,9 @@ class TestCuckooResult:
         from assemblyline_v4_service.common.result import ResultSection
         mocker.patch("cuckoo.cuckoo_result.get_process_api_sums", return_value={"blah": "blah"})
         mocker.patch("cuckoo.cuckoo_result.convert_cuckoo_processes")
-        mocker.patch("cuckoo.cuckoo_result.build_limited_calls_section")
-        process_behaviour(behaviour, ResultSection("blah"), events)
+        process_behaviour(behaviour, events)
         # Code coverage!
         assert True
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "processes, api_sums, correct_body, api_limiting",
-        [
-            (None, {}, '', False),
-            ([], {}, '', False),
-            ([{"pid": 1, "calls": []}], {}, '', False),
-            ([{"pid": 1, "calls": ["blah"]}], {}, '', False),
-            ([{"pid": 1, "calls": ["blah"], "process_name": "blah"}], {"1": 2}, '[{"name": "blah", "api_calls_made_during_detonation": 2, "api_calls_included_in_report": 1}]', True),
-        ]
-    )
-    def test_build_limited_calls_section(processes, api_sums, correct_body, api_limiting):
-        from cuckoo.cuckoo_result import build_limited_calls_section
-        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
-        actual_result_section = ResultSection("blah")
-        build_limited_calls_section(actual_result_section, processes, api_sums)
-        if api_limiting:
-            correct_result_section = ResultSection(title_text="Limited Process API Calls",
-                                                   body_format=BODY_FORMAT.TABLE)
-            correct_result_section.body = correct_body
-            descr = f"For the sake of service processing, the number of the following " \
-                    f"API calls has been reduced in the report.json. The cause of large volumes of specific API calls is " \
-                    f"most likely related to the anti-sandbox technique known as API Hammering."
-            correct_result_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
-            assert check_section_equality(actual_result_section.subsections[0], correct_result_section)
-        else:
-            assert actual_result_section.subsections == []
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -2502,12 +2473,12 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _get_low_level_flows
         from assemblyline_v4_service.common.result import ResultSection
         expected_network_flows_table, expected_netflows_sec_body = expected_return
-        correct_netflows_sec = ResultSection(title_text="Network Flows")
+        correct_netflows_sec = ResultSection(title_text="TCP/UDP Network Traffic")
         if expected_netflows_sec_body == "flag":
             too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
             too_many_unique_ips_sec.body = f"The number of TCP calls displayed has been capped " \
                                            f"at 100. The full results can be found " \
-                                           f"in cuckoo_traffic.pcap"
+                                           f"in the supplementary PCAP file included with the analysis."
             correct_netflows_sec.add_subsection(too_many_unique_ips_sec)
             flows = {"udp": []}
             expected_network_flows_table = []
@@ -2565,7 +2536,7 @@ class TestCuckooResult:
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
         test_parent_section = ResultSection("blah")
         network_flows = [{"dest_port": 80, "dest_ip": "127.0.0.1", "domain": "blah.blah"}, {"dest_port": 443, "dest_ip": "127.0.0.2", "domain": "blah2.blah"}]
-        correct_result_section = ResultSection("Non-HTTP Traffic over HTTP Ports")
+        correct_result_section = ResultSection("Non-HTTP Traffic Over HTTP Ports")
         correct_result_section.set_heuristic(1005)
         correct_result_section.tags = {
             "network.dynamic.ip": ["127.0.0.1", "127.0.0.2"],
@@ -2585,7 +2556,7 @@ class TestCuckooResult:
         al_result = ResultSection("blah")
         events = [{"timestamp": 1, "image": "blah", 'pid': 1, 'src_port': 1, 'dest_ip': "blah", 'src_ip': "blah", 'dest_port': 1, 'guid': "blah", 'protocol': "blah", 'domain': "blah"}, {"pid": 1, "ppid": 1, "guid": "blah", "command_line": "blah", "image": "blah", "timestamp": 2}]
 
-        correct_result_section = ResultSection(title_text="Events")
+        correct_result_section = ResultSection(title_text="Event Log")
 
         correct_result_section.add_tag("dynamic.process.command_line", "blah")
         correct_result_section.add_tag("dynamic.process.file_name", "blah")
@@ -2620,11 +2591,11 @@ class TestCuckooResult:
                     curtain_item = {
                         "process_name": process_name,
                         "original": event[command]["original"],
-                        "altered": None
+                        "reformatted": None
                     }
                     altered = event[command]["altered"]
                     if altered != "No alteration of event.":
-                        curtain_item["altered"] = altered
+                        curtain_item["reformatted"] = altered
                     curtain_body.append(curtain_item)
             for behaviour in curtain[pid]["behaviors"]:
                 correct_result_section.add_tag("file.powershell.cmdlet", behaviour)
