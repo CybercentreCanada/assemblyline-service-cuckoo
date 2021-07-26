@@ -193,7 +193,7 @@ class Cuckoo(ServiceBase):
         self.timeout: Optional[int] = None
         self.max_report_size: Optional[int] = None
         self.allowed_images: List[str] = []
-        self.artefact_list: Optional[List[Dict[str, str]]] = None
+        self.artifact_list: Optional[List[Dict[str, str]]] = None
         self.hosts: List[Dict[str, Any]] = []
         self.routing = ""
 
@@ -213,7 +213,7 @@ class Cuckoo(ServiceBase):
     def execute(self, request: ServiceRequest) -> None:
         self.request = request
         self.session = requests.Session()
-        self.artefact_list = []
+        self.artifact_list = []
         request.result = Result()
 
         # Setting working directory for request
@@ -267,7 +267,7 @@ class Cuckoo(ServiceBase):
             for relevant_image, host_list in relevant_images.items():
                 hosts = [host for host in self.hosts if host["ip"] in host_list]
                 submission_specific_kwargs = kwargs.copy()
-                parent_section = ResultSection(relevant_image)
+                parent_section = ResultSection(f"Analysis Environment Target: {relevant_image}")
                 self.file_res.add_section(parent_section)
                 submission_specific_kwargs["tags"] = relevant_image
                 thr = SubmissionThread(
@@ -280,13 +280,13 @@ class Cuckoo(ServiceBase):
             for thread in submission_threads:
                 thread.join()
         elif image_requested and len(relevant_images_keys) == 1:
-            parent_section = ResultSection(relevant_images_keys[0])
+            parent_section = ResultSection(f"Analysis Environment Target: {relevant_images_keys[0]}")
             self.file_res.add_section(parent_section)
             kwargs["tags"] = relevant_images_keys[0]
             hosts = [host for host in self.hosts if host["ip"] in relevant_images[relevant_images_keys[0]]]
             self._general_flow(kwargs, file_ext, parent_section, hosts)
         elif platform_requested and len(hosts_with_platform[next(iter(hosts_with_platform))]) > 0:
-            parent_section = ResultSection(next(iter(hosts_with_platform)))
+            parent_section = ResultSection(f"Analysis Environment Target: {next(iter(hosts_with_platform))}")
             self.file_res.add_section(parent_section)
             hosts = [host for host in self.hosts if host["ip"] in hosts_with_platform[next(iter(hosts_with_platform))]]
             self._general_flow(kwargs, file_ext, parent_section, hosts)
@@ -298,17 +298,17 @@ class Cuckoo(ServiceBase):
                     hosts = [host for host in self.hosts if host["ip"] == host_ip]
                 else:
                     hosts = self.hosts
-                parent_section = ResultSection(f"File submitted to {kwargs['machine']}")
+                parent_section = ResultSection(f"Analysis Environment Target: {kwargs['machine']}")
             else:
-                parent_section = ResultSection("File submitted to the first machine available")
+                parent_section = ResultSection("Analysis Environment Target: First Machine Available")
                 hosts = self.hosts
             self.file_res.add_section(parent_section)
             self._general_flow(kwargs, file_ext, parent_section, hosts)
 
-        # Adding sandbox artefacts using the SandboxOntology helper class
-        artefact_section = SandboxOntology.handle_artefacts(self.artefact_list, self.request)
-        if artefact_section:
-            self.file_res.add_section(artefact_section)
+        # Adding sandbox artifacts using the SandboxOntology helper class
+        artifact_section = SandboxOntology.handle_artifacts(self.artifact_list, self.request)
+        if artifact_section:
+            self.file_res.add_section(artifact_section)
 
         # Remove empty sections
         for section in self.file_res.sections[:]:
@@ -339,7 +339,7 @@ class Cuckoo(ServiceBase):
 
         if reboot:
             host_to_use = hosts[0]
-            parent_section = ResultSection(f"Reboot Analysis: {parent_section.title_text}")
+            parent_section = ResultSection(f"Reboot Analysis -> {parent_section.title_text}")
             self.file_res.add_section(parent_section)
         else:
             self._set_task_parameters(kwargs, file_ext, parent_section)
@@ -428,7 +428,7 @@ class Cuckoo(ServiceBase):
 
         if status == ANALYSIS_EXCEEDED_TIMEOUT:
             # Add a subsection detailing what's happening and then moving on
-            task_timeout_sec = ResultSection("Assemblyline task timeout exceeded.",
+            task_timeout_sec = ResultSection("Assemblyline Task Timeout Exceeded.",
                                              body=f"The Cuckoo task {cuckoo_task.id} took longer than the "
                                                   f"Assemblyline's task timeout would allow.\nThis is usually due to "
                                                   f"an issue on Cuckoo's machinery end. Contact the Cuckoo "
@@ -791,13 +791,13 @@ class Cuckoo(ServiceBase):
                                 dropped_name) or dropped_name.endswith('_info.txt')):
                             # Resubmit
                             dropped_file_name = f"{cuckoo_task.id}_{dropped_name}"
-                            artefact = {
+                            artifact = {
                                 "name": dropped_file_name,
                                 "path": dropped_file_path,
                                 "description": "Dropped file during Cuckoo analysis.",
                                 "to_be_extracted": True
                             }
-                            self.artefact_list.append(artefact)
+                            self.artifact_list.append(artifact)
                             self.log.debug(f"Submitted dropped file for analysis for task "
                                            f"ID {cuckoo_task.id}: {dropped_file_name}")
             except Exception as e_x:
@@ -821,13 +821,13 @@ class Cuckoo(ServiceBase):
                         fh.write(item["original"] + "\n")
                 fh.close()
                 self.log.debug(f"Adding extracted file for task {task_id}: {ps1_file_name}")
-                artefact = {
+                artifact = {
                     "name": ps1_file_name,
                     "path": ps1_path,
                     "description": "Deobfuscated PowerShell script from Cuckoo analysis",
                     "to_be_extracted": True
                 }
-                self.artefact_list.append(artefact)
+                self.artifact_list.append(artifact)
                 break
 
     # TODO: This is dead service code for the Assemblyline team's Cuckoo setup, but may prove useful to others.
@@ -857,13 +857,13 @@ class Cuckoo(ServiceBase):
             pcap_file.close()
 
             # Resubmit analysis pcap file
-            artefact = {
+            artifact = {
                 "name": pcap_file_name,
                 "path": pcap_path,
                 "description": "PCAP from Cuckoo analysis",
                 "to_be_extracted": True
             }
-            self.artefact_list.append(artefact)
+            self.artifact_list.append(artifact)
             self.log.debug(f"Adding extracted file for task {cuckoo_task.id}: {pcap_file_name}")
 
     def report_machine_info(self, machine_name: str, cuckoo_task: CuckooTask, parent_section: ResultSection) -> None:
@@ -1042,7 +1042,7 @@ class Cuckoo(ServiceBase):
         if self.config.get("machinery_supports_memory_dumps", False) and dump_memory:
             kwargs["memory"] = True
         elif dump_memory:
-            parent_section.add_subsection(ResultSection("Cuckoo machinery cannot generate memory dumps."))
+            parent_section.add_subsection(ResultSection("Cuckoo Machinery Cannot Generate Memory Dumps."))
 
         # TODO: This should be a boolean
         if no_monitor:
@@ -1164,7 +1164,7 @@ class Cuckoo(ServiceBase):
         # only proceed if it looks like we have dll_multi
         # We have a DLL file, but no user specified function(s) to run. let's try to pick a few...
         # This is reliant on analyzer/windows/modules/packages/dll_multi.py
-        dll_parsed = self._create_PE_from_file_contents()
+        dll_parsed = self._create_pe_from_file_contents()
 
         # Do we have any exports?
         if hasattr(dll_parsed, "DIRECTORY_ENTRY_EXPORT"):
@@ -1189,9 +1189,9 @@ class Cuckoo(ServiceBase):
 
         if len(exports_available) > 0:
             dll_multi_section = ResultSection(
-                title_text="Executed multiple DLL exports",
-                body=f"Executed the following exports from the DLL: "
-                     f"{','.join(exports_available[:max_dll_exports])}"
+                title_text="Executed Multiple DLL Exports",
+                body=f"The following exports were executed: "
+                     f"{', '.join(exports_available[:max_dll_exports])}"
             )
             remaining_exports = len(exports_available) - max_dll_exports
             if remaining_exports > 0:
@@ -1201,7 +1201,7 @@ class Cuckoo(ServiceBase):
             parent_section.add_subsection(dll_multi_section)
 
     # Isolating this sequence out because I can't figure out how to mock PE construction
-    def _create_PE_from_file_contents(self) -> PE:
+    def _create_pe_from_file_contents(self) -> PE:
         """
         This file parses a DLL file and handles PEFormatErrors
         :return: An optional parsed PE
@@ -1243,7 +1243,7 @@ class Cuckoo(ServiceBase):
                     parent_section: ResultSection) -> None:
         """
         This method unpacks the tarball, which contains the report for the task
-        :param tar_report: The tarball in bytes which contains all artefacts from the analysis
+        :param tar_report: The tarball in bytes which contains all artifacts from the analysis
         :param file_ext: The file extension of the file to be submitted
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
         :param parent_section: The overarching result section detailing what image this task is being sent to
@@ -1259,7 +1259,7 @@ class Cuckoo(ServiceBase):
             report_json_path = self._add_json_as_supplementary_file(tar_obj, cuckoo_task)
         except MissingCuckooReportException:
             report_json_path = None
-            parent_section.add_subsection(ResultSection("The Cuckoo JSON Report is missing!",
+            parent_section.add_subsection(ResultSection("The Cuckoo JSON Report Is Missing!",
                                                         body="Please alert your Cuckoo administrators."))
         if report_json_path:
             self._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
@@ -1268,7 +1268,7 @@ class Cuckoo(ServiceBase):
         # special 'supplementary' directory
         try:
             self._extract_hollowshunter(tar_obj, cuckoo_task.id)
-            self._extract_artefacts(tar_obj, cuckoo_task.id)
+            self._extract_artifacts(tar_obj, cuckoo_task.id)
 
         except Exception as e:
             self.log.exception(f"Unable to add extra file(s) for "
@@ -1289,13 +1289,13 @@ class Cuckoo(ServiceBase):
             report_file = open(tar_report_path, 'wb')
             report_file.write(tar_report)
             report_file.close()
-            artefact = {
+            artifact = {
                 "name": tar_file_name,
                 "path": tar_report_path,
                 "description": "Cuckoo Sandbox analysis report archive (tar.gz)",
                 "to_be_extracted": False
             }
-            self.artefact_list.append(artefact)
+            self.artifact_list.append(artifact)
             self.log.debug(f"Adding supplementary file {tar_file_name} for task {cuckoo_task.id}")
         except Exception as e:
             self.log.exception(f"Unable to add tar of complete report for "
@@ -1304,7 +1304,7 @@ class Cuckoo(ServiceBase):
     def _add_json_as_supplementary_file(self, tar_obj: tarfile.TarFile, cuckoo_task: CuckooTask) -> str:
         """
         This method adds the JSON report as a supplementary file to Assemblyline
-        :param tar_obj: The tarball object, containing the analysis artefacts for the task
+        :param tar_obj: The tarball object, containing the analysis artifacts for the task
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
         :return: A string representing the path of the report in JSON format
         """
@@ -1319,13 +1319,13 @@ class Cuckoo(ServiceBase):
                 report_name = f"{cuckoo_task.id}_report.json"
 
                 tar_obj.extract(member_name, path=task_dir)
-                artefact = {
+                artifact = {
                     "name": report_name,
                     "path": report_json_path,
                     "description": "Cuckoo Sandbox report (json)",
                     "to_be_extracted": False
                 }
-                self.artefact_list.append(artefact)
+                self.artifact_list.append(artifact)
                 self.log.debug(f"Adding supplementary file {report_name} for task {cuckoo_task.id}")
             else:
                 raise MissingCuckooReportException
@@ -1398,13 +1398,13 @@ class Cuckoo(ServiceBase):
         console_output_file_name = f"{task_id}_console_output.txt"
         console_output_file_path = os.path.join("/tmp", console_output_file_name)
         if os.path.exists(console_output_file_path):
-            artefact = {
+            artifact = {
                 "name": console_output_file_name,
                 "path": console_output_file_path,
                 "description": "Console Output Observed",
                 "to_be_extracted": False
             }
-            self.artefact_list.append(artefact)
+            self.artifact_list.append(artifact)
             self.log.debug(f"Adding supplementary file {console_output_file_name}")
 
     def _extract_encrypted_buffers(self, task_id: int) -> None:
@@ -1422,19 +1422,19 @@ class Cuckoo(ServiceBase):
                 encrypted_buffer_files.append(file_path)
 
         for encrypted_buffer_file in encrypted_buffer_files:
-            artefact = {
+            artifact = {
                 "name": encrypted_buffer_file,
                 "path": encrypted_buffer_file,
                 "description": "Encrypted Buffer Observed in Network Traffic",
                 "to_be_extracted": True
             }
-            self.artefact_list.append(artefact)
+            self.artifact_list.append(artifact)
             self.log.debug(f"Adding extracted file for task {task_id}: {encrypted_buffer_file}")
 
-    def _extract_artefacts(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
+    def _extract_artifacts(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
         """
-        This method extracts certain artefacts from that tarball
-        :param tar_obj: The tarball object, containing the analysis artefacts for the task
+        This method extracts certain artifacts from that tarball
+        :param tar_obj: The tarball object, containing the analysis artifacts for the task
         :param task_id: An integer representing the Cuckoo Task ID
         :return: None
         """
@@ -1442,7 +1442,7 @@ class Cuckoo(ServiceBase):
         tarball_file_map = {
             "buffer": "Extracted buffer",
             "extracted": "Cuckoo extracted file",
-            "memory": "Memory artefact",
+            "memory": "Memory artifact",
             "shots": "Screenshots from Cuckoo analysis",
             # "polarproxy": "HTTPS .pcap from PolarProxy capture",
             "sum": "All traffic from TCPDUMP and PolarProxy",
@@ -1465,19 +1465,19 @@ class Cuckoo(ServiceBase):
                 if key not in ["supplementary", "shots"]:
                     to_be_extracted = True
 
-                artefact = {
+                artifact = {
                     "name": file_name,
                     "path": destination_file_path,
                     "description": value,
                     "to_be_extracted": to_be_extracted
                 }
-                self.artefact_list.append(artefact)
+                self.artifact_list.append(artifact)
                 self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
 
     def _extract_hollowshunter(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
         """
         This method extracts HollowsHunter dumps from the tarball
-        :param tar_obj: The tarball object, containing the analysis artefacts for the task
+        :param tar_obj: The tarball object, containing the analysis artifacts for the task
         :param task_id: An integer representing the Cuckoo Task ID
         :return: None
         """
@@ -1497,13 +1497,13 @@ class Cuckoo(ServiceBase):
                 full_path = os.path.join(task_dir, path)
                 file_name = f"{task_id}_{path}"
                 tar_obj.extract(path, path=task_dir)
-                artefact = {
+                artifact = {
                     "name": file_name,
                     "path": full_path,
                     "description": desc,
                     "to_be_extracted": to_be_extracted
                 }
-                self.artefact_list.append(artefact)
+                self.artifact_list.append(artifact)
                 self.log.debug(f"Adding HollowsHunter file {file_name} for task {task_id}")
 
     def _safely_get_param(self, param: str) -> Optional[Any]:
