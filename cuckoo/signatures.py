@@ -516,6 +516,7 @@ CUCKOO_SIGNATURES = {
   "process_needed": "Suspicious Execution Chain",
   "winmgmts_process_create": "WMI",
   "dll_load_uncommon_file_types": "Suspicious DLL",
+  "antiav_whitespace": "Anti-antivirus",
 }
 
 CUCKOO_SIGNATURE_CATEGORIES = {
