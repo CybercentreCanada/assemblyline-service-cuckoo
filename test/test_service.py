@@ -719,7 +719,14 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "status_code, task_id, task_ids",
-        [(200, 1, None), (200, None, None), (200, None, [1]), (404, 1, None), (500, 1, None), (None, None, None)]
+        [
+            (200, 1, None),
+            (200, None, None),
+            (200, None, [1]),
+            (404, 1, None),
+            (500, 1, None),
+            (None, None, None)
+        ]
     )
     def test_submit_file(status_code, task_id, task_ids, cuckoo_class_instance, mocker):
         mocker.patch('cuckoo.cuckoo_main.generate_random_words', return_value="blah")
@@ -830,7 +837,12 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "status_code,resp",
-        [(200, b"blah"), (404, None), (500, None), (None, None)]
+        [
+            (200, b"blah"),
+            (404, None),
+            (500, None),
+            (None, None)
+        ]
     )
     def test_query_pcap(status_code, resp, cuckoo_class_instance, mocker):
         from requests import Session, exceptions, ConnectionError
@@ -866,7 +878,13 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "status_code,task_dict",
-        [(200, None), (200, 1), (404, None), (500, None), (None, None)]
+        [
+            (200, None),
+            (200, 1),
+            (404, None),
+            (500, None),
+            (None, None)
+        ]
     )
     def test_query_task(status_code, task_dict, cuckoo_class_instance, mocker):
         from requests import Session, exceptions, ConnectionError
@@ -906,8 +924,13 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "status_code,text",
-        [(200, ""), (500, "{}"), (500, "{\"message\":\"The task is currently being processed, cannot delete\"}"),
-         (404, ""), (None, None)]
+        [
+            (200, ""),
+            (500, "{}"),
+            (500, "{\"message\":\"The task is currently being processed, cannot delete\"}"),
+            (404, ""),
+            (None, None)
+        ]
     )
     def test_delete_task(status_code, text, cuckoo_class_instance, mocker):
         from cuckoo.cuckoo_main import CuckooTimeoutException, CuckooTask
@@ -1129,7 +1152,8 @@ class TestCuckooMain:
             assert parent_section.subsections == []
 
     @staticmethod
-    @pytest.mark.parametrize("machine_name, platform, expected_tags",
+    @pytest.mark.parametrize(
+        "machine_name, platform, expected_tags",
         [
             ("", "", []),
             ("blah", "blah", [("dynamic.operating_system.platform", "Blah")]),
@@ -1532,7 +1556,13 @@ class TestCuckooMain:
         assert report_json_path == ""
 
     @staticmethod
-    @pytest.mark.parametrize("report_info", [{}, {"info": {"machine": {"name": "blah"}}}])
+    @pytest.mark.parametrize(
+        "report_info",
+        [
+            {},
+            {"info": {"machine": {"name": "blah"}}}
+        ]
+    )
     def test_build_report(report_info, cuckoo_class_instance, dummy_json_doc_class_instance, mocker):
         from cuckoo.cuckoo_main import Cuckoo, CuckooProcessingException, CuckooTask
         from sys import getrecursionlimit
@@ -1666,8 +1696,13 @@ class TestCuckooMain:
         assert cuckoo_class_instance.artifact_list[4] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.dll", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.dll', "description": 'HollowsHunter Dump', "to_be_extracted": True}
 
     @staticmethod
-    @pytest.mark.parametrize("param_exists, param, correct_value",
-                             [(True, "blah", "blah"), (False, "blah", None)])
+    @pytest.mark.parametrize(
+        "param_exists, param, correct_value",
+        [
+            (True, "blah", "blah"),
+            (False, "blah", None)
+        ]
+    )
     def test_safely_get_param(param_exists, param, correct_value, cuckoo_class_instance, dummy_request_class):
         if param_exists:
             cuckoo_class_instance.request = dummy_request_class(**{param: "blah"})
@@ -1676,7 +1711,8 @@ class TestCuckooMain:
         assert cuckoo_class_instance._safely_get_param(param) == correct_value
 
     @staticmethod
-    @pytest.mark.parametrize("file_type, possible_images, auto_architecture, correct_result",
+    @pytest.mark.parametrize(
+        "file_type, possible_images, auto_architecture, correct_result",
         [
             ("blah", [], {}, []),
             ("blah", ["blah"], {}, []),
@@ -1693,7 +1729,8 @@ class TestCuckooMain:
         assert cuckoo_class_instance._determine_relevant_images(file_type, possible_images, auto_architecture) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("machines, allowed_images, correct_result",
+    @pytest.mark.parametrize(
+        "machines, allowed_images, correct_result",
         [
             ([], [], []),
             ([], ["blah"], []),
@@ -1707,7 +1744,8 @@ class TestCuckooMain:
         assert cuckoo_class_instance._get_available_images(machines, allowed_images) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("machine_requested, hosts, correct_result, correct_body",
+    @pytest.mark.parametrize(
+        "machine_requested, hosts, correct_result, correct_body",
         [
             ("", [{"machines": []}], (False, False), None),
             ("", [{"machines": []}], (False, False), None),
@@ -1737,7 +1775,8 @@ class TestCuckooMain:
             assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("platform_requested, expected_return, expected_result_section",
+    @pytest.mark.parametrize(
+        "platform_requested, expected_return, expected_result_section",
         [
             ("blah", (True, {"blah": []}), 'The requested platform \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current platform options for this Cuckoo deployment include [\'linux\', \'windows\'].'),
             ("none", (False, {}), None),
@@ -1759,7 +1798,8 @@ class TestCuckooMain:
             assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body",
+    @pytest.mark.parametrize(
+        "image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body",
         [
             (False, False, [], [], (False, {}), None),
             (False, True, [], [], (False, {}), None),
@@ -1832,7 +1872,8 @@ class TestCuckooMain:
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section, True) is False
 
     @staticmethod
-    @pytest.mark.parametrize("title_heur_tuples, correct_section_heur_map",
+    @pytest.mark.parametrize(
+        "title_heur_tuples, correct_section_heur_map",
         [
             ([("blah1", 1), ("blah2", 2)], {'blah1': 1, 'blah2': 2}),
             ([("blah1", 1), ("blah1", 2)], {'blah1': 1}),
@@ -1888,7 +1929,8 @@ class TestCuckooMain:
         assert number_of_files_in_tmp_post_call == number_of_files_in_tmp_pre_call
 
     @staticmethod
-    @pytest.mark.parametrize("name, hosts, expected_result",
+    @pytest.mark.parametrize(
+        "name, hosts, expected_result",
         [
             ("blah", [{"machines": []}], None),
             ("blah", [{"machines": [{"name": "blah"}]}], {"name": "blah"}),
@@ -1923,7 +1965,8 @@ class TestCuckooResult:
         assert SCORE_TRANSLATION == {1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000}
 
     @staticmethod
-    @pytest.mark.parametrize("api_report, correct_body",
+    @pytest.mark.parametrize(
+        "api_report, correct_body",
         [
             ({}, None),
             (
@@ -1961,7 +2004,8 @@ class TestCuckooResult:
         mocker.patch("cuckoo.cuckoo_result.process_debug")
         mocker.patch("cuckoo.cuckoo_result.get_process_map", return_value=correct_process_map)
         mocker.patch("cuckoo.cuckoo_result.process_signatures", return_value=False)
-        mocker.patch("cuckoo.cuckoo_result.convert_sysmon_processes", return_value=({}, []))
+        mocker.patch("cuckoo.cuckoo_result.convert_sysmon_processes", return_value=None)
+        mocker.patch("cuckoo.cuckoo_result.convert_sysmon_network", return_value=None)
         mocker.patch("cuckoo.cuckoo_result.process_behaviour", return_value=["blah"])
         mocker.patch("cuckoo.cuckoo_result.process_network", return_value=["blah"])
         mocker.patch("cuckoo.cuckoo_result.process_all_events")
@@ -1982,7 +2026,8 @@ class TestCuckooResult:
             assert check_section_equality(al_result.subsections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("debug, correct_body",
+    @pytest.mark.parametrize(
+        "debug, correct_body",
         [
             ({"errors": [], "log": [], "cuckoo": []}, None),
             ({"errors": ["BLAH"], "log": [], "cuckoo": []}, "BLAH"),
@@ -2010,7 +2055,8 @@ class TestCuckooResult:
             assert check_section_equality(al_result.subsections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("behaviour, events",
+    @pytest.mark.parametrize(
+        "behaviour, events",
         [
             ({"processes": []}, None),
             ({"processes": ["blah"], "apistats": {"blah": "blah"}}, None)
@@ -2026,7 +2072,8 @@ class TestCuckooResult:
         assert True
 
     @staticmethod
-    @pytest.mark.parametrize("apistats, correct_api_sums",
+    @pytest.mark.parametrize(
+        "apistats, correct_api_sums",
         [
             ({}, {}),
             ({"0": {"blah": 2}}, {"0": 2}),
@@ -2037,7 +2084,8 @@ class TestCuckooResult:
         assert get_process_api_sums(apistats) == correct_api_sums
 
     @staticmethod
-    @pytest.mark.parametrize("processes, correct_events",
+    @pytest.mark.parametrize(
+        "processes, correct_events",
         [
             ([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}], [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah"}]),
             ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}], []),
@@ -2052,7 +2100,8 @@ class TestCuckooResult:
         assert actual_events == correct_events
 
     @staticmethod
-    @pytest.mark.parametrize("events, is_process_martian, correct_body",
+    @pytest.mark.parametrize(
+        "events, is_process_martian, correct_body",
         [
             ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], False, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
             ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], True, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
@@ -2078,7 +2127,8 @@ class TestCuckooResult:
             assert actual_res_sec.subsections == []
 
     @staticmethod
-    @pytest.mark.parametrize("sysmon, correct_index",
+    @pytest.mark.parametrize(
+        "sysmon, correct_index",
         [
             ([], 0),
             ([{"EventData": {"Data": []}}], 0),
@@ -2086,7 +2136,7 @@ class TestCuckooResult:
             ([{"EventData": {"Data": [{"@Name": "blah", "#text": "blah"}]}}], 0),
             ([{"EventData": {"Data": [{"@Name": "CurrentDirectory", "#text": "Current"}]}}], 0),
             ([{"EventData": {"Data": [{"@Name": "blah", "#text": "C:\\Users\\buddy\\AppData\\Local\\Temp\\"}]}}], 0),
-            ([{"EventData": {"Data": []}}, {"EventData": {"Data": [{"@Name": "CurrentDirectory", "#text": "C:\\Users\\buddy\\AppData\\Local\\Temp\\"}]}}], 1),
+            ([{"EventData": {"Data": []}}, {"EventData": {"Data": [{"@Name": "ParentCommandLine", "#text": "C:\\Users\\buddy\\AppData\\Local\\Temp\\"}]}}], 1),
         ]
     )
     def test_get_trimming_index(sysmon, correct_index):
@@ -2094,7 +2144,8 @@ class TestCuckooResult:
         assert _get_trimming_index(sysmon) == correct_index
 
     @staticmethod
-    @pytest.mark.parametrize("sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian",
+    @pytest.mark.parametrize(
+        "sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian",
         [
             (None, [], "192.0.2.0/24", "", {}, None, False),
             ("blah", [{"name": "blah", "severity": 1}], "192.0.2.0/24", "", {}, 'No description for signature.', False),
@@ -2131,7 +2182,8 @@ class TestCuckooResult:
         from assemblyline_v4_service.common.result import ResultSection, Heuristic
         al_result = ResultSection("blah")
         task_id = 1
-        assert process_signatures(sigs, al_result, ip_network(random_ip_range), target_filename, process_map, task_id) == correct_is_process_martian
+        file_ext = ".exe"
+        assert process_signatures(sigs, al_result, ip_network(random_ip_range), target_filename, process_map, task_id, file_ext) == correct_is_process_martian
         if correct_body is None:
             assert al_result.subsections == []
         else:
@@ -2171,7 +2223,8 @@ class TestCuckooResult:
             assert check_section_equality(al_result.subsections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("name, marks, filename, filename_remainder, expected_result",
+    @pytest.mark.parametrize(
+        "name, marks, filename, filename_remainder, expected_result",
         [
             ("blah", [], "blah.txt", "blah.txt", False),
             ("creates_doc", [{"ioc": "blah.exe", "type": "blah"}], "blah.txt", "blah.txt", False),
@@ -2225,7 +2278,8 @@ class TestCuckooResult:
         assert _is_signature_a_false_positive(name, marks, filename, filename_remainder, inetsim_network) == expected_result
 
     @staticmethod
-    @pytest.mark.parametrize("name, signature, expected_tags, expected_heuristic_id, expected_description, expected_attack_ids",
+    @pytest.mark.parametrize(
+        "name, signature, expected_tags, expected_heuristic_id, expected_description, expected_attack_ids",
         [
             ("blah", {"severity": 1}, [], 9999, 'No description for signature.', []),
             ("blah", {"description": "blah", "severity": 1}, [], 9999, 'blah', []),
@@ -2260,7 +2314,8 @@ class TestCuckooResult:
         assert True
 
     @staticmethod
-    @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body",
+    @pytest.mark.parametrize(
+        "signature_name, mark, expected_tags, expected_body",
         [
             ("blah", {}, {}, None),
             ("network_cnc_http", {"suspicious_request": "evil http://evil.com", "suspicious_features": "http://evil.com"}, {'network.dynamic.uri': ['http://evil.com']}, '\tFun fact: http://evil.com\n\tIOC: evil http://evil.com'),
@@ -2293,7 +2348,8 @@ class TestCuckooResult:
         assert check_section_equality(actual_result, expected_result)
 
     @staticmethod
-    @pytest.mark.parametrize("signature_name, mark, process_map, expected_tags, expected_body",
+    @pytest.mark.parametrize(
+        "signature_name, mark, process_map, expected_tags, expected_body",
         [
             ("blah", {"ioc": "http://w3.org", "category": "blah"}, {}, {}, None),
             ("network_http", {"ioc": "evil http://evil.org", "category": "blah"}, {}, {'network.dynamic.uri': ['http://evil.org']}, '\tIOC: evil http://evil.org'),
@@ -2324,11 +2380,13 @@ class TestCuckooResult:
         inetsim_network = ip_network("192.0.2.0/24")
         expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
         actual_result = ResultSection("blah")
-        _tag_and_describe_ioc_signature(signature_name, mark, actual_result, inetsim_network, process_map)
+        file_ext = ".exe"
+        _tag_and_describe_ioc_signature(signature_name, mark, actual_result, inetsim_network, process_map, file_ext)
         assert check_section_equality(actual_result, expected_result)
 
     @staticmethod
-    @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body",
+    @pytest.mark.parametrize(
+        "signature_name, mark, expected_tags, expected_body",
         [
             ("blah", {"blah": "blah"}, {}, None),
             ("creates_hidden_file", {"call": {"arguments": {}}}, {}, None),
@@ -2351,7 +2409,8 @@ class TestCuckooResult:
         assert check_section_equality(actual_result, expected_result)
 
     @staticmethod
-    @pytest.mark.parametrize("val, expected_return",
+    @pytest.mark.parametrize(
+        "val, expected_return",
         [
             (None, False),
             (b"blah", False),
@@ -2372,23 +2431,24 @@ class TestCuckooResult:
         pass
 
     @staticmethod
-    @pytest.mark.parametrize("dns_calls, process_map, routing, expected_return",
+    @pytest.mark.parametrize(
+        "dns_calls, process_map, routing, expected_return",
         [
             ([], {}, "", {}),
             ([{"answers": []}], {}, "", {}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "", {'answer': {'domain': 'request'}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "INetSim", {'answer': {'domain': 'request'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "INetSim", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
             ([{"answers": [{"data": "answer"}], "request": "request", "type": "PTR"}], {}, "INetSim", {}),
             ([{"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa", "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer'}}),
-            ([{"answers": [{"data": "10.10.10.10"}], "request": "answer", "type": "A"}, {"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa", "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer'}}),
+            ([{"answers": [{"data": "10.10.10.10"}], "request": "answer", "type": "A"}, {"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa", "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer', "guid": None, "process_id": None, "process_name": None, "time": None}}),
             ([{"answers": [{"data": "answer"}], "request": "ya:ba:da:ba:do:oo.ip6.arpa", "type": "PTR"}], {}, "Internet", {}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"network_calls": [{"blah": {"hostname": "blah"}}]}}, "", {'answer': {'domain': 'request'}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"blah": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request'}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"getaddrinfo": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectA": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"GetAddrInfoW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah'}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"network_calls": [{"blah": {"hostname": "blah"}}]}}, "", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"blah": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"getaddrinfo": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectA": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"GetAddrInfoW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
             ([{"answers": []}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {}),
         ]
     )
@@ -2397,7 +2457,8 @@ class TestCuckooResult:
         assert _get_dns_map(dns_calls, process_map, routing) == expected_return
 
     @staticmethod
-    @pytest.mark.parametrize("resolved_ips, flows, expected_return",
+    @pytest.mark.parametrize(
+        "resolved_ips, flows, expected_return",
         [
             ({}, {}, ([], "")),
             ({}, {"udp": []}, ([], "")),
@@ -2433,7 +2494,8 @@ class TestCuckooResult:
         assert check_section_equality(netflows_sec, correct_netflows_sec)
 
     @staticmethod
-    @pytest.mark.parametrize("process_map, http_level_flows, expected_req_table",
+    @pytest.mark.parametrize(
+        "process_map, http_level_flows, expected_req_table",
         [
             ({}, {}, []),
             ({}, {"http": [], "https": [], "http_ex": [], "https_ex": []}, []),
@@ -2501,12 +2563,13 @@ class TestCuckooResult:
 
         correct_result_section.body = '[{"timestamp": "1970-01-01 00:00:01.000", "process_name": "blah (1)", "details": {"protocol": "blah", "domain": "blah", "dest_ip": "blah", "dest_port": 1}}, {"timestamp": "1970-01-01 00:00:02.000", "process_name": "blah (1)", "details": {"command_line": "blah"}}]'
         correct_result_section.body_format = BODY_FORMAT.TABLE
-
-        process_all_events(al_result, events)
+        file_ext = ".exe"
+        process_all_events(al_result, file_ext, events)
         assert check_section_equality(al_result.subsections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("curtain, process_map",
+    @pytest.mark.parametrize(
+        "curtain, process_map",
     [
         ({}, {0: {"blah": "blah"}}),
         ({"1": {"events": [{"command": {"original": "blah", "altered": "blah"}}], "behaviors": ["blah"]}}, {0: {"blah": "blah"}}),
@@ -2545,7 +2608,8 @@ class TestCuckooResult:
             assert al_result.subsections == []
 
     @staticmethod
-    @pytest.mark.parametrize("sysmon, correct_processes",
+    @pytest.mark.parametrize(
+        "sysmon, correct_processes",
         [
             (None, []),
             ([], []),
@@ -2570,6 +2634,122 @@ class TestCuckooResult:
         convert_sysmon_processes(sysmon, actual_events)
         assert actual_events == correct_processes
 
+    @staticmethod
+    @pytest.mark.parametrize(
+        "sysmon, actual_network, correct_network",
+        [
+             ([], {}, {}),
+             ([], {}, {}),
+             ([{"System": {"EventID": '1'}}], {}, {}),
+             ([{
+                "System": {"EventID": '3'},
+                "EventData": {"Data":
+                    [
+                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                        {"@Name": "ProcessGuid", "#text": "{blah}"},
+                        {"@Name": "ProcessId", "#text": "123"},
+                        {"@Name": "Image", "#text": "blah.exe"},
+                        {"@Name": "SourceIp", "#text": "10.10.10.10"},
+                        {"@Name": "SourcePort", "#text": "123"},
+                        {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+                        {"@Name": "DestinationPort", "#text": "321"},
+                    ]
+                }}], {"tcp": []}, {'tcp': []}),
+             ([{
+                 "System": {"EventID": '3'},
+                 "EventData": {"Data":
+                    [
+                       {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                       {"@Name": "ProcessGuid", "#text": "{blah}"},
+                       {"@Name": "ProcessId", "#text": "123"},
+                       {"@Name": "Image", "#text": "blah.exe"},
+                       {"@Name": "Protocol", "#text": "tcp"},
+                       {"@Name": "SourceIp", "#text": "10.10.10.10"},
+                       {"@Name": "SourcePort", "#text": "123"},
+                       {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+                       {"@Name": "DestinationPort", "#text": "321"},
+                    ]
+                 }}], {"tcp": []}, {'tcp': [{'dport': 321, 'dst': '11.11.11.11', 'guid': '{blah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123, 'src': '10.10.10.10', 'time': 1627054921.001}]}),
+             ([{
+                "System": {"EventID": '3'},
+                "EventData": {"Data":
+                    [
+                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                        {"@Name": "ProcessGuid", "#text": "{blah}"},
+                        {"@Name": "ProcessId", "#text": "123"},
+                        {"@Name": "Image", "#text": "blah.exe"},
+                        {"@Name": "Protocol", "#text": "tcp"},
+                        {"@Name": "SourceIp", "#text": "10.10.10.10"},
+                        {"@Name": "SourcePort", "#text": "123"},
+                        {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+                        {"@Name": "DestinationPort", "#text": "321"},
+                    ]
+                }}], {"tcp": [{"dst": '11.11.11.11', "dport": 321, "src": '10.10.10.10', "sport": 123}]}, {'tcp': [
+                {'dport': 321, 'dst': '11.11.11.11', 'guid': '{blah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123,
+                 'src': '10.10.10.10', 'time': 1627054921.001}]}),
+             ([{
+                "System": {"EventID": '22'},
+                "EventData": {"Data":
+                    [
+                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                        {"@Name": "ProcessGuid", "#text": "{blah}"},
+                        {"@Name": "ProcessId", "#text": "123"},
+                        {"@Name": "Image", "#text": "blah.exe"},
+                        {"@Name": "QueryName", "#text": "blah.com"},
+                        {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
+                    ]
+                }}], {"dns": []}, {'dns': [
+                {
+                    'answers': [{'data': '10.10.10.10', 'type': 'A'}],
+                    'guid': '{blah}',
+                    'image': 'blah.exe',
+                    'pid': 123,
+                    'request': 'blah.com',
+                    'time': 1627054921.001,
+                    'type': 'A'
+                }]}),
+             ([{
+                "System": {"EventID": '22'},
+                "EventData": {"Data":
+                    [
+                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                        {"@Name": "ProcessId", "#text": "123"},
+                        {"@Name": "Image", "#text": "blah.exe"},
+                        {"@Name": "QueryName", "#text": "blah.com"},
+                        {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
+                    ]
+                }}], {"dns": []}, {'dns': []}),
+             ([{
+                "System": {"EventID": '22'},
+                "EventData": {"Data":
+                    [
+                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                        {"@Name": "ProcessGuid", "#text": "{blah}"},
+                        {"@Name": "ProcessId", "#text": "123"},
+                        {"@Name": "Image", "#text": "blah.exe"},
+                        {"@Name": "QueryName", "#text": "blah.com"},
+                        {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
+                    ]
+                }}], {"dns": [{"request": "blah.com"}]}, {'dns': [
+                {
+                    'answers': [{'data': '10.10.10.10', 'type': 'A'}],
+                    'guid': '{blah}',
+                    'image': 'blah.exe',
+                    'pid': 123,
+                    'request': 'blah.com',
+                    'time': 1627054921.001,
+                    'type': 'A'
+                }]}
+             ),
+
+        ]
+    )
+    def test_convert_sysmon_network(sysmon, actual_network, correct_network, dummy_result_class_instance, mocker):
+        from cuckoo.cuckoo_result import convert_sysmon_network
+        mocker.patch("cuckoo.cuckoo_result._get_trimming_index", return_value=0)
+        convert_sysmon_network(sysmon, actual_network)
+        assert actual_network == correct_network
+
     # TODO: method is in the works
     # @staticmethod
     # def test_process_hollowshunter(dummy_result_class_instance):
@@ -2588,15 +2768,16 @@ class TestCuckooResult:
     #     assert check_section_equality(al_result.sections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("process_map, correct_buffer_body, correct_tags",
+    @pytest.mark.parametrize(
+        "process_map, correct_buffer_body, correct_tags",
         [
             ({0: {"decrypted_buffers": []}}, None, {}),
             ({0: {"decrypted_buffers": [{"blah": "blah"}]}}, None, {}),
             ({0: {"decrypted_buffers": [{"CryptDecrypt": {"buffer": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', {}),
             ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', {}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}}, '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1'], 'network.static.uri': ['127.0.0.1']}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.blah"}}]}}, '[{"Decrypted Buffer": "blah.blah"}]', {'network.static.domain': ['blah.blah'], 'network.static.uri': ['blah.blah']}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}}, '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1'], 'network.static.uri': ['127.0.0.1:999']}),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}}, '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1']}),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.ca"}}]}}, '[{"Decrypted Buffer": "blah.ca"}]', {'network.static.domain': ['blah.ca']}),
+            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}}, '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1']}),
         ]
     )
     def test_process_decrypted_buffers(process_map, correct_buffer_body, correct_tags):
@@ -2604,8 +2785,8 @@ class TestCuckooResult:
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
 
         parent_section = ResultSection("blah")
-
-        process_decrypted_buffers(process_map, parent_section)
+        file_ext = ".exe"
+        process_decrypted_buffers(process_map, parent_section, file_ext)
 
         if correct_buffer_body is None:
             assert parent_section.subsections == []
@@ -2627,7 +2808,8 @@ class TestCuckooResult:
             assert not is_ip(val)
 
     @staticmethod
-    @pytest.mark.parametrize("processes, correct_process_map",
+    @pytest.mark.parametrize(
+        "processes, correct_process_map",
         [
             (None, {}),
             ([{"process_name": "C:\\windows\\System32\\lsass.exe", "calls": [], "pid": 1}], {}),
@@ -2649,7 +2831,8 @@ class TestCuckooResult:
         assert get_process_map(processes) == correct_process_map
 
     @staticmethod
-    @pytest.mark.parametrize("sigs, correct_sigs",
+    @pytest.mark.parametrize(
+        "sigs, correct_sigs",
         [
             ([], []),
             ([{"name": "network_cnc_http"}], [{"name": "network_cnc_http"}]),
@@ -2661,22 +2844,24 @@ class TestCuckooResult:
         assert _remove_network_http_noise(sigs) == correct_sigs
 
     @staticmethod
-    @pytest.mark.parametrize("blob, correct_tags",
+    @pytest.mark.parametrize(
+        "blob, file_ext, correct_tags",
         [
-            ("", {}),
-            ("192.168.100.1", {'network.static.domain': ['192.168.100.'], 'network.static.ip': ['192.168.100.1'], 'network.static.uri': ['192.168.100.1']}),
-            ("blah.blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['blah.blah']}),
-            ("https://blah.blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['https://blah.blah']}),
-            ("https://blah.blah/blah", {'network.static.domain': ['blah.blah'], 'network.static.uri': ['https://blah.blah']}),
-            ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", {}),
-            ("DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC", {}),
+            ("", "", {}),
+            ("192.168.100.1", "", {'network.static.ip': ['192.168.100.1']}),
+            ("blah.ca", ".exe", {'network.static.domain': ['blah.ca']}),
+            ("https://blah.ca", ".exe", {'network.static.domain': ['blah.ca'], 'network.static.uri': ['https://blah.ca']}),
+            ("https://blah.ca/blah", ".exe", {'network.static.domain': ['blah.ca'], 'network.static.uri': ['https://blah.ca']}),
+            ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", ".exe", {}),
+            ("DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC", ".exe", {}),
+            ("DRIVE:\\\\PATH TO\\\\PYTHON27.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.py", ".py", {}),
         ]
     )
-    def test_extract_iocs_from_text_blob(blob, correct_tags):
+    def test_extract_iocs_from_text_blob(blob, file_ext, correct_tags):
         from cuckoo.cuckoo_result import _extract_iocs_from_text_blob
         from assemblyline_v4_service.common.result import ResultSection
         test_result_section = ResultSection("blah")
-        _extract_iocs_from_text_blob(blob, test_result_section)
+        _extract_iocs_from_text_blob(blob, test_result_section, file_ext)
         assert test_result_section.tags == correct_tags
 
 
@@ -3412,7 +3597,8 @@ class TestSignatures:
         ]
 
     @staticmethod
-    @pytest.mark.parametrize("sig, correct_int",
+    @pytest.mark.parametrize(
+        "sig, correct_int",
         [
             ("blah", 9999),
             ("network_cnc_http", 22)
@@ -3423,7 +3609,8 @@ class TestSignatures:
         assert get_category_id(sig) == correct_int
 
     @staticmethod
-    @pytest.mark.parametrize("sig, correct_string",
+    @pytest.mark.parametrize(
+        "sig, correct_string",
         [
             ("blah", "unknown"),
             ("network_cnc_http", "C2")
@@ -3442,6 +3629,7 @@ class TestSafelist:
         assert SAFELIST_APPLICATIONS == [
             'C:\\\\tmp.+\\\\bin\\\\.+',
             'C:\\\\Windows\\\\System32\\\\lsass\\.exe',
+            'lsass\\.exe',
             'C:\\\\Program Files\\\\Common Files\\\\Microsoft '
             'Shared\\\\OfficeSoftwareProtectionPlatform\\\\OSPPSVC\\.exe',
             'C:\\\\Windows\\\\System32\\\\csrss\\.exe',
@@ -3688,7 +3876,8 @@ class TestSafelist:
         ]
 
     @staticmethod
-    @pytest.mark.parametrize("data, sigs, correct_result",
+    @pytest.mark.parametrize(
+        "data, sigs, correct_result",
         [
             ("blah", ["blah"], True),
             ("blah", ["nope"], False),
@@ -3699,7 +3888,8 @@ class TestSafelist:
         assert is_match(data, sigs) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("application, correct_result",
+    @pytest.mark.parametrize(
+        "application, correct_result",
         [
             ("C:\\Windows\\System32\\lsass.exe", True),
             ("blah", False),
@@ -3710,7 +3900,8 @@ class TestSafelist:
         assert slist_check_app(application) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("command, correct_result",
+    @pytest.mark.parametrize(
+        "command, correct_result",
         [
             ('C:\\Python27\\pythonw.exe C:/tmpblah/analyzer.py', True),
             ("blah", False),
@@ -3721,7 +3912,8 @@ class TestSafelist:
         assert slist_check_cmd(command) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("domain, correct_result",
+    @pytest.mark.parametrize(
+        "domain, correct_result",
         [
             ('blah.adobe.com', True),
             ("blah", False),
@@ -3732,7 +3924,8 @@ class TestSafelist:
         assert slist_check_domain(domain) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("ip, correct_result",
+    @pytest.mark.parametrize(
+        "ip, correct_result",
         [
             ('127.0.0.1', True),
             ("blah", False),
@@ -3743,7 +3936,8 @@ class TestSafelist:
         assert slist_check_ip(ip) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("uri, correct_result",
+    @pytest.mark.parametrize(
+        "uri, correct_result",
         [
             ('http://localhost', True),
             ("blah", False),
@@ -3754,7 +3948,8 @@ class TestSafelist:
         assert slist_check_uri(uri) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("name, correct_result",
+    @pytest.mark.parametrize(
+        "name, correct_result",
         [
             ('SharedDataEvents', True),
             ('\\Temp\\~$blah.doc', True),
@@ -3766,7 +3961,8 @@ class TestSafelist:
         assert slist_check_dropped(name) == correct_result
 
     @staticmethod
-    @pytest.mark.parametrize("file_hash, correct_result",
+    @pytest.mark.parametrize(
+        "file_hash, correct_result",
         [
             ('ac6f81bbb302fd4702c0b6c3440a5331', True),
             ("blah", False),

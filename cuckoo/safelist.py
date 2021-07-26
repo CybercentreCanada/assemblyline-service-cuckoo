@@ -6,7 +6,7 @@ from re import match
 
 SAFELIST_APPLICATIONS = [
     # Cuckoo
-    r'C:\\tmp.+\\bin\\.+', r'C:\\Windows\\System32\\lsass\.exe',
+    r'C:\\tmp.+\\bin\\.+', r'C:\\Windows\\System32\\lsass\.exe', r'lsass\.exe',
     r'C:\\Program Files\\Common Files\\Microsoft Shared\\OfficeSoftwareProtectionPlatform\\OSPPSVC\.exe',
     # Sysmon
     r'C:\\Windows\\System32\\csrss\.exe', r'C:\\Windows\\System32\\SearchIndexer\.exe',
