@@ -84,10 +84,10 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
         except Exception:
             pass
         body = {
-            'ID': info['id'],
+            'Cuckoo Task ID': info['id'],
             'Duration': analysis_time,
             'Routing': routing,
-            'Version': info['version']
+            'Cuckoo Version': info['version']
         }
         info_res = ResultSection(title_text='Analysis Information',
                                  body_format=BODY_FORMAT.KEY_VALUE,
@@ -128,13 +128,13 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
                            len(behaviour.get("processes", [])),
                            len(behaviour.get("summary", []))]
         if not any(item > 0 for item in sample_executed):
-            noexec_res = ResultSection(title_text="Notes")
+            noexec_res = ResultSection(title_text="Sample Did Not Execute")
             noexec_res.add_line(f"No program available to execute a file with the following "
                                 f"extension: {safe_str(file_ext)}")
             al_result.add_subsection(noexec_res)
         else:
             # Otherwise, moving on!
-            process_behaviour(behaviour, al_result, events)
+            process_behaviour(behaviour, events)
 
     if events:
         build_process_tree(events, al_result, is_process_martian, signatures)
@@ -190,8 +190,7 @@ def process_debug(debug: Dict[str, Any], parent_result_section: ResultSection) -
         parent_result_section.add_subsection(error_res)
 
 
-def process_behaviour(behaviour: Dict[str, Any], parent_result_section: ResultSection,
-                      events: Optional[List[Dict[str, Any]]] = None) -> None:
+def process_behaviour(behaviour: Dict[str, Any], events: Optional[List[Dict[str, Any]]] = None) -> None:
     """
     This method processes the behaviour section of the Cuckoo report, adding anything noteworthy to the
     Assemblyline report
@@ -202,59 +201,11 @@ def process_behaviour(behaviour: Dict[str, Any], parent_result_section: ResultSe
     """
     if events is None:
         events: List[Dict[str, Any]] = []
-    # Gathering apistats to determine if calls have been limited
-    apistats = behaviour.get("apistats", {})
-    api_sums: Dict[str, int] = {}
-    if apistats:
-        api_sums = get_process_api_sums(apistats)
 
     # Preparing Cuckoo processes to match the SandboxOntology format
     processes = behaviour["processes"]
     if processes:
         convert_cuckoo_processes(events, processes)
-
-    if api_sums:
-        # If calls have been limited, add a subsection detailing this
-        build_limited_calls_section(parent_result_section, processes, api_sums)
-
-
-def build_limited_calls_section(parent_result_section: ResultSection, processes: Optional[List[Dict[str, Any]]] = None,
-                                api_sums: Dict[str, int] = {}) -> None:
-    """
-    This method creates a ResultSection detailing if any process calls have been excluded from the supplementary JSON
-    report
-    :param parent_result_section: The overarching result section detailing what image this task is being sent to
-    :param processes: A list of processes observed during the analysis of the task
-    :param api_sums: A map of process calls and how many times those process calls were made
-    :return: None
-    """
-    if processes is None:
-        processes: List[Dict[str, Any]] = []
-    limited_calls_table: List[Dict[str, Any]] = []
-    for process in processes:
-        pid = str(process["pid"])
-
-        # if the number of calls made by process does not add up to the number recorded
-        # in apistats, then it is assumed that the api calls were limited
-        num_process_calls = len(process["calls"])
-        if num_process_calls > 0:
-            pid_api_sums = api_sums.get(pid, -1)
-            if pid_api_sums > num_process_calls:
-                limited_calls_table.append({
-                    "name": process["process_name"],
-                    "api_calls_made_during_detonation": pid_api_sums,
-                    "api_calls_included_in_report": num_process_calls
-                })
-
-    if len(limited_calls_table) > 0:
-        limited_calls_section = ResultSection(title_text="Limited Process API Calls")
-        limited_calls_section.body = json.dumps(limited_calls_table)
-        limited_calls_section.body_format = BODY_FORMAT.TABLE
-        descr = f"For the sake of service processing, the number of the following " \
-                f"API calls has been reduced in the report.json. The cause of large volumes of specific API calls is " \
-                f"most likely related to the anti-sandbox technique known as API Hammering."
-        limited_calls_section.add_subsection(ResultSection(title_text="Disclaimer", body=descr))
-        parent_result_section.add_subsection(limited_calls_section)
 
 
 def get_process_api_sums(apistats: Dict[str, Dict[str, int]]) -> Dict[str, int]:
@@ -743,7 +694,7 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
     network_flows_table: List[Dict[str, Any]] = []
 
     # This result section will contain all of the "flows" from src ip to dest ip
-    netflows_sec = ResultSection(title_text="Network Flows")
+    netflows_sec = ResultSection(title_text="TCP/UDP Network Traffic")
 
     for protocol, network_calls in flows.items():
         if len(network_calls) <= 0:
@@ -757,7 +708,7 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
                     too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
                     too_many_unique_ips_sec.body = f"The number of TCP calls displayed has been capped " \
                                                    f"at {UNIQUE_IP_LIMIT}. The full results can be found " \
-                                                   f"in cuckoo_traffic.pcap"
+                                                   f"in the supplementary PCAP file included with the analysis."
                     netflows_sec.add_subsection(too_many_unique_ips_sec)
                     break
                 dst_port_pair = json.dumps({network_call["dst"]: network_call["dport"]})
@@ -853,7 +804,7 @@ def process_all_events(parent_result_section: ResultSection, events: Optional[Li
     #   "details": {}
     # }
     so = SandboxOntology(events=events)
-    events_section = ResultSection(title_text="Events")
+    events_section = ResultSection(title_text="Event Log")
     event_table: List[Dict[str, Any]] = []
     for event in so.sorted_events:
         if isinstance(event, NetworkEvent):
@@ -904,11 +855,11 @@ def process_curtain(curtain: Dict[str, Any], parent_result_section: ResultSectio
                 curtain_item = {
                     "process_name": process_name,
                     "original": event[command]["original"],
-                    "altered": None
+                    "reformatted": None
                 }
                 altered = event[command]["altered"]
                 if altered != "No alteration of event.":
-                    curtain_item["altered"] = altered
+                    curtain_item["reformatted"] = altered
                 curtain_body.append(curtain_item)
         for behaviour in curtain[pid]["behaviors"]:
             curtain_res.add_tag("file.powershell.cmdlet", behaviour)
@@ -1384,7 +1335,7 @@ def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netfl
     :param unique_netflows: Network flows observed during Cuckoo analysis
     :return: None
     """
-    non_http_traffic_result_section = ResultSection("Non-HTTP Traffic over HTTP Ports")
+    non_http_traffic_result_section = ResultSection("Non-HTTP Traffic Over HTTP Ports")
     non_http_list = []
     # If there was no HTTP/HTTPS calls made, then confirm that there was no suspicious
     for netflow in unique_netflows:
