@@ -48,7 +48,7 @@ HTTP_API_CALLS = ["send", "InternetConnectW", "InternetConnectA"]
 BUFFER_API_CALLS = ["send"]
 SUSPICIOUS_USER_AGENTS = [
     "Microsoft BITS", "Microsoft Office Existence Discovery", "Microsoft-WebDAV-MiniRedir",
-    "Microsoft Office Protocol Discovery"
+    "Microsoft Office Protocol Discovery", "Excel Service",
 ]
 SUPPORTED_EXTENSIONS = [
     'bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe', 'hta', 'htm', 'html',
@@ -119,10 +119,11 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
         target_file = target.get("file", {})
         target_filename = target_file.get("name", "missing_name")
         is_process_martian = process_signatures(sigs, al_result, validated_random_ip_range, target_filename, process_map,
-                                                info["id"], signatures)
+                                                info["id"], file_ext, signatures)
 
     if sysmon:
         convert_sysmon_processes(sysmon, events)
+        convert_sysmon_network(sysmon, network)
 
     if behaviour:
         sample_executed = [len(behaviour.get("processtree", [])),
@@ -144,7 +145,7 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
         process_network(network, al_result, validated_random_ip_range, routing, process_map, events, info["id"])
 
     if len(events) > 0:
-        process_all_events(al_result, events)
+        process_all_events(al_result, file_ext, events)
 
     if curtain:
         process_curtain(curtain, al_result, process_map)
@@ -153,7 +154,7 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
         process_hollowshunter(hollowshunter, al_result, process_map)
 
     if process_map:
-        process_decrypted_buffers(process_map, al_result)
+        process_decrypted_buffers(process_map, al_result, file_ext)
 
 
 def process_debug(debug: Dict[str, Any], parent_result_section: ResultSection) -> None:
@@ -350,7 +351,7 @@ def _get_trimming_index(sysmon: List[Dict[str, Any]]) -> int:
             val = data["@Name"]
             if not data.get("#text"):
                 continue
-            if val == "CurrentDirectory" and data["#text"] == 'C:\\Users\\buddy\\AppData\\Local\\Temp\\':
+            if val == "ParentCommandLine" and 'C:\\Users\\buddy\\AppData\\Local\\Temp\\' in data["#text"]:
                 # Okay now we have our baseline, everything before this was noise
                 # get index of eventdata
                 index = sysmon.index(event)
@@ -359,7 +360,7 @@ def _get_trimming_index(sysmon: List[Dict[str, Any]]) -> int:
 
 
 def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: ResultSection, inetsim_network: IPv4Network,
-                       target_filename: str, process_map: Dict[int, Dict[str, Any]], task_id: int,
+                       target_filename: str, process_map: Dict[int, Dict[str, Any]], task_id: int, file_ext: str,
                        signatures: Optional[List[Dict[str, Any]]] = None) -> bool:
     """
     This method processes the signatures section of the Cuckoo report, adding anything noteworthy to the
@@ -370,6 +371,7 @@ def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: Result
     :param target_filename: The name of the file that was submitted for analysis
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param task_id: An integer representing the Cuckoo Task ID
+    :param file_ext: The file extension of the file to be submitted
     :param signatures: A list of signatures that will be sent to the SandboxOntology helper class
     :return: A boolean flag that indicates if the is_process_martian signature was raised
     """
@@ -420,7 +422,7 @@ def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: Result
             if mark["type"] == "generic":
                 _tag_and_describe_generic_signature(sig_name, mark, sig_res, inetsim_network)
             elif mark["type"] == "ioc" and mark.get("category") not in SKIPPED_CATEGORY_IOCS:
-                _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network, process_map)
+                _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network, process_map, file_ext)
             elif mark["type"] == "call" and process_name is not None and len(process_names) == 0:
                 sig_res.add_line(f'\tProcess Name: {safe_str(process_name)}')
                 process_names.append(process_name)
@@ -717,6 +719,10 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
             else:
                 resolved_ips[answer] = {
                     "domain": request,
+                    "process_id": dns_call.get("pid"),
+                    "process_name": dns_call.get("image"),
+                    "time": dns_call.get("time"),
+                    "guid": dns_call.get("guid"),
                 }
     # now map process_name to the dns_call
     for process, process_details in process_map.items():
@@ -727,8 +733,10 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
                                           if details["domain"] == dns["hostname"]), None)
                 if not ip_mapped_to_host:
                     continue
-                resolved_ips[ip_mapped_to_host]["process_name"] = process_details["name"]
-                resolved_ips[ip_mapped_to_host]["process_id"] = process
+                if not resolved_ips[ip_mapped_to_host].get("process_name"):
+                    resolved_ips[ip_mapped_to_host]["process_name"] = process_details["name"]
+                if not resolved_ips[ip_mapped_to_host].get("process_id"):
+                    resolved_ips[ip_mapped_to_host]["process_id"] = process
     return resolved_ips
 
 
@@ -781,14 +789,17 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
                 "domain": None,
                 "dest_ip": dst,
                 "dest_port": network_call["dport"],
-                "image": None,
-                "pid": None,
-                "guid": None
+                "image": network_call.get("image"),
+                "pid": network_call.get("pid"),
+                "guid": network_call.get("guid")
             }
             if dst in resolved_ips.keys():
                 network_flow["domain"] = resolved_ips[dst]["domain"]
-                network_flow["image"] = resolved_ips[dst].get("process_name")
-                if network_flow["image"]:
+                if not network_flow["image"]:
+                    network_flow["image"] = resolved_ips[dst].get("process_name")
+                if not network_flow["guid"]:
+                    network_flow["guid"] = resolved_ips[dst].get("guid")
+                if network_flow["image"] and not network_flow["pid"]:
                     network_flow["pid"] = resolved_ips[dst]["process_id"]
             network_flows_table.append(network_flow)
     return network_flows_table, netflows_sec
@@ -838,10 +849,11 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]], proce
     return req_table
 
 
-def process_all_events(parent_result_section: ResultSection, events: Optional[List[Dict]] = None) -> None:
+def process_all_events(parent_result_section: ResultSection, file_ext: str, events: Optional[List[Dict]] = None) -> None:
     """
     This method converts all events to a table that is sorted by timestamp
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param file_ext: The file extension of the file to be submitted
     :param events: A list of events that occurred during the analysis of the task
     :return: None
     """
@@ -870,7 +882,7 @@ def process_all_events(parent_result_section: ResultSection, events: Optional[Li
             })
         elif isinstance(event, ProcessEvent):
             events_section.add_tag("dynamic.process.command_line", event.command_line)
-            _extract_iocs_from_text_blob(event.command_line, events_section)
+            _extract_iocs_from_text_blob(event.command_line, events_section, file_ext)
             if event.image:
                 events_section.add_tag("dynamic.process.file_name", event.image)
             event_table.append({
@@ -972,6 +984,111 @@ def convert_sysmon_processes(sysmon: Optional[List[Dict[str, Any]]] = None,
             events.append(ontology_process)
 
 
+def convert_sysmon_network(sysmon: List[Dict[str, Any]],
+                           network: Dict[str, Any]) -> None:
+    """
+    This method converts network connections observed by Sysmon to the format supported by Cuckoo
+    :param sysmon: A list of processes observed during the analysis of the task by the Sysmon tool
+    :param network: The JSON of the network section from the report generated by Cuckoo
+    :return: None
+    """
+    index = _get_trimming_index(sysmon)
+    trimmed_sysmon = sysmon[index:]
+    for event in trimmed_sysmon:
+        event_id = int(event["System"]["EventID"])
+
+        # There are two main EventIDs that describe network events: 3 (Network connection) and 22 (DNS query)
+        if event_id == 3:
+            protocol = None
+            network_conn = {
+                "src": None,
+                "dst": None,
+                "time": None,
+                "dport": None,
+                "sport": None,
+                "guid": None,
+                "pid": None,
+                "image": None,
+            }
+            for data in event["EventData"]["Data"]:
+                name = data["@Name"]
+                text = data.get("#text")
+                if name == "UtcTime":
+                    network_conn["time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                elif name == "ProcessGuid":
+                    network_conn["guid"] = text
+                elif name == "ProcessId":
+                    network_conn["pid"] = int(text)
+                elif name == "Image":
+                    network_conn["image"] = text
+                elif name == "Protocol":
+                    protocol = text.lower()
+                elif name == "SourceIp":
+                    network_conn["src"] = text
+                elif name == "SourcePort":
+                    network_conn["sport"] = int(text)
+                elif name == "DestinationIp":
+                    network_conn["dst"] = text
+                elif name == "DestinationPort":
+                    network_conn["dport"] = int(text)
+            if any(network_conn[key] is None for key in network_conn.keys()) or not protocol:
+                continue
+            elif any(
+                    req["dst"] == network_conn["dst"] and
+                    req["dport"] == network_conn["dport"] and
+                    req["src"] == network_conn["src"] and
+                    req["sport"] == network_conn["sport"]
+                    for req in network[protocol]
+            ):
+                # Replace record since we have more info from Sysmon
+                for req in network[protocol][:]:
+                    if req["dst"] == network_conn["dst"] and \
+                            req["dport"] == network_conn["dport"] and \
+                            req["src"] == network_conn["src"] and \
+                            req["sport"] == network_conn["sport"]:
+                        network[protocol].remove(req)
+                        network[protocol].append(network_conn)
+            else:
+                network[protocol].append(network_conn)
+        elif event_id == 22:
+            dns_query = {
+                "type": "A",
+                "request": None,
+                "answers": [],
+                "time": None,
+                "guid": None,
+                "pid": None,
+                "image": None,
+            }
+            for data in event["EventData"]["Data"]:
+                name = data["@Name"]
+                text = data.get("#text")
+                if name == "UtcTime":
+                    dns_query["time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                elif name == "ProcessGuid":
+                    dns_query["guid"] = text
+                elif name == "ProcessId":
+                    dns_query["pid"] = int(text)
+                elif name == "QueryName":
+                    if not slist_check_domain(text):
+                        dns_query["request"] = text
+                elif name == "QueryResults":
+                    ip = re.search(IP_REGEX, text).group(0)
+                    dns_query["answers"].append({"data": ip, "type": "A"})
+                elif name == "Image":
+                    dns_query["image"] = text
+            if any(dns_query[key] is None for key in dns_query.keys()):
+                continue
+            elif any(query["request"] == dns_query["request"] for query in network["dns"]):
+                # Replace record since we have more info from Sysmon
+                for query in network["dns"][:]:
+                    if query["request"] == dns_query["request"]:
+                        network["dns"].remove(query)
+                        network["dns"].append(dns_query)
+            else:
+                network["dns"].append(dns_query)
+
+
 def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: ResultSection,
                           process_map: Dict[int, Dict[str, Any]]) -> None:
     """
@@ -990,11 +1107,13 @@ def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: 
         parent_result_section.add_subsection(hollowshunter_res)
 
 
-def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_result_section: ResultSection) -> None:
+def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_result_section: ResultSection,
+                              file_ext: str) -> None:
     """
     This method checks for any decrypted buffers found in the process map, and adds them to the Assemblyline report
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
+    :param file_ext: The file extension of the file to be submitted
     :return:
     """
     buffer_res = ResultSection(title_text="Decrypted Buffers", body_format=BODY_FORMAT.TABLE)
@@ -1012,7 +1131,7 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
                 buffer = call["OutputDebugStringA"]["string"]
             if not buffer:
                 continue
-            _extract_iocs_from_text_blob(buffer, buffer_res)
+            _extract_iocs_from_text_blob(buffer, buffer_res, file_ext)
             if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
                 buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
     if len(buffer_body) > 0:
@@ -1299,7 +1418,8 @@ def _tag_and_describe_generic_signature(signature_name: str, mark: Dict[str, Any
 
 
 def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultSection,
-                                    inetsim_network: IPv4Network, process_map: Dict[int, Dict[str, Any]]) -> None:
+                                    inetsim_network: IPv4Network, process_map: Dict[int, Dict[str, Any]],
+                                    file_ext: str) -> None:
     """
     This method adds the appropriate tags and descriptions for "ioc" signatures
     :param signature_name: The name of the signature
@@ -1307,6 +1427,7 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
     :param sig_res: A ResultSection containing details about the signature
     :param inetsim_network: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :param file_ext: The file extension of the file to be submitted
     :return: None
     """
     ioc = mark["ioc"]
@@ -1340,7 +1461,7 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
         sig_res.add_tag("dynamic.process.file_name", ioc)
     elif mark["category"] == "cmdline":
         sig_res.add_tag("dynamic.process.command_line", ioc)
-        _extract_iocs_from_text_blob(ioc, sig_res)
+        _extract_iocs_from_text_blob(ioc, sig_res, file_ext)
 
 
 def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultSection,
@@ -1416,11 +1537,12 @@ def _remove_network_http_noise(sigs: List[Dict[str, Any]]) -> List[Dict[str, Any
         return sigs
 
 
-def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection) -> None:
+def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_ext: str) -> None:
     """
     This method searches for domains, IPs and URIs used in blobs of text and tags them
     :param blob: The blob of text that we will be searching through
     :param result_section: The result section that that tags will be added to
+    :param file_ext: The file extension of the file to be submitted
     :return: None
     """
     blob = blob.lower()
@@ -1436,12 +1558,14 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection) -> No
     for domain in domains:
         # File names match the domain and URI regexes, so we need to avoid tagging them
         # Note that get_tld only takes URLs so we will prepend http:// to the domain to work around this
-        if not get_tld(f"http://{domain}", fail_silently=True):
+        tld = get_tld(f"http://{domain}", fail_silently=True)
+        if tld is None or f".{tld}" == file_ext:
             continue
         safe_domain = safe_str(domain)
         result_section.add_tag("network.static.domain", safe_domain)
     for uri in uris:
-        if not get_tld(uri, fail_silently=True):
+        tld = get_tld(uri, fail_silently=True)
+        if tld is None or f".{tld}" == file_ext:
             continue
         safe_uri = safe_str(uri)
         result_section.add_tag("network.static.uri", safe_uri)
