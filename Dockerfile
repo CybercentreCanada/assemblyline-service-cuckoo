@@ -1,4 +1,5 @@
-FROM cccs/assemblyline-v4-service-base:latest
+ARG branch=latest
+FROM cccs/assemblyline-v4-service-base:$branch
 
 ENV SERVICE_PATH cuckoo.cuckoo_main.Cuckoo
 
