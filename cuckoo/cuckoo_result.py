@@ -460,6 +460,8 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     if len(dns_calls) > 0:
         title_text = "Protocol: DNS"
         dns_res_sec = ResultSection(title_text=title_text)
+        dns_res_sec.set_heuristic(1000)
+        dns_res_sec.add_tag("network.protocol", "dns")
 
     resolved_ips = _get_dns_map(dns_calls, process_map, routing)
     low_level_flows = {
@@ -503,10 +505,6 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                                 connect["port"] == network_flow["dest_port"]:
                             network_flow["image"] = process_details["name"] + " (" + str(process) + ")"
 
-            # Setting heuristics for appropriate sections
-            if dns_res_sec is not None and dns_res_sec.heuristic is None:
-                dns_res_sec.set_heuristic(1000)
-                dns_res_sec.add_tag("network.protocol", "dns")
             # Host is only detected if the ip was hardcoded, otherwise it is noise
             if protocol_res_sec is not None and protocol_res_sec.heuristic is None and dest_ip not in resolved_ips:
                 protocol_res_sec.set_heuristic(1001)
@@ -538,7 +536,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             # We want all key values for all network flows except for timestamps and event_type
             del network_flow["timestamp"]
 
-    if dns_res_sec and len(dns_res_sec.tags) > 0:
+    if dns_res_sec and len(dns_res_sec.tags.get("network.dynamic.domain", [])) > 0:
         network_res.add_subsection(dns_res_sec)
     if protocol_res_sec and len(protocol_res_sec.tags) > 0:
         network_res.add_subsection(protocol_res_sec)
