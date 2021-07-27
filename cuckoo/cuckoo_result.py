@@ -1014,6 +1014,8 @@ def convert_sysmon_network(sysmon: List[Dict[str, Any]],
             for data in event["EventData"]["Data"]:
                 name = data["@Name"]
                 text = data.get("#text")
+                if text is None:
+                    continue
                 if name == "UtcTime":
                     dns_query["time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
                 elif name == "ProcessGuid":
