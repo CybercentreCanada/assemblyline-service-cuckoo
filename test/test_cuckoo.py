@@ -187,24 +187,24 @@ def check_section_equality(this, that) -> bool:
     # Heuristics also need their own equality checks
     if this.heuristic and that.heuristic:
         heuristic_equality = this.heuristic.definition.attack_id == that.heuristic.definition.attack_id and \
-                             this.heuristic.definition.classification == that.heuristic.definition.classification and \
-                             this.heuristic.definition.description == that.heuristic.definition.description and \
-                             this.heuristic.definition.filetype == that.heuristic.definition.filetype and \
-                             this.heuristic.definition.heur_id == that.heuristic.definition.heur_id and \
-                             this.heuristic.definition.id == that.heuristic.definition.id and \
-                             this.heuristic.definition.max_score == that.heuristic.definition.max_score and \
-                             this.heuristic.definition.name == that.heuristic.definition.name and \
-                             this.heuristic.definition.score == that.heuristic.definition.score and \
-                             this.heuristic.definition.signature_score_map == \
-                             that.heuristic.definition.signature_score_map
+            this.heuristic.definition.classification == that.heuristic.definition.classification and \
+            this.heuristic.definition.description == that.heuristic.definition.description and \
+            this.heuristic.definition.filetype == that.heuristic.definition.filetype and \
+            this.heuristic.definition.heur_id == that.heuristic.definition.heur_id and \
+            this.heuristic.definition.id == that.heuristic.definition.id and \
+            this.heuristic.definition.max_score == that.heuristic.definition.max_score and \
+            this.heuristic.definition.name == that.heuristic.definition.name and \
+            this.heuristic.definition.score == that.heuristic.definition.score and \
+            this.heuristic.definition.signature_score_map == \
+            that.heuristic.definition.signature_score_map
 
         result_heuristic_equality = heuristic_equality and \
-                                    this.heuristic.attack_ids == that.heuristic.attack_ids and \
-                                    this.heuristic.frequency == that.heuristic.frequency and \
-                                    this.heuristic.heur_id == that.heuristic.heur_id and \
-                                    this.heuristic.score == that.heuristic.score and \
-                                    this.heuristic.score_map == that.heuristic.score_map and \
-                                    this.heuristic.signatures == that.heuristic.signatures
+            this.heuristic.attack_ids == that.heuristic.attack_ids and \
+            this.heuristic.frequency == that.heuristic.frequency and \
+            this.heuristic.heur_id == that.heuristic.heur_id and \
+            this.heuristic.score == that.heuristic.score and \
+            this.heuristic.score_map == that.heuristic.score_map and \
+            this.heuristic.signatures == that.heuristic.signatures
 
     elif not this.heuristic and not that.heuristic:
         result_heuristic_equality = True
@@ -213,13 +213,13 @@ def check_section_equality(this, that) -> bool:
 
     # Assuming we are given the "root section" at all times, it is safe to say that we don't need to confirm parent
     current_section_equality = result_heuristic_equality and \
-                               this.body == that.body and \
-                               this.body_format == that.body_format and \
-                               this.classification == that.classification and \
-                               this.depth == that.depth and \
-                               len(this.subsections) == len(that.subsections) and \
-                               this.title_text == that.title_text and \
-                               this.tags == that.tags
+        this.body == that.body and \
+        this.body_format == that.body_format and \
+        this.classification == that.classification and \
+        this.depth == that.depth and \
+        len(this.subsections) == len(that.subsections) and \
+        this.title_text == that.title_text and \
+        this.tags == that.tags
 
     if not current_section_equality:
         return False
@@ -394,7 +394,8 @@ class TestCuckooMain:
     @staticmethod
     def test_start(cuckoo_class_instance):
         cuckoo_class_instance.start()
-        assert cuckoo_class_instance.ssdeep_match_pct == int(cuckoo_class_instance.config.get('dedup_similar_percent', 40))
+        assert cuckoo_class_instance.ssdeep_match_pct == int(
+            cuckoo_class_instance.config.get('dedup_similar_percent', 40))
         assert cuckoo_class_instance.timeout == 120
         assert cuckoo_class_instance.max_report_size == cuckoo_class_instance.config.get('max_report_size', 275000000)
 
@@ -514,7 +515,8 @@ class TestCuckooMain:
 
         # Reboot coverage
         cuckoo_class_instance.config["reboot_supported"] = True
-        cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, [{"auth_header": "blah", "ip": "blah", "port": "blah"}], True, 1)
+        cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, [
+                                            {"auth_header": "blah", "ip": "blah", "port": "blah"}], True, 1)
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=Exception("blah")):
             with pytest.raises(Exception):
@@ -589,10 +591,10 @@ class TestCuckooMain:
             with pytest.raises(AnalysisTimeoutExceeded):
                 cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
             correct_sec = ResultSection("Assemblyline task timeout exceeded.",
-                                         body=f"The Cuckoo task {cuckoo_task.id} took longer than the "
-                                              f"Assemblyline's task timeout would allow.\nThis is usually due to "
-                                              f"an issue on Cuckoo's machinery end. Contact the Cuckoo "
-                                              f"administrator for details.")
+                                        body=f"The Cuckoo task {cuckoo_task.id} took longer than the "
+                                        f"Assemblyline's task timeout would allow.\nThis is usually due to "
+                                        f"an issue on Cuckoo's machinery end. Contact the Cuckoo "
+                                        f"administrator for details.")
             check_section_equality(parent_section.subsections[0], correct_sec)
             assert cuckoo_task.id is None
         elif (poll_started_status == TASK_MISSING and poll_report_status is None) or (poll_started_status == TASK_STARTED and poll_report_status == TASK_MISSING):
@@ -1152,16 +1154,21 @@ class TestCuckooMain:
             assert parent_section.subsections == []
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "machine_name, platform, expected_tags",
-        [
-            ("", "", []),
-            ("blah", "blah", [("dynamic.operating_system.platform", "Blah")]),
-            ("vmss-udev-win10x64", "windows", [("dynamic.operating_system.platform", "Windows"), ("dynamic.operating_system.processor", "x64"), ("dynamic.operating_system.version", "10")]),
-            ("vmss-udev-win7x86", "windows", [("dynamic.operating_system.platform", "Windows"), ("dynamic.operating_system.processor", "x86"), ("dynamic.operating_system.version", "7")]),
-            ("vmss-udev-ub1804x64", "linux", [("dynamic.operating_system.platform", "Linux"), ("dynamic.operating_system.processor", "x64"), ("dynamic.operating_system.version", "1804")]),
-        ]
-    )
+    @pytest.mark.parametrize("machine_name, platform, expected_tags",
+                             [("", "", []),
+                              ("blah", "blah", [("dynamic.operating_system.platform", "Blah")]),
+                              ("vmss-udev-win10x64", "windows",
+                               [("dynamic.operating_system.platform", "Windows"),
+                                ("dynamic.operating_system.processor", "x64"),
+                                ("dynamic.operating_system.version", "10")]),
+                              ("vmss-udev-win7x86", "windows",
+                               [("dynamic.operating_system.platform", "Windows"),
+                                ("dynamic.operating_system.processor", "x86"),
+                                ("dynamic.operating_system.version", "7")]),
+                              ("vmss-udev-ub1804x64", "linux",
+                               [("dynamic.operating_system.platform", "Linux"),
+                                ("dynamic.operating_system.processor", "x64"),
+                                ("dynamic.operating_system.version", "1804")]), ])
     def test_add_operating_system_tags(machine_name, platform, expected_tags, cuckoo_class_instance):
         from assemblyline_v4_service.common.result import ResultSection
 
@@ -1210,7 +1217,9 @@ class TestCuckooMain:
             ("unknown", "blah.html", ".html", "blah.html"),
         ]
     )
-    def test_assign_file_extension(file_type, test_file_name, correct_file_extension, correct_file_name, cuckoo_class_instance, dummy_request_class):
+    def test_assign_file_extension(
+            file_type, test_file_name, correct_file_extension, correct_file_name, cuckoo_class_instance,
+            dummy_request_class):
         from assemblyline.common.identify import tag_to_extension
         from cuckoo.cuckoo_main import SUPPORTED_EXTENSIONS
         kwargs = dict()
@@ -1415,7 +1424,13 @@ class TestCuckooMain:
         # Dummy DIRECTORY_ENTRY_EXPORT class
         class DirectoryEntryExport(object):
             def __init__(self):
-                self.symbols = [Symbol(None), Symbol("blah"), Symbol(b"blah"), Symbol("blah2"), Symbol("blah3"), Symbol("blah4")]
+                self.symbols = [
+                    Symbol(None),
+                    Symbol("blah"),
+                    Symbol(b"blah"),
+                    Symbol("blah2"),
+                    Symbol("blah3"),
+                    Symbol("blah4")]
 
         # Dummy PE class
         class FakePE(object):
@@ -1511,16 +1526,19 @@ class TestCuckooMain:
         cuckoo_class_instance.artifact_list = []
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
-        cuckoo_class_instance._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
+        cuckoo_class_instance._add_tar_ball_as_supplementary_file(
+            tar_file_name, tar_report_path, tar_report, cuckoo_task)
         assert cuckoo_class_instance.artifact_list[0]["path"] == tar_report_path
         assert cuckoo_class_instance.artifact_list[0]["name"] == tar_file_name
-        assert cuckoo_class_instance.artifact_list[0]["description"] == "Cuckoo Sandbox analysis report archive (tar.gz)"
+        assert cuckoo_class_instance.artifact_list[0][
+            "description"] == "Cuckoo Sandbox analysis report archive (tar.gz)"
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == False
 
         cuckoo_class_instance.request.task.supplementary = []
 
         mocker.patch('builtins.open', side_effect=Exception())
-        cuckoo_class_instance._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
+        cuckoo_class_instance._add_tar_ball_as_supplementary_file(
+            tar_file_name, tar_report_path, tar_report, cuckoo_task)
 
         # Cleanup
         os.remove(tar_report_path)
@@ -1660,9 +1678,11 @@ class TestCuckooMain:
             dummy_tar_member = dummy_tar_member_class(key, 1)
             tar_obj.members.append(dummy_tar_member)
             if key in ["supplementary", "shots"]:
-                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": False})
+                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}",
+                                             "description": val, "to_be_extracted": False})
             else:
-                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}", "description": val, "to_be_extracted": True})
+                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}",
+                                             "description": val, "to_be_extracted": True})
 
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance._extract_artifacts(tar_obj, task_id)
@@ -1689,11 +1709,26 @@ class TestCuckooMain:
         cuckoo_class_instance.artifact_list = []
         cuckoo_class_instance._extract_hollowshunter(tar_obj, task_id)
 
-        assert cuckoo_class_instance.artifact_list[0] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_dump_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_dump_report.json', "description": 'HollowsHunter report (json)', "to_be_extracted": False}
-        assert cuckoo_class_instance.artifact_list[1] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_scan_report.json", 'name': f'{task_id}_hollowshunter/hh_process_123_scan_report.json', "description": 'HollowsHunter report (json)', "to_be_extracted": False}
-        assert cuckoo_class_instance.artifact_list[2] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.exe", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.exe', "description": 'HollowsHunter Dump', "to_be_extracted": True}
-        assert cuckoo_class_instance.artifact_list[3] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.shc", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.shc', "description": 'HollowsHunter Dump', "to_be_extracted": True}
-        assert cuckoo_class_instance.artifact_list[4] == {"path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.dll", 'name': f'{task_id}_hollowshunter/hh_process_123_blah.dll', "description": 'HollowsHunter Dump', "to_be_extracted": True}
+        assert cuckoo_class_instance.artifact_list[0] == {
+            "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_dump_report.json",
+            'name': f'{task_id}_hollowshunter/hh_process_123_dump_report.json',
+            "description": 'HollowsHunter report (json)', "to_be_extracted": False}
+        assert cuckoo_class_instance.artifact_list[1] == {
+            "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_scan_report.json",
+            'name': f'{task_id}_hollowshunter/hh_process_123_scan_report.json',
+            "description": 'HollowsHunter report (json)', "to_be_extracted": False}
+        assert cuckoo_class_instance.artifact_list[2] == {
+            "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.exe",
+            'name': f'{task_id}_hollowshunter/hh_process_123_blah.exe', "description": 'HollowsHunter Dump',
+            "to_be_extracted": True}
+        assert cuckoo_class_instance.artifact_list[3] == {
+            "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.shc",
+            'name': f'{task_id}_hollowshunter/hh_process_123_blah.shc', "description": 'HollowsHunter Dump',
+            "to_be_extracted": True}
+        assert cuckoo_class_instance.artifact_list[4] == {
+            "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.dll",
+            'name': f'{task_id}_hollowshunter/hh_process_123_blah.dll', "description": 'HollowsHunter Dump',
+            "to_be_extracted": True}
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1711,22 +1746,38 @@ class TestCuckooMain:
         assert cuckoo_class_instance._safely_get_param(param) == correct_value
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "file_type, possible_images, auto_architecture, correct_result",
-        [
-            ("blah", [], {}, []),
-            ("blah", ["blah"], {}, []),
-            ("blah", ["winblahx64"], {}, ["winblahx64"]),
-            ("executable/linux/elf32", [], {}, []),
-            ("executable/linux/elf32", ["ubblahx86"], {}, ["ubblahx86"]),
-            ("executable/linux/elf32", ["ubblahx64"], {"ub": {"x86": ["ubblahx64"]}}, ["ubblahx64"]),
-            ("executable/windows/pe32", ["winblahx86"], {}, ["winblahx86"]),
-            ("executable/windows/pe32", ["winblahx86", "winblahblahx86"], {"win": {"x86": ["winblahblahx86"]}}, ["winblahblahx86"]),
-            ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {"win": {"x64": ["winblahx64"]}}, ["winblahx64"]),
-        ]
-    )
-    def test_determine_relevant_images(file_type, possible_images, correct_result, auto_architecture, cuckoo_class_instance):
-        assert cuckoo_class_instance._determine_relevant_images(file_type, possible_images, auto_architecture) == correct_result
+    @pytest.mark.parametrize("file_type, possible_images, auto_architecture, correct_result",
+                             [("blah", [],
+                               {},
+                               []),
+                              ("blah", ["blah"],
+                               {},
+                               []),
+                              ("blah", ["winblahx64"],
+                               {},
+                               ["winblahx64"]),
+                              ("executable/linux/elf32", [],
+                               {},
+                               []),
+                              ("executable/linux/elf32", ["ubblahx86"],
+                               {},
+                               ["ubblahx86"]),
+                              ("executable/linux/elf32", ["ubblahx64"],
+                               {"ub": {"x86": ["ubblahx64"]}},
+                               ["ubblahx64"]),
+                              ("executable/windows/pe32", ["winblahx86"],
+                               {},
+                               ["winblahx86"]),
+                              ("executable/windows/pe32", ["winblahx86", "winblahblahx86"],
+                               {"win": {"x86": ["winblahblahx86"]}},
+                               ["winblahblahx86"]),
+                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"],
+                               {"win": {"x64": ["winblahx64"]}},
+                               ["winblahx64"]), ])
+    def test_determine_relevant_images(
+            file_type, possible_images, correct_result, auto_architecture, cuckoo_class_instance):
+        assert cuckoo_class_instance._determine_relevant_images(
+            file_type, possible_images, auto_architecture) == correct_result
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1746,17 +1797,32 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "machine_requested, hosts, correct_result, correct_body",
-        [
-            ("", [{"machines": []}], (False, False), None),
-            ("", [{"machines": []}], (False, False), None),
-            ("True", [{"machines": []}], (True, False), 'The requested machine \'True\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current machine options for this Cuckoo deployment include [].'),
-            ("True", [{"machines": [{"name": "True"}]}], (True, True), None),
-            ("True:True", [{"machines": [{"name": "True"}]}], (True, True), None),
-            ("True:True", [{"ip": "True", "machines": [{"name": "True"}]}, {"ip": "True", "machines": []}], (True, True), None),
-            ("flag", [{"ip": "True", "machines": [{"name": "True"}]}, {"ip": "True", "machines": []}], (True, True), None),
-        ]
-    )
-    def test_handle_specific_machine(machine_requested, hosts, correct_result, correct_body, cuckoo_class_instance, dummy_result_class_instance, mocker):
+        [("", [{"machines": []}],
+          (False, False),
+          None),
+         ("", [{"machines": []}],
+          (False, False),
+          None),
+         ("True", [{"machines": []}],
+          (True, False),
+          'The requested machine \'True\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current machine options for this Cuckoo deployment include [].'),
+         ("True", [{"machines": [{"name": "True"}]}],
+          (True, True),
+          None),
+         ("True:True", [{"machines": [{"name": "True"}]}],
+          (True, True),
+          None),
+         ("True:True", [{"ip": "True", "machines": [{"name": "True"}]},
+                        {"ip": "True", "machines": []}],
+          (True, True),
+          None),
+         ("flag", [{"ip": "True", "machines": [{"name": "True"}]},
+                   {"ip": "True", "machines": []}],
+          (True, True),
+          None), ])
+    def test_handle_specific_machine(
+            machine_requested, hosts, correct_result, correct_body, cuckoo_class_instance, dummy_result_class_instance,
+            mocker):
         from cuckoo.cuckoo_main import Cuckoo
         from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=machine_requested)
@@ -1777,14 +1843,17 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "platform_requested, expected_return, expected_result_section",
-        [
-            ("blah", (True, {"blah": []}), 'The requested platform \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current platform options for this Cuckoo deployment include [\'linux\', \'windows\'].'),
-            ("none", (False, {}), None),
-            ("windows", (True, {'windows': ['blah']}), None),
-            ("linux", (True, {'linux': ['blah']}), None),
-        ]
-    )
-    def test_handle_specific_platform(platform_requested, expected_return, expected_result_section, cuckoo_class_instance, dummy_result_class_instance, mocker):
+        [("blah", (True, {"blah": []}),
+          'The requested platform \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current platform options for this Cuckoo deployment include [\'linux\', \'windows\'].'),
+         ("none", (False, {}),
+          None),
+         ("windows", (True, {'windows': ['blah']}),
+          None),
+         ("linux", (True, {'linux': ['blah']}),
+          None), ])
+    def test_handle_specific_platform(
+            platform_requested, expected_return, expected_result_section, cuckoo_class_instance,
+            dummy_result_class_instance, mocker):
         from cuckoo.cuckoo_main import Cuckoo
         from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=platform_requested)
@@ -1800,19 +1869,45 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body",
-        [
-            (False, False, [], [], (False, {}), None),
-            (False, True, [], [], (False, {}), None),
-            ("blah", False, [], [], (True, {}), 'The requested image \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-            ("blah", True, [], [], (True, {"blah": ["blah"]}), None),
-            ("auto", False, [], [], (True, {}), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-            ("auto", False, ["blah"], [], (True, {}), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-            ("auto", True, ["blah"], [], (True, {"blah": ["blah"]}), None),
-            ("all", True, [], ["blah"], (True, {"blah": ["blah"]}), None),
-            ("all", False, [], [], (True, {}), 'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-        ]
-    )
-    def test_handle_specific_image(image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body, cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
+        [(False, False, [],
+          [],
+          (False, {}),
+          None),
+         (False, True, [],
+          [],
+          (False, {}),
+          None),
+         ("blah", False, [],
+          [],
+          (True, {}),
+          'The requested image \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+         ("blah", True, [],
+          [],
+          (True, {"blah": ["blah"]}),
+          None),
+         ("auto", False, [],
+          [],
+          (True, {}),
+          'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+         ("auto", False, ["blah"],
+          [],
+          (True, {}),
+          'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+         ("auto", True, ["blah"],
+          [],
+          (True, {"blah": ["blah"]}),
+          None),
+         ("all", True, [],
+          ["blah"],
+          (True, {"blah": ["blah"]}),
+          None),
+         ("all", False, [],
+          [],
+          (True, {}),
+          'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'), ])
+    def test_handle_specific_image(
+            image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body,
+            cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
         from cuckoo.cuckoo_main import Cuckoo
         from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=image_requested)
@@ -1861,9 +1956,9 @@ class TestCuckooMain:
 
         parent_section = ResultSection("blah")
         correct_subsection = ResultSection("Invalid Analysis Timeout Requested",
-                                            body="The analysis timeout requested was 900, which exceeds the time that "
-                                                 "Assemblyline will run the service (800). Choose an analysis timeout "
-                                                 "value < 800 and submit the file again.")
+                                           body="The analysis timeout requested was 900, which exceeds the time that "
+                                           "Assemblyline will run the service (800). Choose an analysis timeout "
+                                           "value < 800 and submit the file again.")
         cuckoo_class_instance.request = dummy_request_class(analysis_timeout_in_seconds=900)
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is True
         assert check_section_equality(correct_subsection, parent_section.subsections[0])
@@ -1967,34 +2062,35 @@ class TestCuckooResult:
     @staticmethod
     @pytest.mark.parametrize(
         "api_report, correct_body",
-        [
-            ({}, None),
-            (
-                    {"info": {"started": "blah", "ended": "blah", "duration": "blah", "id": "blah", "route": "blah", "version": "blah"}},
-                    '{"Cuckoo Task ID": "blah", "Duration": -1, "Routing": "blah", "Cuckoo Version": "blah"}',
-            ),
-            (
-                    {"info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}},
-                    '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'
-            ),
-            (
-                    {"info": {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"}, "debug": "blah", "signatures": "blah", "network": "blah", "behavior": {"blah": "blah"}, "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
-                     None
-            ),
-            (
-                    {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"summary": "blah"}},
-                    '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'
-            ),
-            (
-                    {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"processtree": "blah"}},
-                    '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'
-            ),
-            (
-                    {"signatures": "blah", "info": {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}, "behavior": {"processes": "blah"}},
-                    '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'
-            ),
-        ]
-    )
+        [({},
+          None),
+         ({
+             "info":
+             {"started": "blah", "ended": "blah", "duration": "blah", "id": "blah", "route": "blah", "version": "blah"}},
+          '{"Cuckoo Task ID": "blah", "Duration": -1, "Routing": "blah", "Cuckoo Version": "blah"}',),
+         ({"info":
+           {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"}},
+          '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'),
+         ({"info":
+           {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"},
+           "debug": "blah", "signatures": "blah", "network": "blah", "behavior": {"blah": "blah"},
+           "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
+          None),
+         ({"signatures": "blah",
+           "info":
+           {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"},
+           "behavior": {"summary": "blah"}},
+          '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'),
+         ({"signatures": "blah",
+           "info":
+           {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"},
+           "behavior": {"processtree": "blah"}},
+          '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'),
+         ({"signatures": "blah",
+           "info":
+           {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"},
+           "behavior": {"processes": "blah"}},
+          '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'), ])
     def test_generate_al_result(api_report, correct_body, mocker):
         from cuckoo.cuckoo_result import generate_al_result
         from ipaddress import ip_network
@@ -2019,10 +2115,13 @@ class TestCuckooResult:
         if api_report == {}:
             assert al_result.subsections == []
         elif api_report.get("behavior") == {"blah": "blah"}:
-            correct_result_section = ResultSection(title_text='Sample Did Not Execute', body=f'No program available to execute a file with the following extension: {file_ext}')
+            correct_result_section = ResultSection(
+                title_text='Sample Did Not Execute',
+                body=f'No program available to execute a file with the following extension: {file_ext}')
             assert check_section_equality(al_result.subsections[1], correct_result_section)
         else:
-            correct_result_section = ResultSection(title_text='Analysis Information', body_format=BODY_FORMAT.KEY_VALUE, body=correct_body)
+            correct_result_section = ResultSection(
+                title_text='Analysis Information', body_format=BODY_FORMAT.KEY_VALUE, body=correct_body)
             assert check_section_equality(al_result.subsections[0], correct_result_section)
 
     @staticmethod
@@ -2086,13 +2185,13 @@ class TestCuckooResult:
     @staticmethod
     @pytest.mark.parametrize(
         "processes, correct_events",
-        [
-            ([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}], [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah"}]),
-            ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}], []),
-            ([], []),
-            (None, []),
-        ]
-    )
+        [([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}],
+          [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah"}]),
+         ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}],
+          []),
+         ([],
+          []),
+         (None, []), ])
     def test_convert_cuckoo_processes(processes, correct_events):
         from cuckoo.cuckoo_result import convert_cuckoo_processes
         actual_events = []
@@ -2102,12 +2201,14 @@ class TestCuckooResult:
     @staticmethod
     @pytest.mark.parametrize(
         "events, is_process_martian, correct_body",
-        [
-            ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], False, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
-            ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}], True, '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
-            ([], False, None),
-        ]
-    )
+        [([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}],
+          False,
+          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
+         ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}],
+          True,
+          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
+         ([],
+          False, None), ])
     def test_build_process_tree(events, is_process_martian, correct_body):
         from cuckoo.cuckoo_result import build_process_tree
         from assemblyline_v4_service.common.result import ResultSection, Heuristic, BODY_FORMAT
@@ -2175,7 +2276,8 @@ class TestCuckooResult:
             ("network_cnc_http", [{"name": "network_cnc_http", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 127.0.0.1"}]}, {"name": "network_http", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 127.0.0.1"}]}], "192.0.2.0/24", "", {2: {"name": "blah"}, 1: {"name": "blah"}}, None, False),
         ]
     )
-    def test_process_signatures(sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian):
+    def test_process_signatures(
+            sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian):
         from cuckoo.cuckoo_result import process_signatures
         from assemblyline.common.attack_map import revoke_map
         from ipaddress import ip_network
@@ -2183,7 +2285,8 @@ class TestCuckooResult:
         al_result = ResultSection("blah")
         task_id = 1
         file_ext = ".exe"
-        assert process_signatures(sigs, al_result, ip_network(random_ip_range), target_filename, process_map, task_id, file_ext) == correct_is_process_martian
+        assert process_signatures(sigs, al_result, ip_network(random_ip_range), target_filename,
+                                  process_map, task_id, file_ext) == correct_is_process_martian
         if correct_body is None:
             assert al_result.subsections == []
         else:
@@ -2275,7 +2378,8 @@ class TestCuckooResult:
         from ipaddress import ip_network
         from cuckoo.cuckoo_result import _is_signature_a_false_positive
         inetsim_network = ip_network("192.0.2.0/24")
-        assert _is_signature_a_false_positive(name, marks, filename, filename_remainder, inetsim_network) == expected_result
+        assert _is_signature_a_false_positive(
+            name, marks, filename, filename_remainder, inetsim_network) == expected_result
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -2290,7 +2394,8 @@ class TestCuckooResult:
             ("blah", {"description": "blah", "severity": 1, "families": ["blah"]}, ["blah"], 9999, 'blah\n\tFamilies: blah', []),
         ]
     )
-    def test_create_signature_result_section(name, signature, expected_tags, expected_heuristic_id, expected_description, expected_attack_ids):
+    def test_create_signature_result_section(
+            name, signature, expected_tags, expected_heuristic_id, expected_description, expected_attack_ids):
         from cuckoo.cuckoo_result import _create_signature_result_section, SCORE_TRANSLATION
         from assemblyline_v4_service.common.result import ResultSection, Heuristic
         expected_result = ResultSection(f"Signature: {name}", body=expected_description)
@@ -2303,7 +2408,8 @@ class TestCuckooResult:
         expected_result.heuristic = sig_heur
         translated_score = SCORE_TRANSLATION[signature["severity"]]
 
-        assert check_section_equality(_create_signature_result_section(name, signature, translated_score), expected_result)
+        assert check_section_equality(_create_signature_result_section(
+            name, signature, translated_score), expected_result)
 
     @staticmethod
     def test_write_console_output_to_file():
@@ -2314,29 +2420,62 @@ class TestCuckooResult:
         assert True
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "signature_name, mark, expected_tags, expected_body",
-        [
-            ("blah", {}, {}, None),
-            ("network_cnc_http", {"suspicious_request": "evil http://evil.com", "suspicious_features": "http://evil.com"}, {'network.dynamic.uri': ['http://evil.com']}, '\tFun fact: http://evil.com\n\tIOC: evil http://evil.com'),
-            ("network_cnc_http", {"suspicious_request": "benign http://w3.org"}, {}, None),
-            ("nolookup_communication", {"host": "193.0.2.123"}, {'network.dynamic.ip': ['193.0.2.123']}, None),
-            ("nolookup_communication", {"host": "192.0.2.123"}, {}, None),
-            ("suspicious_powershell", {"options": "blah", "option": "blah", "value": "blah"}, {}, '\tIOC: blah via blah'),
-            ("suspicious_powershell", {"value": "blah"}, {}, '\tIOC: blah'),
-            ("exploit_heapspray", {"protection": "blah"}, {}, '\tFun fact: Data was committed to memory at the protection level blah'),
-            ("exploit_heapspray", {"protection": "blah"}, {}, '\tFun fact: Data was committed to memory at the protection level blah'),
-            ("blah", {"type": "blah"}, {}, None),
-            ("blah", {"suspicious_features": "blah"}, {}, None),
-            ("blah", {"entropy": "blah"}, {}, None),
-            ("blah", {"process": "blah"}, {}, None),
-            ("blah", {"useragent": "blah"}, {}, None),
-            ("blah", {"blah": "192.0.2.123"}, {}, None),
-            ("blah", {"blah": "193.0.2.123"}, {}, '\tIOC: 193.0.2.123'),
-            ("blah", {"blah": "blah"}, {}, '\tIOC: blah'),
-            ("blah", {"description": "blah"}, {}, '\tFun fact: blah'),
-        ]
-    )
+    @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body",
+                             [("blah", {},
+                               {},
+                               None),
+                              ("network_cnc_http",
+                               {"suspicious_request": "evil http://evil.com", "suspicious_features": "http://evil.com"},
+                               {'network.dynamic.uri': ['http://evil.com']},
+                               '\tFun fact: http://evil.com\n\tIOC: evil http://evil.com'),
+                              ("network_cnc_http", {"suspicious_request": "benign http://w3.org"},
+                               {},
+                               None),
+                              ("nolookup_communication", {"host": "193.0.2.123"},
+                               {'network.dynamic.ip': ['193.0.2.123']},
+                               None),
+                              ("nolookup_communication", {"host": "192.0.2.123"},
+                               {},
+                               None),
+                              ("suspicious_powershell", {"options": "blah", "option": "blah", "value": "blah"},
+                               {},
+                               '\tIOC: blah via blah'),
+                              ("suspicious_powershell", {"value": "blah"},
+                               {},
+                               '\tIOC: blah'),
+                              ("exploit_heapspray", {"protection": "blah"},
+                               {},
+                               '\tFun fact: Data was committed to memory at the protection level blah'),
+                              ("exploit_heapspray", {"protection": "blah"},
+                               {},
+                               '\tFun fact: Data was committed to memory at the protection level blah'),
+                              ("blah", {"type": "blah"},
+                               {},
+                               None),
+                              ("blah", {"suspicious_features": "blah"},
+                               {},
+                               None),
+                              ("blah", {"entropy": "blah"},
+                               {},
+                               None),
+                              ("blah", {"process": "blah"},
+                               {},
+                               None),
+                              ("blah", {"useragent": "blah"},
+                               {},
+                               None),
+                              ("blah", {"blah": "192.0.2.123"},
+                               {},
+                               None),
+                              ("blah", {"blah": "193.0.2.123"},
+                               {},
+                               '\tIOC: 193.0.2.123'),
+                              ("blah", {"blah": "blah"},
+                               {},
+                               '\tIOC: blah'),
+                              ("blah", {"description": "blah"},
+                               {},
+                               '\tFun fact: blah'), ])
     def test_tag_and_describe_generic_signature(signature_name, mark, expected_tags, expected_body):
         from ipaddress import ip_network
         from assemblyline_v4_service.common.result import ResultSection
@@ -2385,26 +2524,41 @@ class TestCuckooResult:
         assert check_section_equality(actual_result, expected_result)
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "signature_name, mark, expected_tags, expected_body",
-        [
-            ("blah", {"blah": "blah"}, {}, None),
-            ("creates_hidden_file", {"call": {"arguments": {}}}, {}, None),
-            ("creates_hidden_file", {"call": {"arguments": {"filepath": "blah"}}}, {"dynamic.process.file_name": ["blah"]}, None),
-            ("moves_self", {"call": {"arguments": {}}}, {}, None),
-            ("moves_self", {"call": {"arguments": {"oldfilepath": "blah1", "newfilepath": "blah2"}}}, {"dynamic.process.file_name": ["blah1", "blah2"]}, '\tOld file path: blah1\n\tNew file path: blah2'),
-            ("moves_self", {"call": {"arguments": {"oldfilepath": "blah", "newfilepath": ""}}}, {"dynamic.process.file_name": ["blah"]}, '\tOld file path: blah\n\tNew file path: File deleted itself'),
-            ("creates_service", {"call": {"arguments": {}}}, {}, None),
-            ("creates_service", {"call": {"arguments": {"service_name": "blah"}}}, {}, '\tNew service name: blah'),
-            ("terminates_remote_process", {"call": {"arguments": {"process_identifier": 1}}}, {}, '\tTerminated Remote Process: blah'),
-        ]
-    )
+    @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body",
+                             [("blah", {"blah": "blah"},
+                               {},
+                               None),
+                              ("creates_hidden_file", {"call": {"arguments": {}}},
+                               {},
+                               None),
+                              ("creates_hidden_file", {"call": {"arguments": {"filepath": "blah"}}},
+                               {"dynamic.process.file_name": ["blah"]},
+                               None),
+                              ("moves_self", {"call": {"arguments": {}}},
+                               {},
+                               None),
+                              ("moves_self",
+                               {"call": {"arguments": {"oldfilepath": "blah1", "newfilepath": "blah2"}}},
+                               {"dynamic.process.file_name": ["blah1", "blah2"]},
+                               '\tOld file path: blah1\n\tNew file path: blah2'),
+                              ("moves_self", {"call": {"arguments": {"oldfilepath": "blah", "newfilepath": ""}}},
+                               {"dynamic.process.file_name": ["blah"]},
+                               '\tOld file path: blah\n\tNew file path: File deleted itself'),
+                              ("creates_service", {"call": {"arguments": {}}},
+                               {},
+                               None),
+                              ("creates_service", {"call": {"arguments": {"service_name": "blah"}}},
+                               {},
+                               '\tNew service name: blah'),
+                              ("terminates_remote_process", {"call": {"arguments": {"process_identifier": 1}}},
+                               {},
+                               '\tTerminated Remote Process: blah'), ])
     def test_tag_and_describe_call_signature(signature_name, mark, expected_tags, expected_body):
         from assemblyline_v4_service.common.result import ResultSection
         from cuckoo.cuckoo_result import _tag_and_describe_call_signature
         expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
         actual_result = ResultSection("blah")
-        process_map = {1 : {"name": "blah"}}
+        process_map = {1: {"name": "blah"}}
         _tag_and_describe_call_signature(signature_name, mark, actual_result, process_map)
         assert check_section_equality(actual_result, expected_result)
 
@@ -2459,16 +2613,38 @@ class TestCuckooResult:
     @staticmethod
     @pytest.mark.parametrize(
         "resolved_ips, flows, expected_return",
-        [
-            ({}, {}, ([], "")),
-            ({}, {"udp": []}, ([], "")),
-            ({}, {"udp": [{"dst": "blah", "src": "1.1.1.1", "time": "blah", "dport": "blah"}]}, ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None, 'protocol': 'udp', 'src_ip': None, 'src_port': None, 'timestamp': 'blah'}], "")),
-            ({}, {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]}, ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None, 'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}], "")),
-            ({"blah": {"domain": "blah"}}, {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]}, ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': None, 'pid': None, 'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}], "")),
-            ({"blah": {"domain": "blah", "process_name": "blah", "process_id": "blah"}}, {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]}, ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': "blah", 'pid': "blah", 'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}], "")),
-            ({}, {}, ([], "flag"))
-        ]
-    )
+        [({},
+          {},
+          ([],
+           "")),
+         ({},
+          {"udp": []},
+          ([],
+           "")),
+         ({},
+          {"udp": [{"dst": "blah", "src": "1.1.1.1", "time": "blah", "dport": "blah"}]},
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None,
+             'protocol': 'udp', 'src_ip': None, 'src_port': None, 'timestamp': 'blah'}],
+           "")),
+         ({},
+          {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]},
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None,
+             'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
+           "")),
+         ({"blah": {"domain": "blah"}},
+          {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]},
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': None, 'pid': None,
+             'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
+           "")),
+         ({"blah": {"domain": "blah", "process_name": "blah", "process_id": "blah"}},
+          {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]},
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': "blah", 'pid': "blah",
+             'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
+           "")),
+         ({},
+          {},
+          ([],
+           "flag"))])
     def test_get_low_level_flows(resolved_ips, flows, expected_return):
         from cuckoo.cuckoo_result import _get_low_level_flows
         from assemblyline_v4_service.common.result import ResultSection
@@ -2535,7 +2711,8 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _process_non_http_traffic_over_http
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
         test_parent_section = ResultSection("blah")
-        network_flows = [{"dest_port": 80, "dest_ip": "127.0.0.1", "domain": "blah.blah"}, {"dest_port": 443, "dest_ip": "127.0.0.2", "domain": "blah2.blah"}]
+        network_flows = [{"dest_port": 80, "dest_ip": "127.0.0.1", "domain": "blah.blah"},
+                         {"dest_port": 443, "dest_ip": "127.0.0.2", "domain": "blah2.blah"}]
         correct_result_section = ResultSection("Non-HTTP Traffic Over HTTP Ports")
         correct_result_section.set_heuristic(1005)
         correct_result_section.tags = {
@@ -2554,7 +2731,9 @@ class TestCuckooResult:
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
 
         al_result = ResultSection("blah")
-        events = [{"timestamp": 1, "image": "blah", 'pid': 1, 'src_port': 1, 'dest_ip': "blah", 'src_ip': "blah", 'dest_port': 1, 'guid': "blah", 'protocol': "blah", 'domain': "blah"}, {"pid": 1, "ppid": 1, "guid": "blah", "command_line": "blah", "image": "blah", "timestamp": 2}]
+        events = [{"timestamp": 1, "image": "blah", 'pid': 1, 'src_port': 1, 'dest_ip': "blah", 'src_ip': "blah",
+                   'dest_port': 1, 'guid': "blah", 'protocol': "blah", 'domain': "blah"},
+                  {"pid": 1, "ppid": 1, "guid": "blah", "command_line": "blah", "image": "blah", "timestamp": 2}]
 
         correct_result_section = ResultSection(title_text="Event Log")
 
@@ -2570,12 +2749,12 @@ class TestCuckooResult:
     @staticmethod
     @pytest.mark.parametrize(
         "curtain, process_map",
-    [
-        ({}, {0: {"blah": "blah"}}),
-        ({"1": {"events": [{"command": {"original": "blah", "altered": "blah"}}], "behaviors": ["blah"]}}, {0: {"blah": "blah"}}),
-        ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {0: {"blah": "blah"}}),
-        ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {1: {"name": "blah.exe"}}),
-    ])
+        [
+            ({}, {0: {"blah": "blah"}}),
+            ({"1": {"events": [{"command": {"original": "blah", "altered": "blah"}}], "behaviors": ["blah"]}}, {0: {"blah": "blah"}}),
+            ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {0: {"blah": "blah"}}),
+            ({"1": {"events": [{"command": {"original": "blah", "altered": "No alteration of event"}}], "behaviors": ["blah"]}}, {1: {"name": "blah.exe"}}),
+        ])
     def test_process_curtain(curtain, process_map):
         from cuckoo.cuckoo_result import process_curtain
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
@@ -2608,25 +2787,32 @@ class TestCuckooResult:
             assert al_result.subsections == []
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "sysmon, correct_processes",
-        [
-            (None, []),
-            ([], []),
-            (
-                    [{"EventData": {
-                        "Data": [{"@Name": "ParentProcessId", "#text": "2"},
-                                 {"@Name": "Image", "#text": "blah.exe"}, {"@Name": "CommandLine", "#text": "./blah"},
-                                 {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
-                                 {"@Name": "ProcessGuid", "#text": "blah"}]}}],
-                    []
-            ),
-            (
-                    [{"EventData": {"Data": [{"@Name": "ProcessId", "#text": "1"}, {"@Name": "ParentProcessId", "#text": "2"}, {"@Name": "Image", "#text": "blah.exe"}, {"@Name": "CommandLine", "#text": "./blah"}, {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"}, {"@Name": "ProcessGuid", "#text": "blah"}]}}],
-                    [{'pid': 1, 'ppid': 2, 'timestamp': 43932.12, "command_line": "./blah", "image": "blah.exe", "guid": "blah"}]
-            ),
-        ]
-    )
+    @pytest.mark.parametrize("sysmon, correct_processes",
+                             [(None, []),
+                              ([],
+                               []),
+                              ([{
+                                  "EventData":
+                                  {
+                                      "Data":
+                                      [{"@Name": "ParentProcessId", "#text": "2"},
+                                       {"@Name": "Image", "#text": "blah.exe"},
+                                          {"@Name": "CommandLine", "#text": "./blah"},
+                                          {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
+                                          {"@Name": "ProcessGuid", "#text": "blah"}]}}],
+                               []),
+                              ([{
+                                  "EventData":
+                                  {
+                                      "Data":
+                                      [{"@Name": "ProcessId", "#text": "1"},
+                                       {"@Name": "ParentProcessId", "#text": "2"},
+                                          {"@Name": "Image", "#text": "blah.exe"},
+                                          {"@Name": "CommandLine", "#text": "./blah"},
+                                          {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
+                                          {"@Name": "ProcessGuid", "#text": "blah"}]}}],
+                               [{'pid': 1, 'ppid': 2, 'timestamp': 43932.12, "command_line": "./blah",
+                                 "image": "blah.exe", "guid": "blah"}]), ])
     def test_convert_sysmon_processes(sysmon, correct_processes, dummy_result_class_instance, mocker):
         from cuckoo.cuckoo_result import convert_sysmon_processes
         actual_events = []
@@ -2638,108 +2824,108 @@ class TestCuckooResult:
     @pytest.mark.parametrize(
         "sysmon, actual_network, correct_network",
         [
-             ([], {}, {}),
-             ([], {}, {}),
-             ([{"System": {"EventID": '1'}}], {}, {}),
-             ([{
+            ([], {}, {}),
+            ([], {}, {}),
+            ([{"System": {"EventID": '1'}}], {}, {}),
+            ([{
                 "System": {"EventID": '3'},
                 "EventData": {"Data":
-                    [
-                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                        {"@Name": "ProcessGuid", "#text": "{blah}"},
-                        {"@Name": "ProcessId", "#text": "123"},
-                        {"@Name": "Image", "#text": "blah.exe"},
-                        {"@Name": "SourceIp", "#text": "10.10.10.10"},
-                        {"@Name": "SourcePort", "#text": "123"},
-                        {"@Name": "DestinationIp", "#text": "11.11.11.11"},
-                        {"@Name": "DestinationPort", "#text": "321"},
-                    ]
-                }}], {"tcp": []}, {'tcp': []}),
-             ([{
-                 "System": {"EventID": '3'},
-                 "EventData": {"Data":
-                    [
-                       {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                       {"@Name": "ProcessGuid", "#text": "{blah}"},
-                       {"@Name": "ProcessId", "#text": "123"},
-                       {"@Name": "Image", "#text": "blah.exe"},
-                       {"@Name": "Protocol", "#text": "tcp"},
-                       {"@Name": "SourceIp", "#text": "10.10.10.10"},
-                       {"@Name": "SourcePort", "#text": "123"},
-                       {"@Name": "DestinationIp", "#text": "11.11.11.11"},
-                       {"@Name": "DestinationPort", "#text": "321"},
-                    ]
-                 }}], {"tcp": []}, {'tcp': [{'dport': 321, 'dst': '11.11.11.11', 'guid': '{blah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123, 'src': '10.10.10.10', 'time': 1627054921.001}]}),
-             ([{
+                              [
+                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
+                                  {"@Name": "ProcessId", "#text": "123"},
+                                  {"@Name": "Image", "#text": "blah.exe"},
+                                  {"@Name": "SourceIp", "#text": "10.10.10.10"},
+                                  {"@Name": "SourcePort", "#text": "123"},
+                                  {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+                                  {"@Name": "DestinationPort", "#text": "321"},
+                              ]
+                              }}], {"tcp": []}, {'tcp': []}),
+            ([{
                 "System": {"EventID": '3'},
                 "EventData": {"Data":
-                    [
-                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                        {"@Name": "ProcessGuid", "#text": "{blah}"},
-                        {"@Name": "ProcessId", "#text": "123"},
-                        {"@Name": "Image", "#text": "blah.exe"},
-                        {"@Name": "Protocol", "#text": "tcp"},
-                        {"@Name": "SourceIp", "#text": "10.10.10.10"},
-                        {"@Name": "SourcePort", "#text": "123"},
-                        {"@Name": "DestinationIp", "#text": "11.11.11.11"},
-                        {"@Name": "DestinationPort", "#text": "321"},
-                    ]
-                }}], {"tcp": [{"dst": '11.11.11.11', "dport": 321, "src": '10.10.10.10', "sport": 123}]}, {'tcp': [
-                {'dport': 321, 'dst': '11.11.11.11', 'guid': '{blah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123,
-                 'src': '10.10.10.10', 'time': 1627054921.001}]}),
-             ([{
+                              [
+                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
+                                  {"@Name": "ProcessId", "#text": "123"},
+                                  {"@Name": "Image", "#text": "blah.exe"},
+                                  {"@Name": "Protocol", "#text": "tcp"},
+                                  {"@Name": "SourceIp", "#text": "10.10.10.10"},
+                                  {"@Name": "SourcePort", "#text": "123"},
+                                  {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+                                  {"@Name": "DestinationPort", "#text": "321"},
+                              ]
+                              }}], {"tcp": []}, {'tcp': [{'dport': 321, 'dst': '11.11.11.11', 'guid': '{blah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123, 'src': '10.10.10.10', 'time': 1627054921.001}]}),
+            ([{
+                "System": {"EventID": '3'},
+                "EventData": {"Data":
+                              [
+                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
+                                  {"@Name": "ProcessId", "#text": "123"},
+                                  {"@Name": "Image", "#text": "blah.exe"},
+                                  {"@Name": "Protocol", "#text": "tcp"},
+                                  {"@Name": "SourceIp", "#text": "10.10.10.10"},
+                                  {"@Name": "SourcePort", "#text": "123"},
+                                  {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+                                  {"@Name": "DestinationPort", "#text": "321"},
+                              ]
+                              }}], {"tcp": [{"dst": '11.11.11.11', "dport": 321, "src": '10.10.10.10', "sport": 123}]}, {'tcp': [
+                                  {'dport': 321, 'dst': '11.11.11.11', 'guid': '{blah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123,
+                                   'src': '10.10.10.10', 'time': 1627054921.001}]}),
+            ([{
                 "System": {"EventID": '22'},
                 "EventData": {"Data":
-                    [
-                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                        {"@Name": "ProcessGuid", "#text": "{blah}"},
-                        {"@Name": "ProcessId", "#text": "123"},
-                        {"@Name": "Image", "#text": "blah.exe"},
-                        {"@Name": "QueryName", "#text": "blah.com"},
-                        {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
-                    ]
-                }}], {"dns": []}, {'dns': [
-                {
-                    'answers': [{'data': '10.10.10.10', 'type': 'A'}],
-                    'guid': '{blah}',
-                    'image': 'blah.exe',
-                    'pid': 123,
-                    'request': 'blah.com',
-                    'time': 1627054921.001,
-                    'type': 'A'
-                }]}),
-             ([{
+                              [
+                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
+                                  {"@Name": "ProcessId", "#text": "123"},
+                                  {"@Name": "Image", "#text": "blah.exe"},
+                                  {"@Name": "QueryName", "#text": "blah.com"},
+                                  {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
+                              ]
+                              }}], {"dns": []}, {'dns': [
+                                  {
+                                      'answers': [{'data': '10.10.10.10', 'type': 'A'}],
+                                      'guid': '{blah}',
+                                      'image': 'blah.exe',
+                                      'pid': 123,
+                                      'request': 'blah.com',
+                                      'time': 1627054921.001,
+                                      'type': 'A'
+                                  }]}),
+            ([{
                 "System": {"EventID": '22'},
                 "EventData": {"Data":
-                    [
-                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                        {"@Name": "ProcessId", "#text": "123"},
-                        {"@Name": "Image", "#text": "blah.exe"},
-                        {"@Name": "QueryName", "#text": "blah.com"},
-                        {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
-                    ]
-                }}], {"dns": []}, {'dns': []}),
-             ([{
+                              [
+                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                                  {"@Name": "ProcessId", "#text": "123"},
+                                  {"@Name": "Image", "#text": "blah.exe"},
+                                  {"@Name": "QueryName", "#text": "blah.com"},
+                                  {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
+                              ]
+                              }}], {"dns": []}, {'dns': []}),
+            ([{
                 "System": {"EventID": '22'},
                 "EventData": {"Data":
-                    [
-                        {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                        {"@Name": "ProcessGuid", "#text": "{blah}"},
-                        {"@Name": "ProcessId", "#text": "123"},
-                        {"@Name": "Image", "#text": "blah.exe"},
-                        {"@Name": "QueryName", "#text": "blah.com"},
-                        {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
-                    ]
-                }}], {"dns": [{"request": "blah.com"}]}, {'dns': [
-                {
-                    'answers': [{'data': '10.10.10.10', 'type': 'A'}],
-                    'guid': '{blah}',
-                    'image': 'blah.exe',
-                    'pid': 123,
-                    'request': 'blah.com',
-                    'time': 1627054921.001,
-                    'type': 'A'
-                }]}
+                              [
+                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
+                                  {"@Name": "ProcessId", "#text": "123"},
+                                  {"@Name": "Image", "#text": "blah.exe"},
+                                  {"@Name": "QueryName", "#text": "blah.com"},
+                                  {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
+                              ]
+                              }}], {"dns": [{"request": "blah.com"}]}, {'dns': [
+                                  {
+                                      'answers': [{'data': '10.10.10.10', 'type': 'A'}],
+                                      'guid': '{blah}',
+                                      'image': 'blah.exe',
+                                      'pid': 123,
+                                      'request': 'blah.com',
+                                      'time': 1627054921.001,
+                                      'type': 'A'
+                                  }]}
              ),
 
         ]
@@ -2768,18 +2954,21 @@ class TestCuckooResult:
     #     assert check_section_equality(al_result.sections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "process_map, correct_buffer_body, correct_tags",
-        [
-            ({0: {"decrypted_buffers": []}}, None, {}),
-            ({0: {"decrypted_buffers": [{"blah": "blah"}]}}, None, {}),
-            ({0: {"decrypted_buffers": [{"CryptDecrypt": {"buffer": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', {}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}}, '[{"Decrypted Buffer": "blah"}]', {}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}}, '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1']}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.ca"}}]}}, '[{"Decrypted Buffer": "blah.ca"}]', {'network.static.domain': ['blah.ca']}),
-            ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}}, '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1']}),
-        ]
-    )
+    @pytest.mark.parametrize("process_map, correct_buffer_body, correct_tags",
+                             [({0: {"decrypted_buffers": []}},
+                               None, {}),
+                              ({0: {"decrypted_buffers": [{"blah": "blah"}]}},
+                               None, {}),
+                              ({0: {"decrypted_buffers": [{"CryptDecrypt": {"buffer": "blah"}}]}},
+                               '[{"Decrypted Buffer": "blah"}]', {}),
+                              ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}},
+                               '[{"Decrypted Buffer": "blah"}]', {}),
+                              ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}},
+                               '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1']}),
+                              ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.ca"}}]}},
+                               '[{"Decrypted Buffer": "blah.ca"}]', {'network.static.domain': ['blah.ca']}),
+                              ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}},
+                               '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1']}), ])
     def test_process_decrypted_buffers(process_map, correct_buffer_body, correct_tags):
         from cuckoo.cuckoo_result import process_decrypted_buffers
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
@@ -3390,212 +3579,208 @@ class TestSignatures:
         }
 
         assert CUCKOO_SIGNATURE_CATEGORIES == {
-          "Exploit": {
-            "id": 1,
-            "description": "Exploits an known software vulnerability or security flaw."
-          },
-          "PowerShell": {
-            "id": 2,
-            "description": "Leverages Powershell to attack Windows operating systems."
-          },
-          "Hacking tool": {
-            "id": 3,
-            "description": "Programs designed to crack or break computer and network security measures."
-          },
-          "Locker": {
-            "id": 4,
-            "description": "Prevents access to system data and files."
-          },
-          "Anti-analysis": {
-            "id": 5,
-            "description": "Constructed to conceal or obfuscate itself to prevent analysis."
-          },
-          "Suspicious PDF API": {
-            "id": 6,
-            "description": "Makes API calls not consistent with expected/standard behaviour."
-          },
-          "Suspicious Android API": {
-            "id": 7,
-            "description": "Makes API calls not consistent with expected/standard behaviour."
-          },
-          "Anti-antivirus": {
-            "id": 8,
-            "description": "Attempts to conceal itself from detection by anti-virus."
-          },
-          "Anti-vm": {
-            "id": 9,
-            "description": "Attempts to detect if it is being run in virtualized environment."
-          },
-          "Anti-Debug": {
-            "id": 10,
-            "description": "Attempts to detect if it is being debugged."
-          },
-          "Worm": {
-            "id": 11,
-            "description": "Attempts to replicate itself in order to spread to other systems."
-          },
-          "Cloud": {
-            "id": 12,
-            "description": "Makes connection to cloud service."
-          },
-          "Virus": {
-            "id": 13,
-            "description": "Malicious software program"
-          },
-          "Suspicious Office": {
-            "id": 14,
-            "description": "Makes API calls not consistent with expected/standard behaviour"
-          },
-          "Ransomware": {
-            "id": 15,
-            "description": "Designed to block access to a system until a sum of money is paid."
-          },
-          "Persistence": {
-            "id": 16,
-            "description": "Technique used to maintain presence in system(s) across interruptions that could cut off access."
-          },
-          "Injection": {
-            "id": 17,
-            "description": "Input is not properly validated and gets processed by an interpreter as part of a command or query."
-          },
-          "Dropper": {
-            "id": 18,
-            "description": "Trojan that drops additional malware on an affected system."
-          },
-          "Suspicious Execution Chain": {
-            "id": 19,
-            "description": "Command shell or script process was created by unexpected parent process."
-          },
-          "Trojan": {
-            "id": 20,
-            "description": "Presents itself as legitimate in attempt to infiltrate a system."
-          },
-          "RAT": {
-            "id": 21,
-            "description": "Designed to provide the capability of covert surveillance and/or unauthorized access to a target."
-          },
-          "C2": {
-            "id": 22,
-            "description": "Communicates with a server controlled by a malicious actor."
-          },
-          "Tor": {
-            "id": 23,
-            "description": "Intalls/Leverages Tor to enable anonymous communication."
-          },
-          "Web Mail": {
-            "id": 24,
-            "description": "Connects to smtp.[domain] for possible spamming or data exfiltration."
-          },
-          "Anti-sandbox": {
-            "id": 25,
-            "description": "Attempts to detect if it is in a sandbox."
-          },
-          "Stealth": {
-            "id": 26,
-            "description": "Leverages/modifies internal processes and settings to conceal itself."
-          },
-          "Packer": {
-            "id": 27,
-            "description": "Compresses, encrypts, and/or modifies a malicious file's format."
-          },
-          "Banker": {
-            "id": 28,
-            "description": "Designed to gain access to confidential information stored or processed through online banking."
-          },
-          "Point-of-sale": {
-            "id": 29,
-            "description": "Steals information related to financial transactions, including credit card information."
-          },
-          "Bypass": {
-            "id": 30,
-            "description": "Attempts to bypass operating systems security controls (firewall, amsi, applocker, etc.)"
-          },
-          "Crash": {
-            "id": 31,
-            "description": "Attempts to crash the system."
-          },
-          "IM": {
-            "id": 32,
-            "description": "Leverages instant-messaging."
-          },
-          "Rootkit": {
-            "id": 33,
-            "description": "Designed to provide continued privileged access to a system while actively hiding its presence."
-          },
-          "Adware": {
-            "id": 34,
-            "description": "Displays unwanted, unsolicited advertisements."
-          },
-          "Infostealer": {
-            "id": 35,
-            "description": "Collects and disseminates information such as login details, usernames, passwords, etc."
-          },
-          "WMI": {
-            "id": 36,
-            "description": "Leverages Windows Management Instrumentation (WMI) to gather information and/or execute a process."
-          },
-          "Downloader": {
-            "id": 37,
-            "description": "Trojan that downloads installs files."
-          },
-          "DynDNS": {
-            "id": 38,
-            "description": "Utilizes dynamic DNS."
-          },
-          "BOT": {
-            "id": 39,
-            "description": "Appears to be a bot or exhibits bot-like behaviour."
-          },
-          "Rop": {
-            "id": 40,
-            "description": "Exploits trusted programs to execute malicious code from memory to evade data execution prevention."
-          },
-          "Fraud": {
-            "id": 41,
-            "description": "Presents itself as a legitimate program and/or facilitates fraudulent activity."
-          },
-          "URLshort": {
-            "id": 42,
-            "description": "Leverages URL shortening to obfuscate malicious destination."
-          },
-          "Anti-emulation": {
-            "id": 43,
-            "description": "Detects the presence of an emulator."
-          },
-          "Cryptocurrency": {
-            "id": 44,
-            "description": "Facilitates mining of cryptocurrency."
-          },
-          "Bind": {
-            "id": 45,
-            "description": "Allows a resource to be sent or received across a network."
-          },
-          "Suspicious DLL": {
-            "id": 46,
-            "description": "Attempts to load DLL that is inconsistent with expected/standard behaviour."
-          },
-          "AntiVirus Hit": {
-             "id": 1008,
-             "description": "AntiVirus hit. File is infected."
-           }
+            "Exploit": {
+                "id": 1,
+                "description": "Exploits an known software vulnerability or security flaw."
+            },
+            "PowerShell": {
+                "id": 2,
+                "description": "Leverages Powershell to attack Windows operating systems."
+            },
+            "Hacking tool": {
+                "id": 3,
+                "description": "Programs designed to crack or break computer and network security measures."
+            },
+            "Locker": {
+                "id": 4,
+                "description": "Prevents access to system data and files."
+            },
+            "Anti-analysis": {
+                "id": 5,
+                "description": "Constructed to conceal or obfuscate itself to prevent analysis."
+            },
+            "Suspicious PDF API": {
+                "id": 6,
+                "description": "Makes API calls not consistent with expected/standard behaviour."
+            },
+            "Suspicious Android API": {
+                "id": 7,
+                "description": "Makes API calls not consistent with expected/standard behaviour."
+            },
+            "Anti-antivirus": {
+                "id": 8,
+                "description": "Attempts to conceal itself from detection by anti-virus."
+            },
+            "Anti-vm": {
+                "id": 9,
+                "description": "Attempts to detect if it is being run in virtualized environment."
+            },
+            "Anti-Debug": {
+                "id": 10,
+                "description": "Attempts to detect if it is being debugged."
+            },
+            "Worm": {
+                "id": 11,
+                "description": "Attempts to replicate itself in order to spread to other systems."
+            },
+            "Cloud": {
+                "id": 12,
+                "description": "Makes connection to cloud service."
+            },
+            "Virus": {
+                "id": 13,
+                "description": "Malicious software program"
+            },
+            "Suspicious Office": {
+                "id": 14,
+                "description": "Makes API calls not consistent with expected/standard behaviour"
+            },
+            "Ransomware": {
+                "id": 15,
+                "description": "Designed to block access to a system until a sum of money is paid."
+            },
+            "Persistence": {
+                "id": 16,
+                "description": "Technique used to maintain presence in system(s) across interruptions that could cut off access."
+            },
+            "Injection": {
+                "id": 17,
+                "description": "Input is not properly validated and gets processed by an interpreter as part of a command or query."
+            },
+            "Dropper": {
+                "id": 18,
+                "description": "Trojan that drops additional malware on an affected system."
+            },
+            "Suspicious Execution Chain": {
+                "id": 19,
+                "description": "Command shell or script process was created by unexpected parent process."
+            },
+            "Trojan": {
+                "id": 20,
+                "description": "Presents itself as legitimate in attempt to infiltrate a system."
+            },
+            "RAT": {
+                "id": 21,
+                "description": "Designed to provide the capability of covert surveillance and/or unauthorized access to a target."
+            },
+            "C2": {
+                "id": 22,
+                "description": "Communicates with a server controlled by a malicious actor."
+            },
+            "Tor": {
+                "id": 23,
+                "description": "Intalls/Leverages Tor to enable anonymous communication."
+            },
+            "Web Mail": {
+                "id": 24,
+                "description": "Connects to smtp.[domain] for possible spamming or data exfiltration."
+            },
+            "Anti-sandbox": {
+                "id": 25,
+                "description": "Attempts to detect if it is in a sandbox."
+            },
+            "Stealth": {
+                "id": 26,
+                "description": "Leverages/modifies internal processes and settings to conceal itself."
+            },
+            "Packer": {
+                "id": 27,
+                "description": "Compresses, encrypts, and/or modifies a malicious file's format."
+            },
+            "Banker": {
+                "id": 28,
+                "description": "Designed to gain access to confidential information stored or processed through online banking."
+            },
+            "Point-of-sale": {
+                "id": 29,
+                "description": "Steals information related to financial transactions, including credit card information."
+            },
+            "Bypass": {
+                "id": 30,
+                "description": "Attempts to bypass operating systems security controls (firewall, amsi, applocker, etc.)"
+            },
+            "Crash": {
+                "id": 31,
+                "description": "Attempts to crash the system."
+            },
+            "IM": {
+                "id": 32,
+                "description": "Leverages instant-messaging."
+            },
+            "Rootkit": {
+                "id": 33,
+                "description": "Designed to provide continued privileged access to a system while actively hiding its presence."
+            },
+            "Adware": {
+                "id": 34,
+                "description": "Displays unwanted, unsolicited advertisements."
+            },
+            "Infostealer": {
+                "id": 35,
+                "description": "Collects and disseminates information such as login details, usernames, passwords, etc."
+            },
+            "WMI": {
+                "id": 36,
+                "description": "Leverages Windows Management Instrumentation (WMI) to gather information and/or execute a process."
+            },
+            "Downloader": {
+                "id": 37,
+                "description": "Trojan that downloads installs files."
+            },
+            "DynDNS": {
+                "id": 38,
+                "description": "Utilizes dynamic DNS."
+            },
+            "BOT": {
+                "id": 39,
+                "description": "Appears to be a bot or exhibits bot-like behaviour."
+            },
+            "Rop": {
+                "id": 40,
+                "description": "Exploits trusted programs to execute malicious code from memory to evade data execution prevention."
+            },
+            "Fraud": {
+                "id": 41,
+                "description": "Presents itself as a legitimate program and/or facilitates fraudulent activity."
+            },
+            "URLshort": {
+                "id": 42,
+                "description": "Leverages URL shortening to obfuscate malicious destination."
+            },
+            "Anti-emulation": {
+                "id": 43,
+                "description": "Detects the presence of an emulator."
+            },
+            "Cryptocurrency": {
+                "id": 44,
+                "description": "Facilitates mining of cryptocurrency."
+            },
+            "Bind": {
+                "id": 45,
+                "description": "Allows a resource to be sent or received across a network."
+            },
+            "Suspicious DLL": {
+                "id": 46,
+                "description": "Attempts to load DLL that is inconsistent with expected/standard behaviour."
+            },
+            "AntiVirus Hit": {
+                "id": 1008,
+                "description": "AntiVirus hit. File is infected."
+            }
         }
 
         assert CUCKOO_DROPPED_SIGNATURES == [
-          'origin_langid', 'apt_cloudatlas', 'apt_carbunak', 'apt_sandworm_ip',
-          'apt_turlacarbon', 'apt_sandworm_url', 'apt_inception', 'rat_lolbot',
-          'backdoor_vanbot', 'rat_sdbot', 'backdoor_tdss', 'backdoor_whimoo',
-          'madness_url', 'volatility_svcscan_2', 'volatility_svcscan_3',
-          'volatility_modscan_1', 'volatility_handles_1', 'volatility_devicetree_1',
-          'volatility_ldrmodules_1', 'volatility_ldrmodules_2', 'volatility_malfind_2',
-          'volatility_svcscan_1', 'detect_putty', 'powerworm', 'powershell_ddi_rc4',
-          'powershell_di', 'powerfun', 'powershell_dfsp', 'powershell_c2dns',
-          'powershell_unicorn', 'spreading_autoruninf', 'sniffer_winpcap',
-          'mutex_winscp', 'sharing_rghost', 'exp_3322_dom', 'mirc_file', 'vir_napolar',
-          'vertex_url', 'has_pdb', "process_martian", 'rat_teamviewer', 'antiav_detectfile', 'antiav_detectreg',
-          'api_hammering', 'raises_exception', 'antivm_memory_available', 'recon_fingerprint',
-          'application_raises_exception', 'modifies_certificates', 'modifies_proxy_wpad', 'stack_pivot_shellcode_apis',
-          "infostealer_mail", "locates_browser"
-        ]
+            'origin_langid', 'apt_cloudatlas', 'apt_carbunak', 'apt_sandworm_ip', 'apt_turlacarbon', 'apt_sandworm_url',
+            'apt_inception', 'rat_lolbot', 'backdoor_vanbot', 'rat_sdbot', 'backdoor_tdss', 'backdoor_whimoo',
+            'madness_url', 'volatility_svcscan_2', 'volatility_svcscan_3', 'volatility_modscan_1',
+            'volatility_handles_1', 'volatility_devicetree_1', 'volatility_ldrmodules_1', 'volatility_ldrmodules_2',
+            'volatility_malfind_2', 'volatility_svcscan_1', 'detect_putty', 'powerworm', 'powershell_ddi_rc4',
+            'powershell_di', 'powerfun', 'powershell_dfsp', 'powershell_c2dns', 'powershell_unicorn',
+            'spreading_autoruninf', 'sniffer_winpcap', 'mutex_winscp', 'sharing_rghost', 'exp_3322_dom', 'mirc_file',
+            'vir_napolar', 'vertex_url', 'has_pdb', "process_martian", 'rat_teamviewer', 'antiav_detectfile',
+            'antiav_detectreg', 'api_hammering', 'raises_exception', 'antivm_memory_available', 'recon_fingerprint',
+            'application_raises_exception', 'modifies_certificates', 'modifies_proxy_wpad',
+            'stack_pivot_shellcode_apis', "infostealer_mail", "locates_browser"]
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -3628,19 +3813,15 @@ class TestSafelist:
         from cuckoo.safelist import SAFELIST_IPS, SAFELIST_URIS, SAFELIST_DROPPED, SAFELIST_DOMAINS, SAFELIST_COMMANDS, \
             SAFELIST_HASHES, SAFELIST_APPLICATIONS, SAFELIST_COMMON_PATTERNS, GUID_PATTERN
         assert SAFELIST_APPLICATIONS == [
-            'C:\\\\tmp.+\\\\bin\\\\.+',
-            'C:\\\\Windows\\\\System32\\\\lsass\\.exe',
-            'lsass\\.exe',
+            'C:\\\\tmp.+\\\\bin\\\\.+', 'C:\\\\Windows\\\\System32\\\\lsass\\.exe', 'lsass\\.exe',
             'C:\\\\Program Files\\\\Common Files\\\\Microsoft '
-            'Shared\\\\OfficeSoftwareProtectionPlatform\\\\OSPPSVC\\.exe',
-            'C:\\\\Windows\\\\System32\\\\csrss\\.exe',
+            'Shared\\\\OfficeSoftwareProtectionPlatform\\\\OSPPSVC\\.exe', 'C:\\\\Windows\\\\System32\\\\csrss\\.exe',
             'C:\\\\Windows\\\\System32\\\\SearchIndexer\\.exe',
             'C:\\\\Program Files\\\\Microsoft Monitoring '
             'Agent\\\\Agent\\\\(MonitoringHost\\.exe|Health Service State\\\\ICT '
             '2\\\\(CMF-64|CMF)\\\\DesiredStateConfiguration\\\\DscRun\\.exe)',
             'C:\\\\WindowsAzure\\\\GuestAgent.*\\\\(GuestAgent\\\\WindowsAzureGuestAgent\\.exe|WaAppAgent\\.exe|CollectGuestLogs\\.exe)',
-            'C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\\.exe'
-        ]
+            'C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\\.exe']
         assert SAFELIST_COMMANDS == [
             'C:\\\\Python27\\\\pythonw\\.exe C:/tmp.+/analyzer\\.py',
             '"C:\\\\Program Files\\\\Microsoft Monitoring '
@@ -3651,13 +3832,11 @@ class TestSafelist:
             '("MonitorKnowledgeDiscovery\\.vbs"|"ChangeEventModuleBatchSize\\.vbs)',
             'C:\\\\windows\\\\system32\\\\(SppExtComObj|mobsync)\\.exe -Embedding',
             'C:\\\\windows\\\\system32\\\\wbem\\\\wmiprvse\\.exe -secured -Embedding',
-            '(C:\\\\Windows\\\\)?explorer\\.exe',
-            '"C:\\\\Windows\\\\explorer\\.exe" /LOADSAVEDWINDOWS',
+            '(C:\\\\Windows\\\\)?explorer\\.exe', '"C:\\\\Windows\\\\explorer\\.exe" /LOADSAVEDWINDOWS',
             'wmiadap\\.exe (/F /T /R|/D /T)',
             'C:\\\\windows\\\\system32\\\\(sppsvc|wuauclt|appidpolicyconverter|appidcertstorecheck)\\.exe',
             '"C:\\\\Windows\\\\SystemApps\\\\(ShellExperienceHost|Microsoft\\.Windows\\.Cortana)_.*\\\\(ShellExperienceHost|SearchUI)\\.exe" '
-            '-ServerName:(App|CortanaUI)\\.App.*\\.mca',
-            'C:\\\\Windows\\\\system32\\\\dllhost\\.exe /Processid:.*',
+            '-ServerName:(App|CortanaUI)\\.App.*\\.mca', 'C:\\\\Windows\\\\system32\\\\dllhost\\.exe /Processid:.*',
             'C:\\\\Windows\\\\system32\\\\wbem\\\\WmiApSrv\\.exe',
             'C:\\\\Windows\\\\system32\\\\sc\\.exe start wuauserv',
             '"C:\\\\windows\\\\system32\\\\SearchProtocolHost\\.exe" '
@@ -3666,28 +3845,24 @@ class TestSafelist:
             '1 -2147483646 "Software\\\\Microsoft\\\\Windows Search" "Mozilla/4\\.0 '
             '(compatible; MSIE 6\\.0; Windows NT; MS Search 4\\.0 Robot)" '
             '"C:\\\\ProgramData\\\\Microsoft\\\\Search\\\\Data\\\\Temp\\\\usgthrsvc" '
-            '"DownLevelDaemon" "1"',
-            'taskhost\\.exe \\$\\(Arg0\\)',
+            '"DownLevelDaemon" "1"', 'taskhost\\.exe \\$\\(Arg0\\)',
             'C:\\\\Windows\\\\system32\\\\WerFault\\.exe (-u -p [0-9]{3,5} -s '
             '[0-9]{3,5}|-pss -s [0-9]{3,5} -p [0-9]{3,5} -ip [0-9]{3,5})',
             'C:\\\\Windows\\\\system32\\\\wermgr\\.exe -upload',
             'C:\\\\Windows\\\\Microsoft\\.NET\\\\Framework64\\\\v.*\\\\mscorsvw\\.exe '
             '-StartupEvent [0-9]{3} -InterruptEvent [0-9] -NGENProcess [0-9]{2}[a-z} '
-            '-Pipe [0-9]{3} -Comment "NGen Worker Process"',
-            '\\\\\\?\\?\\\\C:\\\\Windows\\\\system32\\\\conhost\\.exe',
+            '-Pipe [0-9]{3} -Comment "NGen Worker Process"', '\\\\\\?\\?\\\\C:\\\\Windows\\\\system32\\\\conhost\\.exe',
             '\\\\\\?\\?\\\\C:\\\\Windows\\\\system32\\\\conhost\\.exe ".*"',
             '\\\\\\?\\?\\\\C:\\\\Windows\\\\system32\\\\conhost\\.exe 0xffffffff -ForceV1',
             'C:\\\\windows\\\\system32\\\\svchost\\.exe -k '
             '(DcomLaunch|NetworkService|UnistackSvcGroup|WerSvcGroup|netsvcs -p -s '
-            '(Schedule|Winmgmt|UsoSvc))',
-            'C:\\\\windows\\\\system32\\\\SearchIndexer\\.exe \\/Embedding',
+            '(Schedule|Winmgmt|UsoSvc))', 'C:\\\\windows\\\\system32\\\\SearchIndexer\\.exe \\/Embedding',
             'C:\\\\Windows\\\\System32\\\\wevtutil\\.exe query-events '
             'microsoft-windows-powershell/operational /rd:true /e:root /format:xml '
             '/uni:true',
             'C:\\\\Windows\\\\System32\\\\wevtutil\\.exe query-events '
             'microsoft-windows-sysmon/operational /format:xml /e:Events',
-            'C:\\\\Windows\\\\system32\\\\AUDIODG\\.EXE 0x6e8'
-        ]
+            'C:\\\\Windows\\\\system32\\\\AUDIODG\\.EXE 0x6e8']
         assert SAFELIST_DOMAINS == [
             '.*\\.adobe\\.com$',
             'play\\.google\\.com$',
