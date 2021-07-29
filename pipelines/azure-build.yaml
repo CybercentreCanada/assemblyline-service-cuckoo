@@ -6,30 +6,30 @@ trigger:
 pr: none
 
 pool:
-  vmImage: 'ubuntu-18.04'
+  vmImage: "ubuntu-20.04"
 
 stages:
-- stage: deploy
-  jobs:
-  - job: deploy
-    displayName: Deploy containers to dockerhub
-    variables:
-      - group: deployment-information
-    steps:
-    - task: Docker@2
-      displayName: Login to docker hub
-      inputs:
-        command: login
-        containerRegistry: dockerhub
-    - script: |
-        set -xv  # Echo commands before they are run
-        export TAG=${BUILD_SOURCEBRANCH#"refs/tags/v"}
-        if [[ "$TAG" == *stable* ]]; then export BUILD_TYPE=stable; else export BUILD_TYPE=latest; fi
-        docker build --build-arg version=$TAG --build-arg branch=$BUILD_TYPE -t cccs/assemblyline-service-cuckoo:$TAG -t cccs/assemblyline-service-cuckoo:$BUILD_TYPE .
-      displayName: Build containers
-    - script: |
-        docker run -v `pwd`/test/:/opt/al_service/test/ cccs/assemblyline-service-cuckoo:latest bash -c 'pip install -U -r test/requirements.txt; pytest'
-      displayName: Test containers
-    - script: |
-        docker push cccs/assemblyline-service-cuckoo --all-tags
-      displayName: Deploy to Docker Hub
+  - stage: deploy
+    jobs:
+      - job: deploy
+        displayName: Deploy containers to dockerhub
+        variables:
+          - group: deployment-information
+        steps:
+          - task: Docker@2
+            displayName: Login to docker hub
+            inputs:
+              command: login
+              containerRegistry: dockerhub
+          - script: |
+              set -xv  # Echo commands before they are run
+              export TAG=${BUILD_SOURCEBRANCH#"refs/tags/v"}
+              if [[ "$TAG" == *stable* ]]; then export BUILD_TYPE=stable; else export BUILD_TYPE=latest; fi
+              docker build --build-arg version=$TAG --build-arg branch=$BUILD_TYPE -t cccs/assemblyline-service-cuckoo:$TAG -t cccs/assemblyline-service-cuckoo:$BUILD_TYPE .
+            displayName: Build containers
+          - script: |
+              docker run -v `pwd`/test/:/opt/al_service/test/ cccs/assemblyline-service-cuckoo:latest bash -c 'pip install -U -r test/requirements.txt; pytest'
+            displayName: Test containers
+          - script: |
+              docker push cccs/assemblyline-service-cuckoo --all-tags
+            displayName: Deploy to Docker Hub
