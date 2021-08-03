@@ -1024,8 +1024,10 @@ def convert_sysmon_network(sysmon: List[Dict[str, Any]],
                     if not slist_check_domain(text):
                         dns_query["request"] = text
                 elif name == "QueryResults":
-                    ip = re.search(IP_REGEX, text).group(0)
-                    dns_query["answers"].append({"data": ip, "type": "A"})
+                    ip = re.search(IP_REGEX, text)
+                    if ip:
+                        ip = ip.group(0)
+                        dns_query["answers"].append({"data": ip, "type": "A"})
                 elif name == "Image":
                     dns_query["image"] = text
             if any(dns_query[key] is None for key in dns_query.keys()):
