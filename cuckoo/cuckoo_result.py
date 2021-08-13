@@ -104,7 +104,10 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
     hollowshunter: Dict[str, Any] = api_report.get("hollowshunter", {})
 
     if debug:
-        process_debug(debug, al_result)
+        # Ransomware tends to cause issues with Cuckoo's analysis modules, and including the associated analysis errors
+        # creates unnecessary noise to include this
+        if not any("ransomware" in sig["name"] for sig in sigs):
+            process_debug(debug, al_result)
 
     process_map = get_process_map(behaviour.get("processes", {}))
 
