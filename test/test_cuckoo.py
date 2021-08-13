@@ -2073,20 +2073,25 @@ class TestCuckooResult:
           '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'),
          ({"info":
            {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"},
-           "debug": "blah", "signatures": "blah", "network": "blah", "behavior": {"blah": "blah"},
+           "debug": "blah", "signatures": [{"name": "blah"}], "network": "blah", "behavior": {"blah": "blah"},
            "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
           None),
-         ({"signatures": "blah",
+         ({"info":
+           {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"},
+           "debug": "blah", "signatures": [{"name": "ransomware"}], "network": "blah", "behavior": {"blah": "blah"},
+           "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
+          None),
+         ({"signatures": [{"name": "blah"}],
            "info":
            {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"},
            "behavior": {"summary": "blah"}},
           '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'),
-         ({"signatures": "blah",
+         ({"signatures": [{"name": "blah"}],
            "info":
            {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"},
            "behavior": {"processtree": "blah"}},
           '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'),
-         ({"signatures": "blah",
+         ({"signatures": [{"name": "blah"}],
            "info":
            {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"},
            "behavior": {"processes": "blah"}},
