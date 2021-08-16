@@ -1510,7 +1510,7 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_
 
     for ip in ips:
         safe_ip = safe_str(ip)
-        result_section.add_tag("network.static.ip", safe_ip)
+        result_section.add_tag("network.dynamic.ip", safe_ip)
     for domain in domains:
         # File names match the domain and URI regexes, so we need to avoid tagging them
         # Note that get_tld only takes URLs so we will prepend http:// to the domain to work around this
@@ -1518,10 +1518,10 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_
         if tld is None or f".{tld}" == file_ext:
             continue
         safe_domain = safe_str(domain)
-        result_section.add_tag("network.static.domain", safe_domain)
+        result_section.add_tag("network.dynamic.domain", safe_domain)
     for uri in uris:
         tld = get_tld(uri, fail_silently=True)
         if tld is None or f".{tld}" == file_ext:
             continue
         safe_uri = safe_str(uri)
-        result_section.add_tag("network.static.uri", safe_uri)
+        result_section.add_tag("network.dynamic.uri", safe_uri)

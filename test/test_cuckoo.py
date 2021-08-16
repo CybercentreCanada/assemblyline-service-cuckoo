@@ -2969,11 +2969,11 @@ class TestCuckooResult:
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}},
                                '[{"Decrypted Buffer": "blah"}]', {}),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}},
-                               '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1']}),
+                               '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.dynamic.ip': ['127.0.0.1']}),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.ca"}}]}},
-                               '[{"Decrypted Buffer": "blah.ca"}]', {'network.static.domain': ['blah.ca']}),
+                               '[{"Decrypted Buffer": "blah.ca"}]', {'network.dynamic.domain': ['blah.ca']}),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}},
-                               '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1']}), ])
+                               '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.dynamic.ip': ['127.0.0.1']}), ])
     def test_process_decrypted_buffers(process_map, correct_buffer_body, correct_tags):
         from cuckoo.cuckoo_result import process_decrypted_buffers
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
@@ -3042,10 +3042,10 @@ class TestCuckooResult:
         "blob, file_ext, correct_tags",
         [
             ("", "", {}),
-            ("192.168.100.1", "", {'network.static.ip': ['192.168.100.1']}),
-            ("blah.ca", ".exe", {'network.static.domain': ['blah.ca']}),
-            ("https://blah.ca", ".exe", {'network.static.domain': ['blah.ca'], 'network.static.uri': ['https://blah.ca']}),
-            ("https://blah.ca/blah", ".exe", {'network.static.domain': ['blah.ca'], 'network.static.uri': ['https://blah.ca']}),
+            ("192.168.100.1", "", {'network.dynamic.ip': ['192.168.100.1']}),
+            ("blah.ca", ".exe", {'network.dynamic.domain': ['blah.ca']}),
+            ("https://blah.ca", ".exe", {'network.dynamic.domain': ['blah.ca'], 'network.dynamic.uri': ['https://blah.ca']}),
+            ("https://blah.ca/blah", ".exe", {'network.dynamic.domain': ['blah.ca'], 'network.dynamic.uri': ['https://blah.ca']}),
             ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", ".exe", {}),
             ("DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC", ".exe", {}),
             ("DRIVE:\\\\PATH TO\\\\PYTHON27.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.py", ".py", {}),
