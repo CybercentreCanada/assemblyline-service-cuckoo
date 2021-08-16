@@ -20,8 +20,8 @@ from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DR
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
-# Remove the part of the regex that looks to match the entire line
-URL_REGEX = re.compile(FULL_URI.lstrip("^").rstrip("$"))
+# Remove the part of the regex that looks to match the entire line. Create non-capturing group.
+URL_REGEX = re.compile(FULL_URI.lstrip("^").rstrip("$").replace("(", "(?:", 1))
 UNIQUE_IP_LIMIT = 100
 SCORE_TRANSLATION = {
     1: 10,
@@ -1317,18 +1317,20 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
     :return: None
     """
     buffer_count = 0
+    encrypted_buffer_result_section = ResultSection("Placeholder")
     for pid, process_details in process_map.items():
         for network_call in process_details["network_calls"]:
             for api_call in BUFFER_API_CALLS:
                 if api_call in network_call:
                     buffer = network_call[api_call]["buffer"]
+                    _extract_iocs_from_text_blob(buffer, encrypted_buffer_result_section)
                     encrypted_buffer_file_path = os.path.join("/tmp", f"{task_id}_encrypted_buffer_{buffer_count}.txt")
                     with open(encrypted_buffer_file_path, "wb") as f:
                         f.write(buffer.encode())
                     f.close()
                     buffer_count += 1
     if buffer_count > 0:
-        encrypted_buffer_result_section = ResultSection(f"{buffer_count} Encrypted Buffer(s) Found")
+        encrypted_buffer_result_section.title_text = f"{buffer_count} Encrypted Buffer(s) Found"
         encrypted_buffer_result_section.set_heuristic(1006)
         network_res.add_subsection(encrypted_buffer_result_section)
 
@@ -1493,7 +1495,7 @@ def _remove_network_http_noise(sigs: List[Dict[str, Any]]) -> List[Dict[str, Any
         return sigs
 
 
-def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_ext: str) -> None:
+def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_ext: str = "") -> None:
     """
     This method searches for domains, IPs and URIs used in blobs of text and tags them
     :param blob: The blob of text that we will be searching through
@@ -1506,7 +1508,7 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_
     # There is overlap here between regular expressions, so we want to isolate domains that are not ips
     domains = set(re.findall(DOMAIN_REGEX, blob)) - ips
     # There is overlap here between regular expressions, so we want to isolate uris that are not domains
-    uris = set(re.findall(URL_REGEX, blob)) - domains
+    uris = set(re.findall(URL_REGEX, blob)) - domains - ips
 
     for ip in ips:
         safe_ip = safe_str(ip)
@@ -1520,8 +1522,15 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_
         safe_domain = safe_str(domain)
         result_section.add_tag("network.dynamic.domain", safe_domain)
     for uri in uris:
-        tld = get_tld(uri, fail_silently=True)
+        if not any(protocol in uri for protocol in ["http", "ftp", "icmp", "ssh"]):
+            tld = get_tld(f"http://{uri}", fail_silently=True)
+        else:
+            tld = get_tld(uri, fail_silently=True)
         if tld is None or f".{tld}" == file_ext:
             continue
         safe_uri = safe_str(uri)
         result_section.add_tag("network.dynamic.uri", safe_uri)
+        if "//" in safe_uri:
+            safe_uri = safe_uri.split("//")[1]
+        for uri_path in re.findall(URI_PATH, safe_uri):
+            result_section.add_tag("network.dynamic.uri_path", uri_path)

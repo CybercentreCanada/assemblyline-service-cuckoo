@@ -2054,7 +2054,7 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import DOMAIN_REGEX, IP_REGEX, URL_REGEX, MD5_REGEX, UNIQUE_IP_LIMIT, SCORE_TRANSLATION
         assert DOMAIN_REGEX == base_domain_regex
         assert IP_REGEX == base_ip_regex
-        assert URL_REGEX == compile(base_uri_regex.lstrip("^").rstrip("$"))
+        assert URL_REGEX == compile(base_uri_regex.lstrip("^").rstrip("$").replace("(", "(?:", 1))
         assert MD5_REGEX == base_md5_regex
         assert UNIQUE_IP_LIMIT == 100
         assert SCORE_TRANSLATION == {1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000}
@@ -3045,10 +3045,12 @@ class TestCuckooResult:
             ("192.168.100.1", "", {'network.dynamic.ip': ['192.168.100.1']}),
             ("blah.ca", ".exe", {'network.dynamic.domain': ['blah.ca']}),
             ("https://blah.ca", ".exe", {'network.dynamic.domain': ['blah.ca'], 'network.dynamic.uri': ['https://blah.ca']}),
-            ("https://blah.ca/blah", ".exe", {'network.dynamic.domain': ['blah.ca'], 'network.dynamic.uri': ['https://blah.ca']}),
+            ("https://blah.ca/blah", ".exe", {'network.dynamic.domain': ['blah.ca'], 'network.dynamic.uri': ['https://blah.ca/blah'], "network.dynamic.uri_path": ["/blah"]}),
             ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", ".exe", {}),
             ("DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC", ".exe", {}),
             ("DRIVE:\\\\PATH TO\\\\PYTHON27.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.py", ".py", {}),
+            ("POST /some/thing/bad.exe HTTP/1.0\nUser-Agent: Mozilla\nHost: evil.ca\nAccept: */*\nContent-Type: application/octet-stream\nContent-Encoding: binary\n\nConnection: close", "", {"network.dynamic.domain": ["evil.ca"]}),
+            ("evil.ca/some/thing/bad.exe", "", {"network.dynamic.domain": ["evil.ca"], "network.dynamic.uri": ["evil.ca/some/thing/bad.exe"], "network.dynamic.uri_path": ["/some/thing/bad.exe"]}),
         ]
     )
     def test_extract_iocs_from_text_blob(blob, file_ext, correct_tags):
