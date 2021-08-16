@@ -27,7 +27,7 @@ from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.constants import RECOGNIZED_TYPES
 
-from cuckoo.cuckoo_result import generate_al_result, INETSIM, SUPPORTED_EXTENSIONS
+from cuckoo.cuckoo_result import generate_al_result, INETSIM, SUPPORTED_EXTENSIONS, ANALYSIS_ERRORS, GUEST_CANNOT_REACH_HOST
 from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
@@ -321,7 +321,8 @@ class Cuckoo(ServiceBase):
                 self._get_subsection_heuristic_map(section.subsections, section_heur_map)
 
     def _general_flow(self, kwargs: Dict[str, Any], file_ext: str, parent_section: ResultSection,
-                      hosts: List[Dict[str, Any]], reboot: bool = False, parent_task_id: int = 0) -> None:
+                      hosts: List[Dict[str, Any]], reboot: bool = False, parent_task_id: int = 0,
+                      resubmit: bool = False) -> None:
         """
         This method contains the general flow of a task: submitting a file to Cuckoo and generating an Assemblyline
         report
@@ -332,6 +333,7 @@ class Cuckoo(ServiceBase):
         :param hosts: The hosts that the file could be sent to
         :param reboot: A boolean representing if we want to reboot the sample post initial analysis
         :param parent_task_id: The ID of the parent task which the reboot analysis will be based on
+        :param resubmit: A boolean representing if we are about to resubmit a file
         :return: None
         """
         if self._is_invalid_analysis_timeout(parent_section, reboot):
@@ -378,6 +380,20 @@ class Cuckoo(ServiceBase):
         if cuckoo_task and cuckoo_task.id is not None:
             self.delete_task(cuckoo_task)
 
+        # Two submissions is enough I'd say
+        if resubmit:
+            return
+
+        for subsection in parent_section.subsections:
+            if subsection.title_text == ANALYSIS_ERRORS and GUEST_CANNOT_REACH_HOST in subsection.body:
+                self.log.debug("The first submission was sent to a machine that had difficulty communicating with the nest. "
+                               "Will try to resubmit again.")
+                parent_section = ResultSection(f"Resubmit -> {parent_section.title_text}")
+                self.file_res.add_section(parent_section)
+                host_to_use = self._determine_host_to_use(hosts)
+                self._general_flow(kwargs, file_ext, parent_section, [host_to_use], resubmit=True)
+                break
+
     def submit(self, file_content: bytes, cuckoo_task: CuckooTask, parent_section: ResultSection,
                reboot: bool = False) -> None:
         """
@@ -421,7 +437,7 @@ class Cuckoo(ServiceBase):
 
         if status == TASK_STARTED:
             try:
-                status = self.poll_report(cuckoo_task)
+                status = self.poll_report(cuckoo_task, parent_section)
             except RetryError:
                 self.log.error("Max retries exceeded for report status.")
                 status = ANALYSIS_EXCEEDED_TIMEOUT
@@ -444,9 +460,7 @@ class Cuckoo(ServiceBase):
         elif status == ANALYSIS_FAILED:
             # Add a subsection detailing what's happening and then moving on
             analysis_failed_sec = ResultSection("Cuckoo Analysis Failed.",
-                                                body=f"The analysis of Cuckoo task {cuckoo_task.id} has failed. This "
-                                                     f"is most likely because a non-native file type was attempted to "
-                                                     f"be detonated. Example: .dll on a Linux VM. Contact the Cuckoo "
+                                                body=f"The analysis of Cuckoo task {cuckoo_task.id} has failed. Contact the Cuckoo "
                                                      f"administrator for details.")
             parent_section.add_subsection(analysis_failed_sec)
             raise AnalysisFailed()
@@ -496,10 +510,11 @@ class Cuckoo(ServiceBase):
            stop_max_attempt_number=((GUEST_VM_START_TIMEOUT + REPORT_GENERATION_TIMEOUT)/CUCKOO_POLL_DELAY),
            retry_on_result=_retry_on_none,
            retry_on_exception=_exclude_chain_ex)
-    def poll_report(self, cuckoo_task: CuckooTask) -> Optional[str]:
+    def poll_report(self, cuckoo_task: CuckooTask, parent_section: ResultSection) -> Optional[str]:
         """
         This method polls the Cuckoo server for the status of the task, doing so until a report has been generated
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
+        :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: A string representing the status
         """
         task_info = self.query_task(cuckoo_task)
@@ -516,6 +531,9 @@ class Cuckoo(ServiceBase):
         status = task_info["status"]
         if "fail" in status:
             self.log.error(f"Analysis has failed for task {cuckoo_task.id} due to {task_info['errors']}.")
+            analysis_errors_sec = ResultSection(ANALYSIS_ERRORS)
+            analysis_errors_sec.add_lines(task_info["errors"])
+            parent_section.add_subsection(analysis_errors_sec)
             return ANALYSIS_FAILED
         elif status == TASK_COMPLETED:
             self.log.debug(f"Analysis has completed for task {cuckoo_task.id}, waiting on report to be produced.")

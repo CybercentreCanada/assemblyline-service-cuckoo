@@ -135,7 +135,7 @@ def dummy_tar_class():
 
 @pytest.fixture
 def dummy_tar_member_class():
-    class DummyTarMember():
+    class DummyTarMember:
         def __init__(self, name, size):
             self.name = name
             self.size = size
@@ -151,7 +151,7 @@ def dummy_tar_member_class():
 @pytest.fixture
 def dummy_json_doc_class_instance():
     # This class is just to create a doc to pass to JSONDecodeError for construction
-    class DummyJSONDoc(object):
+    class DummyJSONDoc:
         def count(self, *args):
             return 0
 
@@ -162,7 +162,7 @@ def dummy_json_doc_class_instance():
 
 @pytest.fixture
 def dummy_result_class_instance():
-    class DummyResult(object):
+    class DummyResult:
         from assemblyline_v4_service.common.result import ResultSection
 
         def __init__(self):
@@ -556,7 +556,7 @@ class TestCuckooMain:
     def test_submit(task_id, poll_started_status, poll_report_status, cuckoo_class_instance, mocker):
         from cuckoo.cuckoo_main import Cuckoo, TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG, \
             SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT, CuckooTask, \
-            AnalysisTimeoutExceeded
+            AnalysisTimeoutExceeded, AnalysisFailed
         from retrying import RetryError
         from assemblyline.common.exceptions import RecoverableError
         from assemblyline_v4_service.common.result import ResultSection
@@ -564,7 +564,6 @@ class TestCuckooMain:
                         SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT]
         file_content = b"blah"
         host_to_use = {"auth_header": {"blah": "blah"}, "ip": "1.1.1.1", "port": 8000}
-        cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
         cuckoo_task.id = task_id
         parent_section = ResultSection("blah")
@@ -602,7 +601,7 @@ class TestCuckooMain:
                 cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
             assert cuckoo_task.id is None
         elif (poll_started_status == ANALYSIS_FAILED and poll_report_status is None) or (poll_report_status == ANALYSIS_FAILED and poll_started_status == TASK_STARTED):
-            with pytest.raises(Exception):
+            with pytest.raises(AnalysisFailed):
                 cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
         elif poll_report_status == "reboot":
             from requests import Session
@@ -686,37 +685,42 @@ class TestCuckooMain:
         ]
     )
     def test_poll_report(return_value, cuckoo_class_instance, dummy_json_doc_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, TASK_MISSING, ANALYSIS_FAILED, TASK_COMPLETED, TASK_REPORTED, CuckooTask
+        from cuckoo.cuckoo_main import Cuckoo, TASK_MISSING, ANALYSIS_FAILED, TASK_COMPLETED, TASK_REPORTED, \
+            CuckooTask, ANALYSIS_ERRORS
         from retrying import RetryError
+        from assemblyline_v4_service.common.result import ResultSection
 
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
+        parent_section = ResultSection("blah")
 
         # Mocking the time.sleep method that Retry uses, since decorators are loaded and immutable following module import
         with mocker.patch("time.sleep", side_effect=lambda _: None):
             # Mocking the Cuckoo.query_task method results since we only care about the output
             with mocker.patch.object(Cuckoo, 'query_task', return_value=return_value):
                 if return_value is None or return_value == {}:
-                    test_result = cuckoo_class_instance.poll_report(cuckoo_task)
+                    test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
                     assert TASK_MISSING == test_result
                 elif return_value["id"] != cuckoo_task.id:
                     with pytest.raises(RetryError):
-                        cuckoo_class_instance.poll_report(cuckoo_task)
+                        cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
                 elif "fail" in return_value["status"]:
-                    test_result = cuckoo_class_instance.poll_report(cuckoo_task)
+                    test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
+                    correct_result = ResultSection(ANALYSIS_ERRORS, body='')
+                    assert check_section_equality(parent_section.subsections[0], correct_result)
                     assert ANALYSIS_FAILED == test_result
                 elif return_value["status"] == TASK_COMPLETED:
                     with pytest.raises(RetryError):
-                        cuckoo_class_instance.poll_report(cuckoo_task)
+                        cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
                 elif return_value["status"] == TASK_REPORTED:
                     # Mocking the Cuckoo.query_report method results since we only care about the output
                     with mocker.patch.object(Cuckoo, 'query_report', return_value=return_value):
-                        test_result = cuckoo_class_instance.poll_report(cuckoo_task)
+                        test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
                         assert return_value["status"] == test_result
                 else:
                     with pytest.raises(RetryError):
-                        cuckoo_class_instance.poll_report(cuckoo_task)
+                        cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -2051,13 +2055,39 @@ class TestCuckooResult:
     def test_constants():
         from re import compile
         from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex, FULL_URI as base_uri_regex, MD5_REGEX as base_md5_regex
-        from cuckoo.cuckoo_result import DOMAIN_REGEX, IP_REGEX, URL_REGEX, MD5_REGEX, UNIQUE_IP_LIMIT, SCORE_TRANSLATION
+        from cuckoo.cuckoo_result import DOMAIN_REGEX, IP_REGEX, URL_REGEX, MD5_REGEX, UNIQUE_IP_LIMIT, \
+            SCORE_TRANSLATION, SKIPPED_MARK_ITEMS, SKIPPED_CATEGORY_IOCS, SKIPPED_FAMILIES, SKIPPED_PATHS, SILENT_IOCS, \
+            INETSIM, DNS_API_CALLS, HTTP_API_CALLS, BUFFER_API_CALLS, SUSPICIOUS_USER_AGENTS, SUPPORTED_EXTENSIONS, \
+            ANALYSIS_ERRORS, GUEST_LOSING_CONNNECTIVITY, GUEST_CANNOT_REACH_HOST, GUEST_LOST_CONNECTIVITY
         assert DOMAIN_REGEX == base_domain_regex
         assert IP_REGEX == base_ip_regex
         assert URL_REGEX == compile(base_uri_regex.lstrip("^").rstrip("$"))
         assert MD5_REGEX == base_md5_regex
         assert UNIQUE_IP_LIMIT == 100
         assert SCORE_TRANSLATION == {1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000}
+        assert SKIPPED_MARK_ITEMS == ["type", "suspicious_features", "entropy", "process", "useragent"]
+        assert SKIPPED_CATEGORY_IOCS == ["section"]
+        assert SKIPPED_FAMILIES == ["generic"]
+        assert SKIPPED_PATHS == ["/"]
+        assert SILENT_IOCS == ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_process",
+                               "uses_windows_utilities", "creates_exe", "deletes_executed_files"]
+        assert INETSIM == "INetSim"
+        assert DNS_API_CALLS == ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
+        assert HTTP_API_CALLS == ["send", "InternetConnectW", "InternetConnectA"]
+        assert BUFFER_API_CALLS == ["send"]
+        assert SUSPICIOUS_USER_AGENTS == [
+            "Microsoft BITS", "Microsoft Office Existence Discovery", "Microsoft-WebDAV-MiniRedir",
+            "Microsoft Office Protocol Discovery", "Excel Service",
+        ]
+        assert SUPPORTED_EXTENSIONS == [
+            'bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe', 'hta', 'htm', 'html',
+            'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt',
+            'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
+        ]
+        assert ANALYSIS_ERRORS == 'Analysis Errors'
+        assert GUEST_LOSING_CONNNECTIVITY == 'Virtual Machine /status failed. This can indicate the guest losing network connectivity'
+        assert GUEST_CANNOT_REACH_HOST == "it appears that this Virtual Machine hasn't been configured properly as the Cuckoo Host wasn't able to connect to the Guest."
+        assert GUEST_LOST_CONNECTIVITY == 5
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -2137,6 +2167,15 @@ class TestCuckooResult:
             ({"errors": [], "log": [], "cuckoo": ["blah"]}, None),
             ({"errors": [], "log": [], "cuckoo": ["blah", "\n"]}, "blah"),
             ({"errors": [], "log": [], "cuckoo": ["blah", "\n", "ERROR: blah"]}, "blah\nblah"),
+            ({"errors": [], "log": [], "cuckoo": [
+                "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
+                "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
+                "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
+                "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
+                "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
+                "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
+                ]},
+             'it appears that this Virtual Machine hasn\'t been configured properly as the Cuckoo Host wasn\'t able to connect to the Guest.'),
         ]
     )
     def test_process_debug(debug, correct_body):

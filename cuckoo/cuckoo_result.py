@@ -55,6 +55,12 @@ SUPPORTED_EXTENSIONS = [
     'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt',
     'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
 ]
+ANALYSIS_ERRORS = 'Analysis Errors'
+# Substring of Warning Message frm https://github.com/cuckoosandbox/cuckoo/blob/50452a39ff7c3e0c4c94d114bc6317101633b958/cuckoo/core/guest.py#L561
+GUEST_LOSING_CONNNECTIVITY = 'Virtual Machine /status failed. This can indicate the guest losing network connectivity'
+# Substring of Error Message from https://github.com/cuckoosandbox/cuckoo/blob/50452a39ff7c3e0c4c94d114bc6317101633b958/cuckoo/core/scheduler.py#L572
+GUEST_CANNOT_REACH_HOST = "it appears that this Virtual Machine hasn't been configured properly as the Cuckoo Host wasn't able to connect to the Guest."
+GUEST_LOST_CONNECTIVITY = 5
 
 # noinspection PyBroadException
 # TODO: break this into smaller methods
@@ -164,7 +170,7 @@ def process_debug(debug: Dict[str, Any], parent_result_section: ResultSection) -
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
     :return: None
     """
-    error_res = ResultSection(title_text='Analysis Errors')
+    error_res = ResultSection(ANALYSIS_ERRORS)
     for error in debug['errors']:
         err_str = str(error)
         # TODO: what is the point of lower-casing it?
@@ -180,13 +186,20 @@ def process_debug(debug: Dict[str, Any], parent_result_section: ResultSection) -
 
     # Including error that is not reported conveniently by Cuckoo for whatever reason
     previous_log: Optional[str] = None
+    status_failed_count = 0
     for log_line in debug['cuckoo']:
         if log_line == "\n":  # There is always a newline character following a stacktrace
             error_res.add_line(previous_log.rstrip("\n"))
         elif "ERROR:" in log_line:  # Hoping that Cuckoo logs as ERROR
             split_log = log_line.split("ERROR:")
             error_res.add_line(split_log[1].lstrip().rstrip("\n"))
+        elif GUEST_LOSING_CONNNECTIVITY in log_line:
+            status_failed_count += 1
         previous_log = log_line
+
+    # This means that the guest unable to communicate with the host for at least n iterations of polling
+    if status_failed_count > GUEST_LOST_CONNECTIVITY:
+        error_res.add_line(GUEST_CANNOT_REACH_HOST)
 
     if error_res.body and len(error_res.body) > 0:
         parent_result_section.add_subsection(error_res)
