@@ -55,6 +55,8 @@ SUPPORTED_EXTENSIONS = [
     'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt',
     'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
 ]
+SIGNATURES_SECTION_TITLE = "Signatures"
+
 
 # noinspection PyBroadException
 # TODO: break this into smaller methods
@@ -336,7 +338,7 @@ def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: Result
 
     # Flag used to indicate if process_martian signature should be used in process_behaviour
     is_process_martian = False
-    sigs_res = ResultSection(title_text="Signatures")
+    sigs_res = ResultSection(SIGNATURES_SECTION_TITLE)
     # Sometimes the filename gets shortened
     target_filename_remainder = target_filename
     if len(target_filename) > 12:

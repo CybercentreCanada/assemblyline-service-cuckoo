@@ -27,7 +27,7 @@ from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.constants import RECOGNIZED_TYPES
 
-from cuckoo.cuckoo_result import generate_al_result, INETSIM, SUPPORTED_EXTENSIONS
+from cuckoo.cuckoo_result import generate_al_result, INETSIM, SUPPORTED_EXTENSIONS, SIGNATURES_SECTION_TITLE
 from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
@@ -79,6 +79,9 @@ TASK_COMPLETED = "completed"
 TASK_REPORTED = "reported"
 ANALYSIS_FAILED = "analysis_failed"
 ANALYSIS_EXCEEDED_TIMEOUT = "analysis_exceeded_timeout"
+
+MACHINE_INFORMATION_SECTION_TITLE = 'Machine Information'
+SIGNATURE_HIGHLIGHTS_SECTION_TITLE = "Signature Highlights"
 
 
 class CuckooTimeoutException(Exception):
@@ -196,6 +199,7 @@ class Cuckoo(ServiceBase):
         self.artifact_list: Optional[List[Dict[str, str]]] = None
         self.hosts: List[Dict[str, Any]] = []
         self.routing = ""
+        self.sig_highlight_min_score: int = 0
 
     def start(self) -> None:
         for host in self.config["remote_host_details"]["hosts"]:
@@ -207,6 +211,7 @@ class Cuckoo(ServiceBase):
         self.max_report_size = self.config.get('max_report_size', 275000000)
         self.allowed_images = self.config.get("allowed_images", [])
         self.routing = self.config.get("routing", INETSIM)
+        self.sig_highlight_min_score = self.config.get("sig_highlight_min_score", 0)
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
@@ -319,6 +324,9 @@ class Cuckoo(ServiceBase):
             section_heur_map = {}
             for section in self.file_res.sections:
                 self._get_subsection_heuristic_map(section.subsections, section_heur_map)
+
+        # Bring signatures to the top of the service result and collapse per-env sections
+        self._collect_signatures()
 
     def _general_flow(self, kwargs: Dict[str, Any], file_ext: str, parent_section: ResultSection,
                       hosts: List[Dict[str, Any]], reboot: bool = False, parent_task_id: int = 0) -> None:
@@ -896,7 +904,7 @@ class Cuckoo(ServiceBase):
         for tag in machine.get('tags', []):
             body['Tags'].append(safe_str(tag).replace('_', ' '))
 
-        machine_section = ResultSection(title_text='Machine Information',
+        machine_section = ResultSection(title_text=MACHINE_INFORMATION_SECTION_TITLE,
                                         body_format=BODY_FORMAT.KEY_VALUE,
                                         body=json.dumps(body))
 
@@ -1756,7 +1764,7 @@ class Cuckoo(ServiceBase):
         # If a sample has raised a signature that would indicate that it will behave differently upon reboot,
         # then make it happen
         for subsection in parent_section.subsections:
-            if subsection.title_text == "Signatures":
+            if subsection.title_text == SIGNATURES_SECTION_TITLE:
                 for subsubsection in subsection.subsections:
                     if any(item in subsubsection.title_text for item in ["persistence_autorun", "creates_service"]):
                         return True
@@ -1792,6 +1800,41 @@ class Cuckoo(ServiceBase):
         else:
             self.log.info(f"Machine {machine_name} does not exist in {machines}.")
             return None
+
+    def _collect_signatures(self):
+        """
+        This method collects all signatures that score high enough, and add them to a section at the top
+        of the service result. Sets parent sections to default as closed if signature highlights section exists.
+        :return: None
+        """
+        sig_summary: Dict[str, List] = {}
+        for parent_section in self.file_res.sections:
+            machine_name = None
+            for subsection in parent_section.subsections:
+                if subsection.title_text == MACHINE_INFORMATION_SECTION_TITLE:
+                    body = json.loads(subsection.body)
+                    machine_name = body['Name']
+                    sig_summary[machine_name] = []
+                elif subsection.title_text == SIGNATURES_SECTION_TITLE and machine_name:
+                    for sig_subsection in subsection.subsections:
+                        if sig_subsection.heuristic.score < self.sig_highlight_min_score:
+                            continue
+                        sig_name = next((iter(sig_subsection.heuristic.signatures)), None)
+                        if sig_name:
+                            sig_summary[machine_name].append({"name": sig_name, "body": sig_subsection.body})
+
+        if len(sig_summary.keys()) > 0:
+            sig_highlights_sec = ResultSection("Signature Highlights", body=f"The following signatures are highlights (scored {self.sig_highlight_min_score}+) from analysis.")
+            for machine, signatures in sig_summary.items():
+                for sig in signatures:
+                    ResultSection(f"Signature '{sig['name']}' was observed in '{machine}'", body=sig["body"], parent=sig_highlights_sec)
+            if len(sig_highlights_sec.subsections) > 0:
+                for parent_section in self.file_res.sections:
+                    parent_section.auto_collapse = True
+
+                # Put the signature hightlights section at the top of the service result
+                self.file_res.sections.insert(0, sig_highlights_sec)
+
 
 
 def generate_random_words(num_words: int) -> str:
