@@ -2041,6 +2041,55 @@ class TestCuckooMain:
         test_result = cuckoo_class_instance._get_machine_by_name(name)
         assert test_result == expected_result
 
+    @staticmethod
+    @pytest.mark.parametrize(
+        "scores",
+        [
+            [10, 100, 250, 500, 750, 1000], [10, 10, 10, 10, 10, 10], [10000, 10, 10, 10, 10, 10]
+        ]
+    )
+    def test_collect_signatures(scores, cuckoo_class_instance):
+        from assemblyline_v4_service.common.result import Result, ResultSection, Heuristic
+        from cuckoo.cuckoo_main import SIGNATURES_SECTION_TITLE, MACHINE_INFORMATION_SECTION_TITLE, SIGNATURE_HIGHLIGHTS_SECTION_TITLE
+        all_sig_highlights = [{"title": "Signature 'blah1' was observed in 'cuckoo-victim-win7x64_0'", "body": "yaba"}, {"title": "Signature 'blah2' was observed in 'cuckoo-victim-win10x64_0'", "body": "daba"}, {"title": "Signature 'blah3' was observed in 'cuckoo-victim-win10x64_0'", "body": "daba"}, {"title": "Signature 'blah4' was observed in 'cuckoo-victim-win10x64_0'", "body": "daba"}, {"title": "Signature 'blah5' was observed in 'cuckoo-victim-ub1804x64_0'", "body": "doo"}, {"title": "Signature 'blah6' was observed in 'cuckoo-victim-ub1804x64_0'", "body": "doo"}]
+        cuckoo_class_instance.file_res = Result()
+        win7x64_res_sec = ResultSection("Analysis Environment Target: win7x64")
+        _ = ResultSection(MACHINE_INFORMATION_SECTION_TITLE, body=json.dumps({"Name": "cuckoo-victim-win7x64_0"}), parent=win7x64_res_sec)
+        win7x64_sigs_res_sec = ResultSection(SIGNATURES_SECTION_TITLE, parent=win7x64_res_sec)
+        _ = ResultSection("Signature: blah1", body="yaba", heuristic=Heuristic(1, signatures={"blah1": 1}, score_map={"blah1": scores[0]}), parent=win7x64_sigs_res_sec)
+        cuckoo_class_instance.file_res.add_section(win7x64_res_sec)
+
+        win10x64_res_sec = ResultSection("Analysis Environment Target: win10x64")
+        _ = ResultSection(MACHINE_INFORMATION_SECTION_TITLE, body=json.dumps({"Name": "cuckoo-victim-win10x64_0"}), parent=win10x64_res_sec)
+        win10x64_sigs_res_sec = ResultSection(SIGNATURES_SECTION_TITLE, parent=win10x64_res_sec)
+        _ = ResultSection("Signature: blah2", body="daba", heuristic=Heuristic(1, signatures={"blah2": 1}, score_map={"blah2": scores[1]}), parent=win10x64_sigs_res_sec)
+        _ = ResultSection("Signature: blah3", body="daba", heuristic=Heuristic(1, signatures={"blah3": 1}, score_map={"blah3": scores[2]}), parent=win10x64_sigs_res_sec)
+        _ = ResultSection("Signature: blah4", body="daba", heuristic=Heuristic(1, signatures={"blah4": 1}, score_map={"blah4": scores[3]}), parent=win10x64_sigs_res_sec)
+        cuckoo_class_instance.file_res.add_section(win10x64_res_sec)
+
+        win7x86_res_sec = ResultSection("Analysis Environment Target: win7x86")
+        _ = ResultSection(MACHINE_INFORMATION_SECTION_TITLE, body=json.dumps({"Name": "cuckoo-victim-win7x86_0"}), parent=win7x86_res_sec)
+        cuckoo_class_instance.file_res.add_section(win7x86_res_sec)
+
+        ub1804x64_res_sec = ResultSection("Analysis Environment Target: ub1804x64")
+        _ = ResultSection(MACHINE_INFORMATION_SECTION_TITLE, body=json.dumps({"Name": "cuckoo-victim-ub1804x64_0"}), parent=ub1804x64_res_sec)
+        ub1804x64_sigs_res_sec = ResultSection(SIGNATURES_SECTION_TITLE, parent=ub1804x64_res_sec)
+        _ = ResultSection("Signature: blah5", body="doo", heuristic=Heuristic(1, signatures={"blah5": 1}, score_map={"blah5": scores[4]}), parent=ub1804x64_sigs_res_sec)
+        _ = ResultSection("Signature: blah6", body="doo", heuristic=Heuristic(1, signatures={"blah6": 1}, score_map={"blah6": scores[5]}), parent=ub1804x64_sigs_res_sec)
+        cuckoo_class_instance.file_res.add_section(ub1804x64_res_sec)
+
+        cuckoo_class_instance._collect_signatures()
+        correct_result = ResultSection(SIGNATURE_HIGHLIGHTS_SECTION_TITLE, body=f"The following signatures are highlights (scored {cuckoo_class_instance.sig_highlight_min_score}+) from analysis.")
+        for index, item in enumerate(all_sig_highlights):
+            if scores[index] < cuckoo_class_instance.sig_highlight_min_score:
+                continue
+            else:
+                correct_result.add_subsection(ResultSection(item["title"], body=item["body"]))
+        if len(correct_result.subsections) > 0:
+            assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result)
+        else:
+            assert all(section.title_text != SIGNATURE_HIGHLIGHTS_SECTION_TITLE for section in cuckoo_class_instance.file_res.sections)
+
 
 class TestCuckooResult:
     @classmethod
@@ -2054,14 +2103,13 @@ class TestCuckooResult:
     @staticmethod
     def test_constants():
         from re import compile
-        from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex, FULL_URI as base_uri_regex, MD5_REGEX as base_md5_regex
+        from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex, MD5_REGEX as base_md5_regex
         from cuckoo.cuckoo_result import DOMAIN_REGEX, IP_REGEX, URL_REGEX, MD5_REGEX, UNIQUE_IP_LIMIT, \
             SCORE_TRANSLATION, SKIPPED_MARK_ITEMS, SKIPPED_CATEGORY_IOCS, SKIPPED_FAMILIES, SKIPPED_PATHS, SILENT_IOCS, \
             INETSIM, DNS_API_CALLS, HTTP_API_CALLS, BUFFER_API_CALLS, SUSPICIOUS_USER_AGENTS, SUPPORTED_EXTENSIONS, \
-            ANALYSIS_ERRORS, GUEST_LOSING_CONNNECTIVITY, GUEST_CANNOT_REACH_HOST, GUEST_LOST_CONNECTIVITY
-        assert DOMAIN_REGEX == base_domain_regex
+            ANALYSIS_ERRORS, GUEST_LOSING_CONNNECTIVITY, GUEST_CANNOT_REACH_HOST, GUEST_LOST_CONNECTIVITY        assert DOMAIN_REGEX == base_domain_regex
         assert IP_REGEX == base_ip_regex
-        assert URL_REGEX == compile(base_uri_regex.lstrip("^").rstrip("$"))
+        assert URL_REGEX == compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#]\S*)?")
         assert MD5_REGEX == base_md5_regex
         assert UNIQUE_IP_LIMIT == 100
         assert SCORE_TRANSLATION == {1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000}
@@ -2103,20 +2151,25 @@ class TestCuckooResult:
           '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'),
          ({"info":
            {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"},
-           "debug": "blah", "signatures": "blah", "network": "blah", "behavior": {"blah": "blah"},
+           "debug": "blah", "signatures": [{"name": "blah"}], "network": "blah", "behavior": {"blah": "blah"},
            "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
           None),
-         ({"signatures": "blah",
+         ({"info":
+           {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"},
+           "debug": "blah", "signatures": [{"name": "ransomware"}], "network": "blah", "behavior": {"blah": "blah"},
+           "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
+          None),
+         ({"signatures": [{"name": "blah"}],
            "info":
            {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"},
            "behavior": {"summary": "blah"}},
           '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'),
-         ({"signatures": "blah",
+         ({"signatures": [{"name": "blah"}],
            "info":
            {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"},
            "behavior": {"processtree": "blah"}},
           '{"Cuckoo Task ID": "blah", "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}'),
-         ({"signatures": "blah",
+         ({"signatures": [{"name": "blah"}],
            "info":
            {"started": "1", "ended": "1", "duration": "1", "id": "blah", "route": "blah", "version": "blah"},
            "behavior": {"processes": "blah"}},
@@ -3003,11 +3056,11 @@ class TestCuckooResult:
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}},
                                '[{"Decrypted Buffer": "blah"}]', {}),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}},
-                               '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.static.ip': ['127.0.0.1']}),
+                               '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.dynamic.ip': ['127.0.0.1']}),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.ca"}}]}},
-                               '[{"Decrypted Buffer": "blah.ca"}]', {'network.static.domain': ['blah.ca']}),
+                               '[{"Decrypted Buffer": "blah.ca"}]', {'network.dynamic.domain': ['blah.ca']}),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}},
-                               '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.static.ip': ['127.0.0.1']}), ])
+                               '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.dynamic.ip': ['127.0.0.1']}), ])
     def test_process_decrypted_buffers(process_map, correct_buffer_body, correct_tags):
         from cuckoo.cuckoo_result import process_decrypted_buffers
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
@@ -3076,13 +3129,15 @@ class TestCuckooResult:
         "blob, file_ext, correct_tags",
         [
             ("", "", {}),
-            ("192.168.100.1", "", {'network.static.ip': ['192.168.100.1']}),
-            ("blah.ca", ".exe", {'network.static.domain': ['blah.ca']}),
-            ("https://blah.ca", ".exe", {'network.static.domain': ['blah.ca'], 'network.static.uri': ['https://blah.ca']}),
-            ("https://blah.ca/blah", ".exe", {'network.static.domain': ['blah.ca'], 'network.static.uri': ['https://blah.ca']}),
+            ("192.168.100.1", "", {'network.dynamic.ip': ['192.168.100.1']}),
+            ("blah.ca", ".exe", {'network.dynamic.domain': ['blah.ca']}),
+            ("https://blah.ca", ".exe", {'network.dynamic.domain': ['blah.ca'], 'network.dynamic.uri': ['https://blah.ca']}),
+            ("https://blah.ca/blah", ".exe", {'network.dynamic.domain': ['blah.ca'], 'network.dynamic.uri': ['https://blah.ca/blah'], "network.dynamic.uri_path": ["/blah"]}),
             ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", ".exe", {}),
             ("DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC", ".exe", {}),
             ("DRIVE:\\\\PATH TO\\\\PYTHON27.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.py", ".py", {}),
+            ("POST /some/thing/bad.exe HTTP/1.0\nUser-Agent: Mozilla\nHost: evil.ca\nAccept: */*\nContent-Type: application/octet-stream\nContent-Encoding: binary\n\nConnection: close", "", {"network.dynamic.domain": ["evil.ca"]}),
+            ("evil.ca/some/thing/bad.exe", "", {"network.dynamic.domain": ["evil.ca"], "network.dynamic.uri": ["evil.ca/some/thing/bad.exe"], "network.dynamic.uri_path": ["/some/thing/bad.exe"]}),
         ]
     )
     def test_extract_iocs_from_text_blob(blob, file_ext, correct_tags):
