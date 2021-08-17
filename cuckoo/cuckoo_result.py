@@ -20,8 +20,8 @@ from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DR
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
-# Remove the part of the regex that looks to match the entire line. Create non-capturing group.
-URL_REGEX = re.compile(FULL_URI.lstrip("^").rstrip("$").replace("(", "(?:", 1))
+# Custom regex for finding uris in a text blob
+URL_REGEX = re.compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#]\S*)?")
 UNIQUE_IP_LIMIT = 100
 SCORE_TRANSLATION = {
     1: 10,
