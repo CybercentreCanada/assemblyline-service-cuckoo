@@ -1,6 +1,6 @@
-MIT License 
+MIT License
 
-Copyright (c) 2020 Crown Copyright, Government of Canada (Canadian Centre for Cyber Security / Communications Security Establishment)
+Copyright (c) 2021 Crown Copyright, Government of Canada (Canadian Centre for Cyber Security / Communications Security Establishment)
 
 Copyright title to all 3rd party software distributed with Assemblyline (AL) is held by the respective copyright holders as noted in those files. Users are asked to read the 3rd Party Licenses referenced with those assets.
 
