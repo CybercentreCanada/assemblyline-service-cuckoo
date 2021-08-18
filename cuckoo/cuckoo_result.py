@@ -1350,8 +1350,7 @@ def _tag_and_describe_generic_signature(signature_name: str, mark: Dict[str, Any
     if signature_name == "network_cnc_http":
         http_string = mark["suspicious_request"].split()
         if not contains_safelisted_value(http_string[1]):
-            sig_res.add_line(f'\tFun fact: {safe_str(mark["suspicious_features"])}')
-            sig_res.add_line(f'\tIOC: {safe_str(mark["suspicious_request"])}')
+            sig_res.add_line(f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
             if re.match(FULL_URI, http_string[1]):
                 sig_res.add_tag("network.dynamic.uri", http_string[1])
     elif signature_name == "nolookup_communication":
