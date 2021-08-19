@@ -1695,13 +1695,14 @@ class Cuckoo(ServiceBase):
 
     def _determine_host_to_use(self, hosts: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        This method determines which host to send a file to, based on the length of the host's pending task queue
+        This method determines which host to send a file to, based on randomness and the length of the host's pending
+        task queue
         :param hosts: The hosts that the file could be sent to
         :return: The host that the file will be sent to
         """
         # This method will be used to determine the host to use for a submission
         # Key aspect that we are using to make a decision is the # of pending tasks, aka the queue size
-        host_details: List[Tuple[Dict[str, Any], int]] = []
+        host_details: List[Dict[str, Any], int] = []
         min_queue_size = sys.maxsize
         for host in hosts:
             host_status_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_HOST}"
@@ -1716,16 +1717,17 @@ class Cuckoo(ServiceBase):
             else:
                 resp_dict = resp.json()
                 queue_size = resp_dict["tasks"]["pending"]
-                host_details.append((host, queue_size))
+                host_details.append({"host": host, "queue_size": queue_size})
                 if queue_size < min_queue_size:
                     min_queue_size = queue_size
 
-        for host_detail in host_details:
-            host, queue_size = host_detail
-            if queue_size == min_queue_size:
-                return host
-
-        raise CuckooVMBusyException(f"No host available for submission between {[host['ip'] for host in hosts]}")
+        # If the minimum queue size is shared by multiple hosts, choose a random one.
+        min_queue_hosts = [host_detail["host"] for host_detail in host_details
+                           if host_detail["queue_size"] == min_queue_size]
+        if len(min_queue_hosts) > 0:
+            return random.choice(min_queue_hosts)
+        else:
+            raise CuckooVMBusyException(f"No host available for submission between {[host['ip'] for host in hosts]}")
 
     def _is_invalid_analysis_timeout(self, parent_section: ResultSection, reboot: bool = False) -> bool:
         """
