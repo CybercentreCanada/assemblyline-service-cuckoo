@@ -1934,20 +1934,26 @@ class TestCuckooMain:
         from cuckoo.cuckoo_main import CUCKOO_API_QUERY_HOST, CuckooTimeoutException, CuckooVMBusyException
         from requests import Session, exceptions, ConnectionError
         cuckoo_class_instance.session = Session()
-        hosts = [{"ip": "1.1.1.1", "port": 1111, "auth_header": {"blah": "blah"}}]
+        hosts = [
+            {"ip": "1.1.1.1", "port": 1111, "auth_header": {"blah": "blah"}},
+            {"ip": "2.2.2.2", "port": 2222, "auth_header": {"blah": "blah"}},
+            {"ip": "3.3.3.3", "port": 3333, "auth_header": {"blah": "blah"}}
+        ]
         with requests_mock.Mocker() as m:
             for host in hosts:
                 host_status_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_HOST}"
                 m.get(host_status_url, json={"tasks": {"pending": 1}})
             test_result = cuckoo_class_instance._determine_host_to_use(hosts)
-            assert hosts[0] == test_result
+            assert any(host == test_result for host in hosts)
             m.get(host_status_url, exc=exceptions.Timeout)
             with pytest.raises(CuckooTimeoutException):
                 cuckoo_class_instance._determine_host_to_use(hosts)
             m.get(host_status_url, exc=ConnectionError)
             with pytest.raises(Exception):
                 cuckoo_class_instance._determine_host_to_use(hosts)
-            m.get(host_status_url, status_code=404)
+            for host in hosts:
+                host_status_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_HOST}"
+                m.get(host_status_url, status_code=404)
             with pytest.raises(CuckooVMBusyException):
                 cuckoo_class_instance._determine_host_to_use(hosts)
 
