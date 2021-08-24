@@ -1837,6 +1837,8 @@ class Cuckoo(ServiceBase):
                     sig_summary[machine_name] = []
                 elif subsection.title_text == SIGNATURES_SECTION_TITLE and machine_name:
                     for sig_subsection in subsection.subsections:
+                        if sig_subsection.heuristic is None:
+                            continue
                         if sig_subsection.heuristic.score < self.sig_highlight_min_score:
                             continue
                         sig_name = next((iter(sig_subsection.heuristic.signatures)), None)
