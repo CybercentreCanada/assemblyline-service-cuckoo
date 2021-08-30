@@ -1332,6 +1332,7 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
     :return: None
     """
     buffer_count = 0
+    buffers = set()
     encrypted_buffer_result_section = ResultSection("Placeholder")
     for pid, process_details in process_map.items():
         for network_call in process_details["network_calls"]:
@@ -1339,7 +1340,8 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
                 if api_call in network_call:
                     buffer = network_call[api_call]["buffer"]
                     _extract_iocs_from_text_blob(buffer, encrypted_buffer_result_section)
-                    encrypted_buffer_file_path = os.path.join("/tmp", f"{task_id}_encrypted_buffer_{buffer_count}.txt")
+                    encrypted_buffer_file_path = os.path.join("/tmp", f"{task_id}_{pid}_encrypted_buffer_{buffer_count}.txt")
+                    buffers.add(encrypted_buffer_file_path)
                     with open(encrypted_buffer_file_path, "wb") as f:
                         f.write(buffer.encode())
                     f.close()
@@ -1347,6 +1349,9 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
     if buffer_count > 0:
         encrypted_buffer_result_section.title_text = f"{buffer_count} Encrypted Buffer(s) Found"
         encrypted_buffer_result_section.set_heuristic(1006)
+        encrypted_buffer_result_section.add_line("The following buffer(s) was found in network calls and extracted as "
+                                                 "a file for further analysis")
+        encrypted_buffer_result_section.add_lines(list(buffers))
         network_res.add_subsection(encrypted_buffer_result_section)
 
 

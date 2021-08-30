@@ -540,7 +540,7 @@ heuristics:
     description: Cuckoo detected non-HTTP traffic being made over HTTP ports (80, 443)
 
   - heur_id: 1006
-    name: Enrypted Buffer
+    name: Encrypted Buffer
     score: 500
     filetype: '*'
     description: Cuckoo detected an encrypted buffer being transferred through a network call
