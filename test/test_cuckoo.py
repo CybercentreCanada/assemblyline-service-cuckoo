@@ -2798,11 +2798,14 @@ class TestCuckooResult:
         from assemblyline_v4_service.common.result import ResultSection
         from cuckoo.cuckoo_result import _write_encrypted_buffers_to_file
         test_parent_section = ResultSection("blah")
-        correct_result_section = ResultSection("1 Encrypted Buffer(s) Found")
+        correct_result_section = ResultSection("2 Encrypted Buffer(s) Found")
         correct_result_section.set_heuristic(1006)
-        _write_encrypted_buffers_to_file(1, {1: {"network_calls": [{"send": {"buffer": "blah"}}]}}, test_parent_section)
+        correct_result_section.add_line("The following buffer(s) was found in network calls and extracted as a file for further analysis")
+        correct_result_section.add_lines(list({"/tmp/1_1_encrypted_buffer_0.txt", "/tmp/1_2_encrypted_buffer_1.txt"}))
+        _write_encrypted_buffers_to_file(1, {1: {"network_calls": [{"send": {"buffer": "blah"}}]}, 2: {"network_calls": [{"send": {"buffer": "blah"}}]}}, test_parent_section)
         assert check_section_equality(test_parent_section.subsections[0], correct_result_section)
-        remove("/tmp/1_encrypted_buffer_0.txt")
+        remove("/tmp/1_1_encrypted_buffer_0.txt")
+        remove("/tmp/1_2_encrypted_buffer_1.txt")
 
     @staticmethod
     def test_process_non_http_traffic_over_http():
