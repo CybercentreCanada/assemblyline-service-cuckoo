@@ -13,7 +13,7 @@ import sys
 import requests
 import tempfile
 from threading import Thread
-from typing import Optional, Dict, List, Any, Set, Tuple
+from typing import Optional, Dict, List, Any, Set
 
 from retrying import retry, RetryError
 
@@ -210,7 +210,6 @@ class Cuckoo(ServiceBase):
         self.timeout = self.config.get("rest_timeout_in_seconds", 120)
         self.max_report_size = self.config.get('max_report_size', 275000000)
         self.allowed_images = self.config.get("allowed_images", [])
-        self.routing = self.config.get("routing", INETSIM)
         self.sig_highlight_min_score = self.config.get("sig_highlight_min_score", 0)
         self.log.debug("Cuckoo started!")
 
@@ -1056,6 +1055,7 @@ class Cuckoo(ServiceBase):
         sysmon_enabled = self.request.get_param("sysmon_enabled")
         simulate_user = self.request.get_param("simulate_user")
         package = self.request.get_param("package")
+        route = self.request.get_param("routing")
 
         self._prepare_dll_submission(kwargs, task_options, file_ext, parent_section)
 
@@ -1091,6 +1091,12 @@ class Cuckoo(ServiceBase):
         # If deep_scan, then get 100 HH files of all types
         if self.request.deep_scan:
             task_options.append("hollowshunter=all")
+
+        if route:
+            task_options.append(f"route={route.lower()}")
+            self.routing = route
+        else:
+            self.routing = "None"
 
         kwargs['options'] = ','.join(task_options)
         if custom_options is not None:

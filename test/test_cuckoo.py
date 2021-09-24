@@ -390,6 +390,7 @@ class TestCuckooMain:
         assert cuckoo_class_instance.allowed_images == []
         assert cuckoo_class_instance.artifact_list is None
         assert cuckoo_class_instance.hosts == []
+        assert cuckoo_class_instance.routing == ""
 
     @staticmethod
     def test_start(cuckoo_class_instance):
@@ -1295,6 +1296,7 @@ class TestCuckooMain:
                 "deep_scan": False,
                 "package": "",
                 "dump_memory": False,
+                "routing": "none",
             },
             {
                 "analysis_timeout_in_seconds": 1,
@@ -1311,6 +1313,7 @@ class TestCuckooMain:
                 "deep_scan": True,
                 "package": "doc",
                 "dump_memory": True,
+                "routing": "tor",
             }
         ]
     )
@@ -1335,6 +1338,7 @@ class TestCuckooMain:
         simulate_user = params["simulate_user"]
         package = params["package"]
         dump_memory = params["dump_memory"]
+        route = params["routing"]
         if timeout:
             correct_kwargs['enforce_timeout'] = True
             correct_kwargs['timeout'] = timeout
@@ -1361,6 +1365,8 @@ class TestCuckooMain:
         deep_scan = params.pop("deep_scan")
         if deep_scan:
             correct_task_options.append("hollowshunter=all")
+        if route:
+            correct_task_options.append(f"route={route}")
 
         correct_kwargs['options'] = ','.join(correct_task_options)
         if custom_options is not None:
