@@ -153,11 +153,12 @@ submission_params:
     value: "none"
     list: ["none", "windows", "linux"]
 
-  - default: INetSim
+  # https://cuckoo.readthedocs.io/en/latest/installation/host/routing/#per-analysis-network-routing-options
+  - default: none
     name: routing
     type: list
-    value: INetSim
-    list: [ "INetSim" ]
+    value: none
+    list: ["none", "inetsim", "drop", "internet", "tor", "vpn"]
 
 heuristics:
   - heur_id: 1
