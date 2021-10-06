@@ -3684,7 +3684,8 @@ class TestSignatures:
             "process_needed": "Suspicious Execution Chain",
             "winmgmts_process_create": "WMI",
             "dll_load_uncommon_file_types": "Suspicious DLL",
-            "antiav_whitespace": "Anti-antivirus"
+            "antiav_whitespace": "Anti-antivirus",
+            "office_uses_wmi": "WMI",
         }
 
         assert CUCKOO_SIGNATURE_CATEGORIES == {
