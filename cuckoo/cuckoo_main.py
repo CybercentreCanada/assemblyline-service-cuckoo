@@ -18,7 +18,7 @@ from typing import Optional, Dict, List, Any, Set
 from retrying import retry, RetryError
 
 from assemblyline_v4_service.common.request import ServiceRequest
-from assemblyline_v4_service.common.result import Result, ResultSection, BODY_FORMAT
+from assemblyline_v4_service.common.result import Result, ResultSection, ResultImageSection, BODY_FORMAT
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
 
@@ -1300,7 +1300,7 @@ class Cuckoo(ServiceBase):
         # special 'supplementary' directory
         try:
             self._extract_hollowshunter(tar_obj, cuckoo_task.id)
-            self._extract_artifacts(tar_obj, cuckoo_task.id)
+            self._extract_artifacts(tar_obj, cuckoo_task.id, parent_section)
 
         except Exception as e:
             self.log.exception(f"Unable to add extra file(s) for "
@@ -1463,13 +1463,16 @@ class Cuckoo(ServiceBase):
             self.artifact_list.append(artifact)
             self.log.debug(f"Adding extracted file for task {task_id}: {encrypted_buffer_file}")
 
-    def _extract_artifacts(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
+    def _extract_artifacts(self, tar_obj: tarfile.TarFile, task_id: int, parent_section: ResultSection) -> None:
         """
         This method extracts certain artifacts from that tarball
         :param tar_obj: The tarball object, containing the analysis artifacts for the task
         :param task_id: An integer representing the Cuckoo Task ID
+        :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: None
         """
+        image_section = ResultImageSection(self.request, f'Screenshots taken during Task {task_id}')
+
         # Extract buffers, screenshots and anything else
         tarball_file_map = {
             "buffer": "Extracted buffer",
@@ -1494,6 +1497,10 @@ class Cuckoo(ServiceBase):
                 tar_obj.extract(f, path=task_dir)
                 file_name = f"{task_id}_{f}"
                 to_be_extracted = False
+
+                if key == "shots":
+                    image_section.add_image(destination_file_path, file_name, value)
+
                 if key not in ["supplementary", "shots"]:
                     to_be_extracted = True
 
@@ -1505,6 +1512,8 @@ class Cuckoo(ServiceBase):
                 }
                 self.artifact_list.append(artifact)
                 self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
+        if len(image_section.body) > 0:
+            parent_section.add_subsection(image_section)
 
     def _extract_hollowshunter(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
         """
