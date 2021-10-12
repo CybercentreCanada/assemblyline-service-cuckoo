@@ -102,6 +102,9 @@ def dummy_request_class(dummy_task_class):
             else:
                 return val
 
+        def add_image(self, *args):
+            return True
+
     yield DummyRequest
 
 
@@ -120,6 +123,7 @@ def dummy_tar_class():
                 "hollowshunter/hh_process_123_blah.exe",
                 "hollowshunter/hh_process_123_blah.shc",
                 "hollowshunter/hh_process_123_blah.dll",
+                "shots/001.jpg",
             ]
 
         def extract(self, output, path=None):
@@ -1669,6 +1673,7 @@ class TestCuckooMain:
 
     @staticmethod
     def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
+        from assemblyline_v4_service.common.result import ResultSection, ResultImageSection
 
         tarball_file_map = {
             "buffer": "Extracted buffer",
@@ -1679,14 +1684,21 @@ class TestCuckooMain:
             "sysmon/sysmon.evtx": "Sysmon Logging Captured",
             "supplementary": "Supplementary File"
         }
+        parent_section = ResultSection("blah")
         correct_artifact_list = []
         tar_obj = dummy_tar_class()
         task_id = 1
         cuckoo_class_instance.artifact_list = []
+        correct_image_section = ResultImageSection(
+            dummy_request_class,
+            f"Screenshots taken during Task {task_id}",
+        )
         for key, val in tarball_file_map.items():
             correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{key}"
             dummy_tar_member = dummy_tar_member_class(key, 1)
             tar_obj.members.append(dummy_tar_member)
+            if key == "shots":
+                correct_image_section.add_image(correct_path, f"{task_id}_{key}", val)
             if key in ["supplementary", "shots"]:
                 correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}",
                                              "description": val, "to_be_extracted": False})
@@ -1695,7 +1707,7 @@ class TestCuckooMain:
                                              "description": val, "to_be_extracted": True})
 
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_class_instance._extract_artifacts(tar_obj, task_id)
+        cuckoo_class_instance._extract_artifacts(tar_obj, task_id, parent_section)
 
         all_extracted = True
         for extracted in cuckoo_class_instance.artifact_list:
@@ -1710,6 +1722,8 @@ class TestCuckooMain:
                 all_supplementary = False
                 break
         assert all_supplementary
+
+        check_section_equality(parent_section.subsections[0], correct_image_section)
 
     @staticmethod
     def test_extract_hollowshunter(cuckoo_class_instance, dummy_request_class, dummy_tar_class):
