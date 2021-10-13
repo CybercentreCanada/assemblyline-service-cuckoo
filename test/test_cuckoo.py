@@ -1697,9 +1697,10 @@ class TestCuckooMain:
             correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{key}"
             dummy_tar_member = dummy_tar_member_class(key, 1)
             tar_obj.members.append(dummy_tar_member)
-            if key == "shots":
+            if key in ["shots"]:
                 correct_image_section.add_image(correct_path, f"{task_id}_{key}", val)
-            if key in ["supplementary", "shots"]:
+                continue
+            if key in ["supplementary"]:
                 correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}",
                                              "description": val, "to_be_extracted": False})
             else:

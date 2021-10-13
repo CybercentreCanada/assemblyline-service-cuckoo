@@ -1498,10 +1498,11 @@ class Cuckoo(ServiceBase):
                 file_name = f"{task_id}_{f}"
                 to_be_extracted = False
 
-                if key == "shots":
+                if key in ["shots"]:
                     image_section.add_image(destination_file_path, file_name, value)
+                    continue
 
-                if key not in ["supplementary", "shots"]:
+                if key not in ["supplementary"]:
                     to_be_extracted = True
 
                 artifact = {
