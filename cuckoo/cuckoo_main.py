@@ -1499,7 +1499,9 @@ class Cuckoo(ServiceBase):
                 to_be_extracted = False
 
                 if key in ["shots"]:
-                    image_section.add_image(destination_file_path, file_name, value)
+                    # AL generates thumbnails already
+                    if "_small" not in f:
+                        image_section.add_image(destination_file_path, file_name, value)
                     continue
 
                 if key not in ["supplementary"]:
@@ -1514,6 +1516,7 @@ class Cuckoo(ServiceBase):
                 self.artifact_list.append(artifact)
                 self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
         if len(image_section.body) > 0:
+            image_section.body = sorted(image_section.body, key=lambda image: image["name"])
             parent_section.add_subsection(image_section)
 
     def _extract_hollowshunter(self, tar_obj: tarfile.TarFile, task_id: int) -> None:

@@ -102,8 +102,9 @@ def dummy_request_class(dummy_task_class):
             else:
                 return val
 
-        def add_image(self, *args):
-            return True
+        @staticmethod
+        def add_image(path, name, description, classification=None):
+            return {"path": path, "name": name, "description": description, "classification": classification}
 
     yield DummyRequest
 
@@ -123,7 +124,12 @@ def dummy_tar_class():
                 "hollowshunter/hh_process_123_blah.exe",
                 "hollowshunter/hh_process_123_blah.shc",
                 "hollowshunter/hh_process_123_blah.dll",
-                "shots/001.jpg",
+                "shots/0005.jpg",
+                "shots/0010.jpg",
+                "shots/0001_small.jpg",
+                "shots/0001.jpg",
+                "buffer/blahblah",
+                "supplementary/blahblah",
             ]
 
         def extract(self, output, path=None):
@@ -1693,20 +1699,26 @@ class TestCuckooMain:
             dummy_request_class,
             f"Screenshots taken during Task {task_id}",
         )
-        for key, val in tarball_file_map.items():
-            correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{key}"
-            dummy_tar_member = dummy_tar_member_class(key, 1)
+        for f in tar_obj.getnames():
+            key = next((k for k in tarball_file_map if k in f), None)
+            if not key:
+                continue
+            val = tarball_file_map[key]
+            correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{f}"
+            dummy_tar_member = dummy_tar_member_class(f, 1)
             tar_obj.members.append(dummy_tar_member)
             if key in ["shots"]:
-                correct_image_section.add_image(correct_path, f"{task_id}_{key}", val)
+                if "_small" not in f:
+                    correct_image_section.add_image(correct_path, f"{task_id}_{f}", val)
                 continue
             if key in ["supplementary"]:
-                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}",
+                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{f}",
                                              "description": val, "to_be_extracted": False})
             else:
-                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{key}",
+                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{f}",
                                              "description": val, "to_be_extracted": True})
 
+        correct_image_section.body = sorted(correct_image_section.body, key=lambda image: image["name"])
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance._extract_artifacts(tar_obj, task_id, parent_section)
 
