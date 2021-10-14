@@ -104,7 +104,10 @@ def dummy_request_class(dummy_task_class):
 
         @staticmethod
         def add_image(path, name, description, classification=None):
-            return {"path": path, "name": name, "description": description, "classification": classification}
+            return {
+                "img": {"path": path, "name": name, "description": description, "classification": classification},
+                "thumb": {"path": path, "name": f"{name}.thumb", "description": description, "classification": classification}
+            }
 
     yield DummyRequest
 
@@ -1718,7 +1721,7 @@ class TestCuckooMain:
                 correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{f}",
                                              "description": val, "to_be_extracted": True})
 
-        correct_image_section.body = sorted(correct_image_section.body, key=lambda image: image["name"])
+        correct_image_section.body = sorted(correct_image_section.body, key=lambda image: image["img"]["name"])
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance._extract_artifacts(tar_obj, task_id, parent_section)
 
