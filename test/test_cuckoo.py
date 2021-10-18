@@ -1669,14 +1669,14 @@ class TestCuckooMain:
 
     @staticmethod
     def test_extract_encrypted_buffers(cuckoo_class_instance, dummy_request_class, mocker):
-        mocker.patch('os.listdir', return_value=["1_encrypted_buffer_0.txt"])
+        mocker.patch('os.listdir', return_value=["1_1_encrypted_buffer_0.txt"])
         mocker.patch('os.path.isfile', return_value=True)
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance.artifact_list = []
         task_id = 1
         cuckoo_class_instance._extract_encrypted_buffers(task_id)
-        assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/1_encrypted_buffer_0.txt"
-        assert cuckoo_class_instance.artifact_list[0]["name"] == "/tmp/1_encrypted_buffer_0.txt"
+        assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/1_1_encrypted_buffer_0.txt"
+        assert cuckoo_class_instance.artifact_list[0]["name"] == "/tmp/1_1_encrypted_buffer_0.txt"
         assert cuckoo_class_instance.artifact_list[0]["description"] == "Encrypted Buffer Observed in Network Traffic"
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
@@ -2836,7 +2836,7 @@ class TestCuckooResult:
         test_parent_section = ResultSection("blah")
         correct_result_section = ResultSection("2 Encrypted Buffer(s) Found")
         correct_result_section.set_heuristic(1006)
-        correct_result_section.add_line("The following buffer(s) was found in network calls and extracted as a file for further analysis")
+        correct_result_section.add_line("The following buffers were found in network calls and extracted as files for further analysis:")
         correct_result_section.add_lines(list({"/tmp/1_1_encrypted_buffer_0.txt", "/tmp/1_2_encrypted_buffer_1.txt"}))
         _write_encrypted_buffers_to_file(1, {1: {"network_calls": [{"send": {"buffer": "blah"}}]}, 2: {"network_calls": [{"send": {"buffer": "blah"}}]}}, test_parent_section)
         assert check_section_equality(test_parent_section.subsections[0], correct_result_section)

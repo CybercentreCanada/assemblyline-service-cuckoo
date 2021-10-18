@@ -480,6 +480,11 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         dns_res_sec = ResultSection(title_text=title_text)
         dns_res_sec.set_heuristic(1000)
         dns_res_sec.add_tag("network.protocol", "dns")
+        # If there is only UDP and no TCP traffic, then we need to tag the domains here:
+        for dns_call in dns_calls:
+            domain = dns_call["request"]
+            if domain and not slist_check_domain(domain):
+                dns_res_sec.add_tag("network.dynamic.domain", safe_str(domain))
 
     resolved_ips = _get_dns_map(dns_calls, process_map, routing)
     low_level_flows = {
@@ -659,10 +664,10 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
             request = dns_call["request"]
             dns_type = dns_call["type"]
 
-            # If the method of routing is INetSim, then we will not use PTR records. The reason being that there is
+            # If the method of routing is INetSim or a variation of INetSim, then we will not use PTR records. The reason being that there is
             # always a chance for collision between IPs and hostnames due to the DNS cache, and that chance increases
             # the smaller the size of the random network space
-            if routing == INETSIM and dns_type == "PTR":
+            if routing.lower() in [INETSIM.lower(), "none"] and dns_type == "PTR":
                 continue
 
             # A DNS pointer record (PTR for short) provides the domain name associated with an IP address.
@@ -1255,6 +1260,10 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
                     url_pieces = urlparse(http_string[1])
                     if url_pieces.path in SKIPPED_PATHS or not re.match(FULL_URI, http_string[1]):
                         fp_count += 1
+                elif name in ["dead_host"]:
+                    ip, port = ioc.split(":")
+                    if is_ip(ip) and ip_address(ip) in inetsim_network:
+                        fp_count += 1
                 elif name != "persistence_autorun" and name not in SILENT_IOCS and \
                         (is_ip(ioc) and ip_address(ioc) in inetsim_network):
                     fp_count += 1
@@ -1349,8 +1358,8 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
     if buffer_count > 0:
         encrypted_buffer_result_section.title_text = f"{buffer_count} Encrypted Buffer(s) Found"
         encrypted_buffer_result_section.set_heuristic(1006)
-        encrypted_buffer_result_section.add_line("The following buffer(s) was found in network calls and extracted as "
-                                                 "a file for further analysis")
+        encrypted_buffer_result_section.add_line("The following buffers were found in network calls and "
+                                                 "extracted as files for further analysis:")
         encrypted_buffer_result_section.add_lines(list(buffers))
         network_res.add_subsection(encrypted_buffer_result_section)
 

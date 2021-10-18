@@ -154,7 +154,7 @@ submission_params:
     list: ["none", "windows", "linux"]
 
   # https://cuckoo.readthedocs.io/en/latest/installation/host/routing/#per-analysis-network-routing-options
-  - default: none
+  - default: "none"
     name: routing
     type: list
     value: none
