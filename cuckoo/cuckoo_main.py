@@ -27,12 +27,12 @@ from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.constants import RECOGNIZED_TYPES
 
-from cuckoo.cuckoo_result import generate_al_result, INETSIM, SUPPORTED_EXTENSIONS, ANALYSIS_ERRORS, GUEST_CANNOT_REACH_HOST, SIGNATURES_SECTION_TITLE
+from cuckoo.cuckoo_result import generate_al_result, SUPPORTED_EXTENSIONS, ANALYSIS_ERRORS, GUEST_CANNOT_REACH_HOST, SIGNATURES_SECTION_TITLE
 from cuckoo.safelist import slist_check_hash, slist_check_dropped
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc|dll)$"
-ENCRYPTED_BUFFER_REGEX = "^\/tmp\/%s_encrypted_buffer_[0-9]{1,2}\.txt$"
+ENCRYPTED_BUFFER_REGEX = "^\/tmp\/%s_[0-9]{1,}_encrypted_buffer_[0-9]{1,2}\.txt$"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
