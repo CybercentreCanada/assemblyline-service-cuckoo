@@ -186,6 +186,15 @@ def dummy_result_class_instance():
     return DummyResult()
 
 
+@pytest.fixture
+def dummy_api_interface_class():
+    class DummyApiInterface:
+        @staticmethod
+        def get_safelist():
+            return []
+    return DummyApiInterface
+
+
 def yield_sample_file_paths():
     samples_path = os.path.join(TEST_DIR, "samples")
     # For some reason os.listdir lists the same file twice, but with a trailing space on the second entry
@@ -406,7 +415,8 @@ class TestCuckooMain:
         assert cuckoo_class_instance.routing == ""
 
     @staticmethod
-    def test_start(cuckoo_class_instance):
+    def test_start(cuckoo_class_instance, dummy_api_interface_class, mocker):
+        mocker.patch.object(cuckoo_class_instance, "get_api_interface", return_value=dummy_api_interface_class)
         cuckoo_class_instance.start()
         assert cuckoo_class_instance.ssdeep_match_pct == int(
             cuckoo_class_instance.config.get('dedup_similar_percent', 40))
@@ -1030,7 +1040,6 @@ class TestCuckooMain:
         from assemblyline_v4_service.common.task import Task
         from assemblyline.odm.messages.task import Task as ServiceTask
         from assemblyline_v4_service.common.request import ServiceRequest
-        from assemblyline_v4_service.common.result import ResultSection
         from cuckoo.cuckoo_main import Cuckoo, CuckooTask
         import tarfile
         import io
@@ -1043,7 +1052,7 @@ class TestCuckooMain:
         cuckoo_class_instance._task = task
         cuckoo_class_instance.request = ServiceRequest(task)
         cuckoo_class_instance.artifact_list = []
-        parent_section = ResultSection("blah")
+        cuckoo_class_instance.ssdeep_match_pct = 40
 
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
@@ -1054,11 +1063,14 @@ class TestCuckooMain:
                 # Tar it up
                 tar.add(file_path)
                 break
+        with open("/tmp/blah.txt", "w") as f:
+            f.write("blah")
+        tar.add("/tmp/blah.txt")
         tar.close()
 
         mocker.patch.object(Cuckoo, "query_report", return_value=s.getvalue())
-        cuckoo_class_instance.check_dropped(cuckoo_task, parent_section)
-        assert cuckoo_class_instance.artifact_list[0]["name"] == f"1_{sample['filename']}"
+        cuckoo_class_instance.check_dropped(cuckoo_task)
+        assert cuckoo_class_instance.artifact_list[0]["name"] == f"1_blah.txt"
         assert cuckoo_class_instance.artifact_list[0]["description"] == 'Dropped file during Cuckoo analysis.'
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == True
 
@@ -2146,14 +2158,13 @@ class TestCuckooResult:
     def test_constants():
         from re import compile
         from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex, MD5_REGEX as base_md5_regex
-        from cuckoo.cuckoo_result import DOMAIN_REGEX, IP_REGEX, URL_REGEX, MD5_REGEX, UNIQUE_IP_LIMIT, \
+        from cuckoo.cuckoo_result import DOMAIN_REGEX, IP_REGEX, URL_REGEX, UNIQUE_IP_LIMIT, \
             SCORE_TRANSLATION, SKIPPED_MARK_ITEMS, SKIPPED_CATEGORY_IOCS, SKIPPED_FAMILIES, SKIPPED_PATHS, SILENT_IOCS, \
             INETSIM, DNS_API_CALLS, HTTP_API_CALLS, BUFFER_API_CALLS, SUSPICIOUS_USER_AGENTS, SUPPORTED_EXTENSIONS, \
             ANALYSIS_ERRORS, GUEST_LOSING_CONNNECTIVITY, GUEST_CANNOT_REACH_HOST, GUEST_LOST_CONNECTIVITY
         assert DOMAIN_REGEX == base_domain_regex
         assert IP_REGEX == base_ip_regex
         assert URL_REGEX == compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#]\S*)?")
-        assert MD5_REGEX == base_md5_regex
         assert UNIQUE_IP_LIMIT == 100
         assert SCORE_TRANSLATION == {1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000}
         assert SKIPPED_MARK_ITEMS == ["type", "suspicious_features", "entropy", "process", "useragent"]
@@ -2236,7 +2247,8 @@ class TestCuckooResult:
         mocker.patch("cuckoo.cuckoo_result.process_decrypted_buffers")
         al_result = ResultSection("blah")
         file_ext = "blah"
-        generate_al_result(api_report, al_result, file_ext, ip_network("192.0.2.0/24"), "blah")
+        safelist = {}
+        generate_al_result(api_report, al_result, file_ext, ip_network("192.0.2.0/24"), "blah", safelist)
 
         if api_report == {}:
             assert al_result.subsections == []
@@ -2298,10 +2310,10 @@ class TestCuckooResult:
     )
     def test_process_behaviour(behaviour, events, mocker):
         from cuckoo.cuckoo_result import process_behaviour
-        from assemblyline_v4_service.common.result import ResultSection
         mocker.patch("cuckoo.cuckoo_result.get_process_api_sums", return_value={"blah": "blah"})
         mocker.patch("cuckoo.cuckoo_result.convert_cuckoo_processes")
-        process_behaviour(behaviour, events)
+        safelist = {}
+        process_behaviour(behaviour, events, safelist)
         # Code coverage!
         assert True
 
@@ -2325,12 +2337,12 @@ class TestCuckooResult:
          ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}],
           []),
          ([],
-          []),
-         (None, []), ])
+          [])])
     def test_convert_cuckoo_processes(processes, correct_events):
         from cuckoo.cuckoo_result import convert_cuckoo_processes
         actual_events = []
-        convert_cuckoo_processes(actual_events, processes)
+        safelist = {}
+        convert_cuckoo_processes(actual_events, processes, safelist)
         assert actual_events == correct_events
 
     @staticmethod
@@ -2389,7 +2401,7 @@ class TestCuckooResult:
             ("process_martian", [{"name": "process_martian", "markcount": 1}], "192.0.2.0/24", "", {}, None, True),
             ("creates_doc", [{"name": "creates_doc", "severity": 1, "markcount": 1, "marks": [{"ioc": "blahblah"}]}], "192.0.2.0/24", "blahblah", {}, None, False),
             ("creates_hidden_file", [{"name": "creates_hidden_file", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"filepath": "blahblah"}}}]}], "192.0.2.0/24", "blahblah", {}, None, False),
-            ("creates_hidden_file", [{"name": "creates_hidden_file", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"filepath": "desktop.ini"}}}]}], "192.0.2.0/24", "blahblah", {}, None, False),
+            ("creates_hidden_file", [{"name": "creates_hidden_file", "severity": 1, "markcount": 1, "marks": [{"call": {"arguments": {"filepath": "desktop.ini"}}, "type": "call"}]}], "192.0.2.0/24", "blahblah", {}, None, False),
             ("creates_exe", [{"name": "creates_exe", "severity": 1, "markcount": 1, "marks": [{"ioc": "AppData\\Roaming\\Microsoft\\Office\\Recent\\Temp.LNK"}]}], "192.0.2.0/24", "blahblah", {}, None, False),
             ("creates_shortcut", [{"name": "creates_shortcut", "severity": 1, "markcount": 1, "marks": [{"ioc": "blahblah.lnk"}]}], "192.0.2.0/24", "blahblah.blah", {}, None, False),
             ("attack_id", [{"name": "attack_id", "severity": 1, "markcount": 1, "marks": [], "ttp": ["T1186"]}], "192.0.2.0/24", "blahblahblahblah", {}, 'No description for signature.', False),
@@ -2420,8 +2432,10 @@ class TestCuckooResult:
         al_result = ResultSection("blah")
         task_id = 1
         file_ext = ".exe"
+        safelist = {"match": {"network.dynamic.ip": ["127.0.0.1"], "file.path": ["desktop.ini"]}, "regex": {"network.dynamic.domain": [".*\.adobe\.com$"]}}
+        signatures = []
         assert process_signatures(sigs, al_result, ip_network(random_ip_range), target_filename,
-                                  process_map, task_id, file_ext) == correct_is_process_martian
+                                  process_map, task_id, file_ext, signatures, safelist) == correct_is_process_martian
         if correct_body is None:
             assert al_result.subsections == []
         else:
@@ -2513,8 +2527,9 @@ class TestCuckooResult:
         from ipaddress import ip_network
         from cuckoo.cuckoo_result import _is_signature_a_false_positive
         inetsim_network = ip_network("192.0.2.0/24")
+        safelist = {"match": {"file.path": ["desktop.ini"]}, "regex": {"network.dynamic.domain": ["w3\.org"]}}
         assert _is_signature_a_false_positive(
-            name, marks, filename, filename_remainder, inetsim_network) == expected_result
+            name, marks, filename, filename_remainder, inetsim_network, safelist) == expected_result
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -2618,7 +2633,8 @@ class TestCuckooResult:
         inetsim_network = ip_network("192.0.2.0/24")
         expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
         actual_result = ResultSection("blah")
-        _tag_and_describe_generic_signature(signature_name, mark, actual_result, inetsim_network)
+        safelist = {"regex": {"network.dynamic.domain": ["(www\.)?w3\.org$"]}}
+        _tag_and_describe_generic_signature(signature_name, mark, actual_result, inetsim_network, safelist)
         assert check_section_equality(actual_result, expected_result)
 
     @staticmethod
@@ -2655,7 +2671,8 @@ class TestCuckooResult:
         expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
         actual_result = ResultSection("blah")
         file_ext = ".exe"
-        _tag_and_describe_ioc_signature(signature_name, mark, actual_result, inetsim_network, process_map, file_ext)
+        safelist = {"regex": {"network.dynamic.domain": ["(www\.)?w3\.org$"]}}
+        _tag_and_describe_ioc_signature(signature_name, mark, actual_result, inetsim_network, process_map, file_ext, safelist)
         assert check_section_equality(actual_result, expected_result)
 
     @staticmethod
@@ -2706,13 +2723,13 @@ class TestCuckooResult:
             ("127.0.0.1", True),
             ("http://blah.adobe.com", True),
             ("play.google.com", True),
-            ("ac6f81bbb302fd4702c0b6c3440a5331", True),
             ("blah.com", False)
         ]
     )
     def test_contains_safelisted_value(val, expected_return):
         from cuckoo.cuckoo_result import contains_safelisted_value
-        assert contains_safelisted_value(val) == expected_return
+        safelist = {"regex": {"network.dynamic.domain": [".*\.adobe\.com$", "play\.google\.com$"], "network.dynamic.ip": ["(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*"]}}
+        assert contains_safelisted_value(val, safelist) == expected_return
 
     # TODO: complete unit tests for process_network
     @staticmethod
@@ -2800,7 +2817,8 @@ class TestCuckooResult:
                                                      "timestamp": "blah", "image": None, "pid": None, "guid": None})
             expected_network_flows_table = expected_network_flows_table[:100]
 
-        network_flows_table, netflows_sec = _get_low_level_flows(resolved_ips, flows)
+        safelist = {"regex": {"network.dynamic.ip": ["(^1\.1\.1\.1$)|(^8\.8\.8\.8$)"]}}
+        network_flows_table, netflows_sec = _get_low_level_flows(resolved_ips, flows, safelist)
         assert network_flows_table == expected_network_flows_table
         assert check_section_equality(netflows_sec, correct_netflows_sec)
 
@@ -2826,7 +2844,8 @@ class TestCuckooResult:
     )
     def test_process_http_calls(process_map, http_level_flows, expected_req_table):
         from cuckoo.cuckoo_result import _process_http_calls
-        assert _process_http_calls(http_level_flows, process_map) == expected_req_table
+        safelist = {"regex": {"network.dynamic.ip": ["(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*"], "network.dynamic.domain": [".*\.adobe\.com$"], "network.dynamic.uri": ["(?:ftp|http)s?://localhost(?:$|/.*)"]}}
+        assert _process_http_calls(http_level_flows, process_map, safelist) == expected_req_table
 
     @staticmethod
     def test_write_encrypted_buffers_to_file():
@@ -2926,9 +2945,7 @@ class TestCuckooResult:
 
     @staticmethod
     @pytest.mark.parametrize("sysmon, correct_processes",
-                             [(None, []),
-                              ([],
-                               []),
+                             [([], []),
                               ([{
                                   "EventData":
                                   {
@@ -2955,7 +2972,8 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import convert_sysmon_processes
         actual_events = []
         mocker.patch("cuckoo.cuckoo_result._get_trimming_index", return_value=0)
-        convert_sysmon_processes(sysmon, actual_events)
+        safelist = {}
+        convert_sysmon_processes(sysmon, actual_events, safelist)
         assert actual_events == correct_processes
 
     @staticmethod
@@ -3071,7 +3089,8 @@ class TestCuckooResult:
     def test_convert_sysmon_network(sysmon, actual_network, correct_network, dummy_result_class_instance, mocker):
         from cuckoo.cuckoo_result import convert_sysmon_network
         mocker.patch("cuckoo.cuckoo_result._get_trimming_index", return_value=0)
-        convert_sysmon_network(sysmon, actual_network)
+        safelist = {}
+        convert_sysmon_network(sysmon, actual_network, safelist)
         assert actual_network == correct_network
 
     # TODO: method is in the works
@@ -3138,7 +3157,7 @@ class TestCuckooResult:
     @pytest.mark.parametrize(
         "processes, correct_process_map",
         [
-            (None, {}),
+            ([], {}),
             ([{"process_name": "C:\\windows\\System32\\lsass.exe", "calls": [], "pid": 1}], {}),
             ([{"process_name": "blah.exe", "calls": [], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
             ([{"process_name": "blah.exe", "calls": [{"api": "blah"}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
@@ -3155,7 +3174,8 @@ class TestCuckooResult:
     )
     def test_get_process_map(processes, correct_process_map):
         from cuckoo.cuckoo_result import get_process_map
-        assert get_process_map(processes) == correct_process_map
+        safelist = {"regex": {"dynamic.process.file_name": [r"C:\\Windows\\System32\\lsass\.exe"]}}
+        assert get_process_map(processes, safelist) == correct_process_map
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -3192,6 +3212,27 @@ class TestCuckooResult:
         test_result_section = ResultSection("blah")
         _extract_iocs_from_text_blob(blob, test_result_section, file_ext)
         assert test_result_section.tags == correct_tags
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "value, tags, safelist, substring, expected_output",
+        [
+            ("", [], {}, False, False),
+            ("blah", ["network.dynamic.domain"], {}, False, False),
+            ("blah", [], {"match": {"network.dynamic.domain": ["google.com"]}}, False, False),
+            ("google.com", ["network.dynamic.domain"], {"match": {"network.dynamic.domain": ["google.com"]}}, False,
+             True),
+            ("google.com", ["network.dynamic.domain"], {"regex": {"network.dynamic.domain": ["google\.com"]}}, False,
+             True),
+            ("google.com", ["network.dynamic.domain"], {"match": {"network.dynamic.domain": ["www.google.com"]}}, True,
+             False),
+            ("www.google.com", ["network.dynamic.domain"], {"match": {"network.dynamic.domain": ["google.com"]}}, True,
+             True),
+        ]
+    )
+    def test_is_safelisted(value, tags, safelist, substring, expected_output):
+        from cuckoo.cuckoo_result import is_safelisted
+        assert is_safelisted(value, tags, safelist, substring) == expected_output
 
 
 class TestSignatures:
@@ -3945,345 +3986,3 @@ class TestSignatures:
     def test_get_signature_category(sig, correct_string):
         from cuckoo.signatures import get_signature_category
         assert get_signature_category(sig) == correct_string
-
-
-class TestSafelist:
-    @staticmethod
-    def test_constants():
-        from cuckoo.safelist import SAFELIST_IPS, SAFELIST_URIS, SAFELIST_DROPPED, SAFELIST_DOMAINS, SAFELIST_COMMANDS, \
-            SAFELIST_HASHES, SAFELIST_APPLICATIONS, SAFELIST_COMMON_PATTERNS, GUID_PATTERN
-        assert SAFELIST_APPLICATIONS == [
-            'C:\\\\tmp.+\\\\bin\\\\.+', 'C:\\\\Windows\\\\System32\\\\lsass\\.exe', 'lsass\\.exe',
-            'C:\\\\Program Files\\\\Common Files\\\\Microsoft '
-            'Shared\\\\OfficeSoftwareProtectionPlatform\\\\OSPPSVC\\.exe', 'C:\\\\Windows\\\\System32\\\\csrss\\.exe',
-            'C:\\\\Windows\\\\System32\\\\SearchIndexer\\.exe',
-            'C:\\\\Program Files\\\\Microsoft Monitoring '
-            'Agent\\\\Agent\\\\(MonitoringHost\\.exe|Health Service State\\\\ICT '
-            '2\\\\(CMF-64|CMF)\\\\DesiredStateConfiguration\\\\DscRun\\.exe)',
-            'C:\\\\WindowsAzure\\\\GuestAgent.*\\\\(GuestAgent\\\\WindowsAzureGuestAgent\\.exe|WaAppAgent\\.exe|CollectGuestLogs\\.exe)',
-            'C:\\\\windows\\\\SysWOW64\\\\Macromed\\\\Flash\\\\FlashPlayerUpdateService\\.exe']
-        assert SAFELIST_COMMANDS == [
-            'C:\\\\Python27\\\\pythonw\\.exe C:/tmp.+/analyzer\\.py',
-            '"C:\\\\Program Files\\\\Microsoft Monitoring '
-            'Agent\\\\Agent\\\\MonitoringHost\\.exe" -Embedding',
-            '"C:\\\\Program Files\\\\Microsoft Monitoring '
-            'Agent\\\\Agent\\\\MOMPerfSnapshotHelper\\.exe\\\\" -Embedding',
-            '"C:\\\\windows\\\\system32\\\\cscript\\.exe" /nologo '
-            '("MonitorKnowledgeDiscovery\\.vbs"|"ChangeEventModuleBatchSize\\.vbs)',
-            'C:\\\\windows\\\\system32\\\\(SppExtComObj|mobsync)\\.exe -Embedding',
-            'C:\\\\windows\\\\system32\\\\wbem\\\\wmiprvse\\.exe -secured -Embedding',
-            '(C:\\\\Windows\\\\)?explorer\\.exe', '"C:\\\\Windows\\\\explorer\\.exe" /LOADSAVEDWINDOWS',
-            'wmiadap\\.exe (/F /T /R|/D /T)',
-            'C:\\\\windows\\\\system32\\\\(sppsvc|wuauclt|appidpolicyconverter|appidcertstorecheck)\\.exe',
-            '"C:\\\\Windows\\\\SystemApps\\\\(ShellExperienceHost|Microsoft\\.Windows\\.Cortana)_.*\\\\(ShellExperienceHost|SearchUI)\\.exe" '
-            '-ServerName:(App|CortanaUI)\\.App.*\\.mca', 'C:\\\\Windows\\\\system32\\\\dllhost\\.exe /Processid:.*',
-            'C:\\\\Windows\\\\system32\\\\wbem\\\\WmiApSrv\\.exe',
-            'C:\\\\Windows\\\\system32\\\\sc\\.exe start wuauserv',
-            '"C:\\\\windows\\\\system32\\\\SearchProtocolHost\\.exe" '
-            'Global\\\\UsGthrFltPipeMssGthrPipe_S-1-5-21-451555073-2684619755-382164121-5006_ '
-            'Global\\\\UsGthrCtrlFltPipeMssGthrPipe_S-1-5-21-451555073-2684619755-382164121-5006 '
-            '1 -2147483646 "Software\\\\Microsoft\\\\Windows Search" "Mozilla/4\\.0 '
-            '(compatible; MSIE 6\\.0; Windows NT; MS Search 4\\.0 Robot)" '
-            '"C:\\\\ProgramData\\\\Microsoft\\\\Search\\\\Data\\\\Temp\\\\usgthrsvc" '
-            '"DownLevelDaemon" "1"', 'taskhost\\.exe \\$\\(Arg0\\)',
-            'C:\\\\Windows\\\\system32\\\\WerFault\\.exe (-u -p [0-9]{3,5} -s '
-            '[0-9]{3,5}|-pss -s [0-9]{3,5} -p [0-9]{3,5} -ip [0-9]{3,5})',
-            'C:\\\\Windows\\\\system32\\\\wermgr\\.exe -upload',
-            'C:\\\\Windows\\\\Microsoft\\.NET\\\\Framework64\\\\v.*\\\\mscorsvw\\.exe '
-            '-StartupEvent [0-9]{3} -InterruptEvent [0-9] -NGENProcess [0-9]{2}[a-z} '
-            '-Pipe [0-9]{3} -Comment "NGen Worker Process"', '\\\\\\?\\?\\\\C:\\\\Windows\\\\system32\\\\conhost\\.exe',
-            '\\\\\\?\\?\\\\C:\\\\Windows\\\\system32\\\\conhost\\.exe ".*"',
-            '\\\\\\?\\?\\\\C:\\\\Windows\\\\system32\\\\conhost\\.exe 0xffffffff -ForceV1',
-            'C:\\\\windows\\\\system32\\\\svchost\\.exe -k '
-            '(DcomLaunch|NetworkService|UnistackSvcGroup|WerSvcGroup|netsvcs -p -s '
-            '(Schedule|Winmgmt|UsoSvc))', 'C:\\\\windows\\\\system32\\\\SearchIndexer\\.exe \\/Embedding',
-            'C:\\\\Windows\\\\System32\\\\wevtutil\\.exe query-events '
-            'microsoft-windows-powershell/operational /rd:true /e:root /format:xml '
-            '/uni:true',
-            'C:\\\\Windows\\\\System32\\\\wevtutil\\.exe query-events '
-            'microsoft-windows-sysmon/operational /format:xml /e:Events',
-            'C:\\\\Windows\\\\system32\\\\AUDIODG\\.EXE 0x6e8']
-        assert SAFELIST_DOMAINS == [
-            '.*\\.adobe\\.com$',
-            'play\\.google\\.com$',
-            '.*\\.android\\.pool\\.ntp\\.org$',
-            'android\\.googlesource\\.com$',
-            'schemas\\.android\\.com$',
-            'xmlpull\\.org$',
-            'schemas\\.openxmlformats\\.org$',
-            'img-s-msn-com\\.akamaized\\.net$',
-            'fbstatic-a\\.akamaihd\\.net$',
-            'ajax\\.aspnetcdn\\.com$',
-            '(www\\.)?w3\\.org$',
-            'ocsp\\.omniroot\\.com$',
-            '^wpad\\..*$',
-            'schemas\\.microsoft\\.com$',
-            '.*\\.?teredo\\.ipv6\\.microsoft\\.com$',
-            'watson\\.microsoft\\.com$',
-            'dns\\.msftncsi\\.com$',
-            'www\\.msftncsi\\.com$',
-            'ipv6\\.msftncsi\\.com$',
-            'crl\\.microsoft\\.com$',
-            '(www|go)\\.microsoft\\.com$',
-            'isatap\\..*\\.microsoft\\.com$',
-            'tile-service\\.weather\\.microsoft\\.com$',
-            '.*\\.prod\\.do\\.dsp\\.mp\\.microsoft\\.com$',
-            '(login|g)\\.live\\.com$',
-            'nexus\\.officeapps\\.live\\.com$',
-            '.*\\.events\\.data\\.microsoft\\.com$',
-            'wdcp\\.microsoft\\.com$',
-            'fe3(cr)?\\.delivery\\.mp\\.microsoft\\.com$',
-            'client\\.wns\\.windows\\.com$',
-            '(www\\.)?go\\.microsoft\\.com$',
-            'js\\.microsoft\\.com$',
-            'ajax\\.microsoft\\.com$',
-            'ieonline\\.microsoft\\.com$',
-            'dns\\.msftncsi\\.com$',
-            'ocsp\\.msocsp\\.com$',
-            'fs\\.microsoft\\.com$',
-            'www\\.msftconnecttest\\.com$',
-            'www\\.msftncsi\\.com$',
-            'iecvlist\\.microsoft\\.com$',
-            'r20swj13mr\\.microsoft\\.com$',
-            '(([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\\.msedge\\.net$',
-            'displaycatalog(\\.md)?\\.mp\\.microsoft\\.com$',
-            'officeclient\\.microsoft\\.com$',
-            'ow1\\.res\\.office365\\.com$',
-            'fp-(as-nocache|vp)\\.azureedge\\.net$',
-            'outlookmobile-office365-tas\\.msedge\\.net$',
-            'config\\.messenger\\.msn\\.com$',
-            'settings(-win)?\\.data\\.microsoft\\.com$',
-            '.*vortex-win\\.data\\.microsoft\\.com$',
-            '.*\\.windowsupdate\\.com$',
-            'time\\.(microsoft|windows)\\.com$',
-            '.*\\.windows\\.com$',
-            '.*\\.update\\.microsoft\\.com$',
-            '.*download\\.microsoft\\.com$',
-            'kms\\.core\\.windows\\.net$',
-            '.*windows\\.microsoft\\.com$',
-            'win10\\.ipv6\\.microsoft\\.com$',
-            'activation-v2\\.sls\\.microsoft\\.com$',
-            'msedge\\.api\\.cdp\\.microsoft\\.com$',
-            'cdn\\.content\\.prod\\.cms\\.msn\\.com$',
-            '((www|arc)\\.)?msn\\.com$',
-            '(www\\.)?static-hp-eas\\.s-msn\\.com$',
-            'img\\.s-msn\\.com$',
-            '((api|www|platform)\\.)?bing\\.com$',
-            'md-ssd-.*\\.blob\\.core\\.windows\\.net$',
-            '.*\\.table\\.core\\.windows\\.net',
-            '.*\\.blob\\.core\\.windows\\.net',
-            '.*\\.opinsights\\.azure\\.com',
-            '.*reddog\\.microsoft\\.com$',
-            'agentserviceapi\\.azure-automation\\.net$',
-            'agentserviceapi\\.guestconfiguration\\.azure\\.com$',
-            '.*\\.blob\\.storage\\.azure\\.net$',
-            'config\\.edge\\.skype\\.com',
-            'cdn\\.onenote\\.net$',
-            '(www\\.)?verisign\\.com$',
-            'csc3-2010-crl\\.verisign\\.com$',
-            'csc3-2010-aia\\.verisign\\.com$',
-            'ocsp\\.verisign\\.com$',
-            'logo\\.verisign\\.com$',
-            'crl\\.verisign\\.com$',
-            '(changelogs|daisy|ntp|ddebs|security)\\.ubuntu\\.com$',
-            '(azure|ca)\\.archive\\.ubuntu\\.com$',
-            '.*\\.local$',
-            'local$',
-            'localhost$',
-            '.*\\.comodoca\\.com$',
-            '[0-9a-f\\.]+\\.ip6.arpa$',
-            '(www\\.)?java\\.com$',
-            'sldc-esd\\.oracle\\.com$',
-            'javadl\\.sun\\.com$',
-            'ocsp\\.digicert\\.com$',
-            'crl[0-9]\\.digicert\\.com$',
-            's[a-z0-9]?\\.symc[bd]\\.com$',
-            '(evcs|ts)-(ocsp|crl)\\.ws\\.symantec\\.com$',
-            'ocsp\\.thawte\\.com$',
-            'ocsp[0-9]?\\.globalsign\\.com$',
-            'crl\\.globalsign\\.(com|net)$',
-            'google\\.com$',
-            '(www\\.)?inetsim\\.org$'
-        ]
-        assert SAFELIST_IPS == [
-            '(^1\\.1\\.1\\.1$)|(^8\\.8\\.8\\.8$)',
-            '(?:127\\.|10\\.|192\\.168|172\\.1[6-9]\\.|172\\.2[0-9]\\.|172\\.3[01]\\.).*',
-            '255\\.255\\.255\\.255',
-            '169\\.169\\.169\\.169',
-            '239\\.255\\.255\\.250',
-            '224\\..*',
-            '169\\.254\\.169\\.254',
-            '168\\.63\\.129\\.16'
-        ]
-        assert SAFELIST_DROPPED == [
-            "SharedDataEvents", "SharedDataEvents-journal", "AcroFnt09.lst", "AdobeSysFnt09.lst", "AdobeCMapFnt09.lst",
-            "ACECache10.lst", "UserCache.bin", "desktop.ini", "sRGB Color Space Profile.icm", "is330.icm",
-            "kodak_dc.icm", "R000000000007.clb", "JSByteCodeWin.bin", "Accessibility.api", "AcroForm.api", "Annots.api",
-            "Checker.api", "DigSig.api", "DVA.api", "eBook.api", "EScript.api", "HLS.api", "IA32.api",
-            "MakeAccessible.api", "Multimedia.api", "PDDom.api", "PPKLite.api", "ReadOutLoad.api", "reflow.api",
-            "SaveAsRTF.api", "Search5.api", "Search.api", "SendMail.api", "Spelling.api", "Updater.api", "weblink.api",
-            "ADMPlugin.apl", "Words.pdf", "Dynamic.pdf", "SignHere.pdf", "StandardBusiness.pdf", "AdobeID.pdf",
-            "DefaultID.pdf", "AdobePiStd.otf", "CourierStd.otf", "CourierStd-Bold.otf", "CourierStd-BoldOblique.otf",
-            "CourierStd-Oblique.otf", "MinionPro-Bold.otf", "MinionPro-BoldIt.otf", "MinionPro-It.otf",
-            "MinionPro-Regular.otf", "MyriadPro-Bold.otf", "MyriadPro-BoldIt.otf", "MyriadPro-It.otf",
-            "MyriadPro-Regular.otf", "SY______.PFB", "ZX______.PFB", "ZY______.PFB", "SY______.PFM", "zx______.pfm",
-            "zy______.pfm", "Identity-H", "Identity-V", "msointl.dll", "Normal.dot", "~$Normal.dotm", "wwintl.dll",
-            "Word11.pip", "Word12.pip", "shell32.dll", "oleacc.dll", "index.dat",
-        ]
-        assert SAFELIST_HASHES == [
-            'ac6f81bbb302fd4702c0b6c3440a5331', '34c4dbd7f13cfba281b554bf5ec185a4', '578c03ad278153d0d564717d8fb3de1d',
-            '05044fbab6ca6fd667f6e4a54469bd13', 'e16d04c25249a64f47bf6f2709f21fbe', '5d4d94ee7e06bbb0af9584119797b23a',
-            '7ad0077a4e63b28b3f23db81510143f9', 'd41d8cd98f00b204e9800998ecf8427e', '534c811e6cf1146241126513810a389e',
-            'f3b25701fe362ec84616a93a45ce9998', 'e62d73c60f743dd822a652c2c6d32e8b', '8e3e307a923321a27a9ed8e868159589',
-            '5a56faaf51109f44214b022e0cdddd80', '985a2930713d530334bd570ef447cc65', 'ba9b716bc18cf2010aefd580788a3a47',
-            '7031f4a5881dea5522d6aea11ed86fbc', 'd13eac51cd03eb893de24fc827b8cddb', 'be5eae9bd85769bce02d6e52a4927bcd',
-            '08e7d39a806b89366fb3e0328661aa93', 'd3cbe4cec3b40b336530a5a8e3371fda7696a3b1',
-        ]
-        assert GUID_PATTERN == r'{[A-F0-9]{8}\-([A-F0-9]{4}\-){3}[A-F0-9]{12}\}'
-        assert SAFELIST_COMMON_PATTERNS == [
-            '(?:[a-f0-9]{2}|\\~\\$)[a-f0-9]{62}\\.(doc|xls|ppt)x?$',
-            '\\\\~[A-Z]{3}{[A-F0-9]{8}\\-([A-F0-9]{4}\\-){3}[A-F0-9]{12}\\}\\.tmp$',
-            '\\\\Microsoft\\\\OFFICE\\\\DATA\\\\[a-z0-9]+\\.dat$',
-            'AppData\\\\Local\\\\Microsoft\\\\Windows\\\\Temporary Internet '
-            'Files\\\\Content.Word\\\\~WRS',
-            '.*\\\\Temp\\\\~\\$[a-z0-9]+\\.doc',
-            '\\\\Microsoft\\\\Document Building Blocks\\\\[0-9]{4}\\\\',
-            'AppData\\\\Roaming\\\\MicrosoftOffice\\\\.*\\.acl$',
-            'AppData\\\\Roaming\\\\Microsoft\\\\UProof\\\\CUSTOM.DIC$',
-            '.*AppData\\\\Roaming\\\\Microsoft\\\\Proof\\\\\\~\\$CUSTOM.DIC$',
-            'AppData\\\\Local\\\\Temp\\\\Word...\\\\MSForms.exd$[A-F0-9]{7,8}\\.(w|e)mf$',
-            'RecoveryStore\\.{[A-F0-9]{8}\\-([A-F0-9]{4}\\-){3}[A-F0-9]{12}\\}\\.dat$',
-            '{[A-F0-9]{8}\\-([A-F0-9]{4}\\-){3}[A-F0-9]{12}\\}\\.dat$',
-            'AppData\\\\Local\\\\Microsoft\\\\Windows\\\\Temporary Internet '
-            'Files\\\\Content.MSO\\\\',
-            'AppData\\\\[^\\\\]+\\\\MicrosoftCryptnetUrlCache\\\\',
-            '\\\\Temp\\\\Cab....\\.tmp'
-        ]
-        assert SAFELIST_URIS == [
-            '(?:ftp|http)s?://localhost(?:$|/.*)',
-            '(?:ftp|http)s?://(?:(?:(?:10|127)(?:\\.(?:[2](?:[0-5][0-5]|[01234][6-9])|[1][0-9][0-9]|[1-9][0-9]|[0-9])){3})|(?:172\\.(?:1[6-9]|2[0-9]|3[0-1])(?:\\.(?:2[0-4][0-9]|25[0-5]|[1][0-9][0-9]|[1-9][0-9]|[0-9])){2}|(?:192\\.168(?:\\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])){2})))(?:$|/.*)',
-            'https?://schemas\\.android\\.com/apk/res(-auto|/android)',
-            'https?://android\\.googlesource\\.com/toolchain/llvm-project',
-            'https?://xmlpull\\.org/v1/doc/features\\.html(?:$|.*)',
-            'https?://schemas\\.openxmlformats\\.org(?:$|/.*)',
-            'https?://schemas\\.microsoft\\.com(?:$|/.*)',
-            'https?://(www\\.)?go\\.microsoft\\.com(?:$|/.*)',
-            'https?://displaycatalog(\\.md)?\\.mp\\.microsoft\\.com(?:$|/.*)',
-            'https?://officeclient\\.microsoft\\.com(?:$|/.*)',
-            'https?://activation-v2\\.sls\\.microsoft\\.com(?:$|/.*)',
-            'https?://fe3(cr)?\\.delivery\\.mp\\.microsoft\\.com(?:$|/.*)',
-            'https?://config\\.messenger\\.msn\\.com(?:$|/.*)',
-            'https?://ctldl\\.windowsupdate\\.com(?:$|/.*)',
-            'https?://ca\\.archive\\.ubuntu\\.com(?:$|/.*)',
-            'https?://schemas\\.microsoft\\.com(?:$|/.*)',
-            'https?://(www|oscp|crl|logo|csc3-2010-(crl|aia))\\.verisign\\.com(?:$|/.*)',
-            'https?://wpad\\..*/wpad\\.dat',
-            'https?://ocsp\\.digicert\\.com/.*',
-            'https?://crl[0-9]\\.digicert\\.com/.*',
-            'https?://s[a-z0-9]?\\.symc[bd]\\.com/.*',
-            'https?://(evcs|ts)-(ocsp|crl)\\.ws\\.symantec\\.com/.*',
-            'https?://ocsp\\.thawte\\.com/.*',
-            'https?://ocsp\\.entrust\\.net/.*',
-            'https?://crl\\.entrust\\.net/.*',
-            'https?://ocsp[0-9]?\\.globalsign\\.com/.*',
-            'https?://crl\\.globalsign\\.(com|net)/.*',
-            'https?://www\\.w3\\.org/.*',
-            'https?://www\\.google\\.com'
-        ]
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "data, sigs, correct_result",
-        [
-            ("blah", ["blah"], True),
-            ("blah", ["nope"], False),
-        ]
-    )
-    def test_is_match(data, sigs, correct_result):
-        from cuckoo.safelist import is_match
-        assert is_match(data, sigs) == correct_result
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "application, correct_result",
-        [
-            ("C:\\Windows\\System32\\lsass.exe", True),
-            ("blah", False),
-        ]
-    )
-    def test_slist_check_app(application, correct_result):
-        from cuckoo.safelist import slist_check_app
-        assert slist_check_app(application) == correct_result
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "command, correct_result",
-        [
-            ('C:\\Python27\\pythonw.exe C:/tmpblah/analyzer.py', True),
-            ("blah", False),
-        ]
-    )
-    def test_slist_check_cmd(command, correct_result):
-        from cuckoo.safelist import slist_check_cmd
-        assert slist_check_cmd(command) == correct_result
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "domain, correct_result",
-        [
-            ('blah.adobe.com', True),
-            ("blah", False),
-        ]
-    )
-    def test_slist_check_domain(domain, correct_result):
-        from cuckoo.safelist import slist_check_domain
-        assert slist_check_domain(domain) == correct_result
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "ip, correct_result",
-        [
-            ('127.0.0.1', True),
-            ("blah", False),
-        ]
-    )
-    def test_slist_check_ip(ip, correct_result):
-        from cuckoo.safelist import slist_check_ip
-        assert slist_check_ip(ip) == correct_result
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "uri, correct_result",
-        [
-            ('http://localhost', True),
-            ("blah", False),
-        ]
-    )
-    def test_slist_check_uri(uri, correct_result):
-        from cuckoo.safelist import slist_check_uri
-        assert slist_check_uri(uri) == correct_result
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "name, correct_result",
-        [
-            ('SharedDataEvents', True),
-            ('\\Temp\\~$blah.doc', True),
-            ("blah", False),
-        ]
-    )
-    def test_slist_check_dropped(name, correct_result):
-        from cuckoo.safelist import slist_check_dropped
-        assert slist_check_dropped(name) == correct_result
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "file_hash, correct_result",
-        [
-            ('ac6f81bbb302fd4702c0b6c3440a5331', True),
-            ("blah", False),
-        ]
-    )
-    def test_slist_check_hash(file_hash, correct_result):
-        from cuckoo.safelist import slist_check_hash
-        assert slist_check_hash(file_hash) == correct_result

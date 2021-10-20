@@ -1,0 +1,342 @@
+match:
+  file.path:
+  - SharedDataEvents
+  - SharedDataEvents-journal
+  - AcroFnt09.lst
+  - AdobeSysFnt09.lst
+  - AdobeCMapFnt09.lst
+  - ACECache10.lst
+  - UserCache.bin
+  - desktop.ini
+  - sRGB Color Space Profile.icm
+  - is330.icm
+  - kodak_dc.icm
+  - R000000000007.clb
+  - JSByteCodeWin.bin
+  # adobe plugins
+  - Accessibility.api
+  - AcroForm.api
+  - Annots.api
+  - Checker.api
+  - DigSig.api
+  - DVA.api
+  - eBook.api
+  - EScript.api
+  - HLS.api
+  - IA32.api
+  - MakeAccessible.api
+  - Multimedia.api
+  - PDDom.api
+  - PPKLite.api
+  - ReadOutLoad.api
+  - reflow.api
+  - SaveAsRTF.api
+  - Search5.api
+  - Search.api
+  - SendMail.api
+  - Spelling.api
+  - Updater.api
+  - weblink.api
+  - ADMPlugin.apl
+  # adobe annotations
+  - Words.pdf
+  - Dynamic.pdf
+  - SignHere.pdf
+  - StandardBusiness.pdf
+  # adobe templates
+  - AdobeID.pdf
+  - DefaultID.pdf
+  # adobe fonts
+  - AdobePiStd.otf
+  - CourierStd.otf
+  - CourierStd-Bold.otf
+  - CourierStd-BoldOblique.otf
+  - CourierStd-Oblique.otf
+  - MinionPro-Bold.otf
+  - MinionPro-BoldIt.otf
+  - MinionPro-It.otf
+  - MinionPro-Regular.otf
+  - MyriadPro-Bold.otf
+  - MyriadPro-BoldIt.otf
+  - MyriadPro-It.otf
+  - MyriadPro-Regular.otf
+  - SY______.PFB
+  - ZX______.PFB
+  - ZY______.PFB
+  - SY______.PFM
+  - zx______.pfm
+  - zy______.pfm
+  # adobe cmap
+  - Identity-H
+  - Identity-V
+  # Winword
+  - msointl.dll
+  - Normal.dot
+  - ~$Normal.dotm
+  - wwintl.dll
+  - Word11.pip
+  - Word12.pip
+  - shell32.dll
+  - oleacc.dll
+  # IE
+  - index.dat
+regex:
+  dynamic.process.file_name:
+  # Cuckoo
+  - C:\\tmp.+\\bin\\.+
+  - C:\\Windows\\System32\\lsass\.exe
+  - lsass\.exe
+  # Office
+  - C:\\Program Files\\Common Files\\Microsoft Shared\\OfficeSoftwareProtectionPlatform\\OSPPSVC\.exe
+  # Sysmon
+  - C:\\Windows\\System32\\csrss\.exe
+  - C:\\Windows\\System32\\SearchIndexer\.exe
+  # Azure
+  - C:\\Program Files\\Microsoft Monitoring Agent\\Agent\\(MonitoringHost\.exe|Health Service State\\ICT 2\\(CMF-64|CMF)\\DesiredStateConfiguration\\DscRun\.exe)
+  - C:\\WindowsAzure\\GuestAgent.*\\(GuestAgent\\WindowsAzureGuestAgent\.exe|WaAppAgent\.exe|CollectGuestLogs\.exe)
+  # Flash
+  - C:\\windows\\SysWOW64\\Macromed\\Flash\\FlashPlayerUpdateService\.exe
+  dynamic.process.command_line:
+  # Cuckoo
+  - C:\\Python27\\pythonw\.exe C:/tmp.+/analyzer\.py
+  # Azure
+  - \"C:\\Program Files\\Microsoft Monitoring Agent\\Agent\\MonitoringHost\.exe\" -Embedding
+  - \"C:\\Program Files\\Microsoft Monitoring Agent\\Agent\\MOMPerfSnapshotHelper\.exe\\\" -Embedding
+  - \"C:\\windows\\system32\\cscript\.exe\" /nologo ("MonitorKnowledgeDiscovery\.vbs"|"ChangeEventModuleBatchSize\.vbs)
+  # Windows
+  - C:\\windows\\system32\\(SppExtComObj|mobsync)\.exe -Embedding
+  - C:\\windows\\system32\\wbem\\wmiprvse\.exe -secured -Embedding
+  - (C:\\Windows\\)?explorer\.exe
+  - \"C:\\Windows\\explorer\.exe\" /LOADSAVEDWINDOWS
+  - wmiadap\.exe (/F /T /R|/D /T)
+  - C:\\windows\\system32\\(sppsvc|wuauclt|appidpolicyconverter|appidcertstorecheck)\.exe
+  - \"C:\\Windows\\SystemApps\\(ShellExperienceHost|Microsoft\.Windows\.Cortana)_.*\\(ShellExperienceHost|SearchUI)\.exe\" -ServerName:(App|CortanaUI)\.App.*\.mca
+  - C:\\Windows\\system32\\dllhost\.exe /Processid:.*
+  - C:\\Windows\\system32\\wbem\\WmiApSrv\.exe
+  - C:\\Windows\\system32\\sc\.exe start wuauserv
+  - \"C:\\windows\\system32\\SearchProtocolHost\.exe\" Global\\UsGthrFltPipeMssGthrPipe_S-1-5-21-451555073-2684619755-382164121-5006_ Global\\UsGthrCtrlFltPipeMssGthrPipe_S-1-5-21-451555073-2684619755-382164121-5006 1 -2147483646 "Software\\Microsoft\\Windows Search" "Mozilla/4\.0 (compatible; MSIE 6\.0; Windows NT; MS Search 4\.0 Robot)" "C:\\ProgramData\\Microsoft\\Search\\Data\\Temp\\usgthrsvc" "DownLevelDaemon" "1"
+  - taskhost\.exe \$\(Arg0\)
+  # If an error is raised, WerFault will pop up and WerMgr will try to upload it
+  - C:\\Windows\\system32\\WerFault\.exe (-u -p [0-9]{3,5} -s [0-9]{3,5}|-pss -s [0-9]{3,5} -p [0-9]{3,5} -ip [0-9]{3,5})
+  - C:\\Windows\\system32\\wermgr\.exe -upload
+  # NET
+  - C:\\Windows\\Microsoft\.NET\\Framework64\\v.*\\mscorsvw\.exe -StartupEvent [0-9]{3} -InterruptEvent [0-9] -NGENProcess [0-9]{2}[a-z} -Pipe [0-9]{3} -Comment "NGen Worker Process"
+  # Sysmon
+  - \\\?\?\\C:\\Windows\\system32\\conhost\.exe
+  - \\\?\?\\C:\\Windows\\system32\\conhost\.exe ".*"
+  - \\\?\?\\C:\\Windows\\system32\\conhost\.exe 0xffffffff -ForceV1
+  - C:\\windows\\system32\\svchost\.exe -k (DcomLaunch|NetworkService|UnistackSvcGroup|WerSvcGroup|netsvcs -p -s (Schedule|Winmgmt|UsoSvc))
+  - C:\\windows\\system32\\SearchIndexer\.exe \/Embedding
+  - C:\\Windows\\System32\\wevtutil\.exe query-events microsoft-windows-powershell/operational /rd:true /e:root /format:xml /uni:true
+  - C:\\Windows\\System32\\wevtutil\.exe query-events microsoft-windows-sysmon/operational /format:xml /e:Events
+  - C:\\Windows\\system32\\AUDIODG\.EXE 0x6e8
+  network.dynamic.domain:
+  # Adobe
+  - .*\.adobe\.com$
+  # Google
+  - play\.google\.com$
+  # Android
+  - .*\.android\.pool\.ntp\.org$
+  - android\.googlesource\.com$
+  - schemas\.android\.com$
+  # XML
+  - xmlpull\.org$
+  - schemas\.openxmlformats\.org$
+  # Akamai
+  - img-s-msn-com\.akamaized\.net$
+  - fbstatic-a\.akamaihd\.net$
+  # ASPNet
+  - ajax\.aspnetcdn\.com$
+  # WWW
+  - (www\.)?w3\.org$
+  # Omniroot
+  - ocsp\.omniroot\.com$
+  # WPAD
+  - ^wpad\..*$
+  # Microsoft
+  - schemas\.microsoft\.com$
+  - .*\.?teredo\.ipv6\.microsoft\.com$
+  - watson\.microsoft\.com$
+  - dns\.msftncsi\.com$
+  - www\.msftncsi\.com$
+  - ipv6\.msftncsi\.com$
+  - crl\.microsoft\.com$
+  - (www|go)\.microsoft\.com$
+  - isatap\..*\.microsoft\.com$
+  - tile-service\.weather\.microsoft\.com$
+  - .*\.prod\.do\.dsp\.mp\.microsoft\.com$
+  - (login|g)\.live\.com$
+  - nexus\.officeapps\.live\.com$
+  - .*\.events\.data\.microsoft\.com$
+  - wdcp\.microsoft\.com$
+  - fe3(cr)?\.delivery\.mp\.microsoft\.com$
+  - client\.wns\.windows\.com$
+  - (www\.)?go\.microsoft\.com$
+  - js\.microsoft\.com$
+  - ajax\.microsoft\.com$
+  - ieonline\.microsoft\.com$
+  - dns\.msftncsi\.com$
+  - ocsp\.msocsp\.com$
+  - fs\.microsoft\.com$
+  - www\.msftconnecttest\.com$
+  - www\.msftncsi\.com$
+  - iecvlist\.microsoft\.com$
+  - r20swj13mr\.microsoft\.com$
+  - (([a-z]-ring(-fallback)?)|(fp)|(segments-[a-z]))\.msedge\.net$
+  - displaycatalog(\.md)?\.mp\.microsoft\.com$
+  - officeclient\.microsoft\.com$
+  - ow1\.res\.office365\.com$
+  - fp-(as-nocache|vp)\.azureedge\.net$
+  - outlookmobile-office365-tas\.msedge\.net$
+  - config\.messenger\.msn\.com$
+  # Windows
+  - settings(-win)?\.data\.microsoft\.com$
+  - .*vortex-win\.data\.microsoft\.com$
+  - .*\.windowsupdate\.com$
+  - time\.(microsoft|windows)\.com$
+  - .*\.windows\.com$
+  - .*\.update\.microsoft\.com$
+  - .*download\.microsoft\.com$
+  - kms\.core\.windows\.net$
+  - .*windows\.microsoft\.com$
+  - win10\.ipv6\.microsoft\.com$
+  - activation-v2\.sls\.microsoft\.com$
+  - msedge\.api\.cdp\.microsoft\.com$
+  # MSN
+  - cdn\.content\.prod\.cms\.msn\.com$
+  - ((www|arc)\.)?msn\.com$
+  - (www\.)?static-hp-eas\.s-msn\.com$
+  - img\.s-msn\.com$
+  # Bing
+  - ((api|www|platform)\.)?bing\.com$
+  # Azure
+  - md-ssd-.*\.blob\.core\.windows\.net$
+  - .*\.table\.core\.windows\.net
+  - .*\.blob\.core\.windows\.net
+  - .*\.opinsights\.azure\.com
+  - .*reddog\.microsoft\.com$
+  - agentserviceapi\.azure-automation\.net$
+  - agentserviceapi\.guestconfiguration\.azure\.com$
+  - .*\.blob\.storage\.azure\.net$
+  # Office
+  - config\.edge\.skype\.com
+  - cdn\.onenote\.net$
+  # Verisign
+  - (www\.)?verisign\.com$
+  - csc3-2010-crl\.verisign\.com$
+  - csc3-2010-aia\.verisign\.com$
+  - ocsp\.verisign\.com$
+  - logo\.verisign\.com$
+  - crl\.verisign\.com$
+  # Ubuntu
+  - (changelogs|daisy|ntp|ddebs|security)\.ubuntu\.com$
+  - (azure|ca)\.archive\.ubuntu\.com$
+  # Local
+  - .*\.local$
+  - local$
+  - localhost$
+  # Comodo
+  - .*\.comodoca\.com$
+  # .arpa
+  - \[0-9a-f\.\]+\.ip6\.arpa$
+  # Oracle
+  - (www\.)?java\.com$
+  - sldc-esd\.oracle\.com$
+  - javadl\.sun\.com$
+  # Digicert
+  - ocsp\.digicert\.com$
+  - crl[0-9]\.digicert\.com$
+  # Symantec
+  - s[a-z0-9]?\.symc[bd]\.com$
+  - (evcs|ts)-(ocsp|crl)\.ws\.symantec\.com$
+  # Thawte
+  - ocsp\.thawte\.com$
+  # GlobalSign
+  - ocsp[0-9]?\.globalsign\.com$
+  - crl\.globalsign\.(com|net)$
+  # Google
+  - google\.com$
+  # INetSim
+  - (www\.)?inetsim\.org$
+  network.dynamic.ip:
+  # Public DNS
+  - (^1\.1\.1\.1$)|(^8\.8\.8\.8$)
+  # Local
+  - (?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*
+  - 255\.255\.255\.255
+  # Honeynet
+  - 169\.169\.169\.169
+  # Windows
+  - 239\.255\.255\.250
+  - 224\..*
+  # Azure
+  - 169\.254\.169\.254
+  - 168\.63\.129\.16
+  network.dynamic.uri:
+  # Local
+  - (?:ftp|http)s?://localhost(?:$|/.*)
+  - (?:ftp|http)s?://(?:(?:(?:10|127)(?:\.(?:[2](?:[0-5][0-5]|[01234][6-9])|[1][0-9][0-9]|[1-9][0-9]|[0-9])){3})|(?:172\.(?:1[6-9]|2[0-9]|3[0-1])(?:\.(?:2[0-4][0-9]|25[0-5]|[1][0-9][0-9]|[1-9][0-9]|[0-9])){2}|(?:192\.168(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])){2})))(?:$|/.*)
+  # Android
+  - https?://schemas\.android\.com/apk/res(-auto|/android)
+  - https?://android\.googlesource\.com/toolchain/llvm-project
+  # XML
+  - https?://xmlpull\.org/v1/doc/features\.html(?:$|.*)
+  - https?://schemas\.openxmlformats\.org(?:$|/.*)
+  # Microsoft
+  - https?://schemas\.microsoft\.com(?:$|/.*)
+  - https?://(www\.)?go\.microsoft\.com(?:$|/.*)
+  - https?://displaycatalog(\.md)?\.mp\.microsoft\.com(?:$|/.*)
+  - https?://officeclient\.microsoft\.com(?:$|/.*)
+  - https?://activation-v2\.sls\.microsoft\.com(?:$|/.*)
+  - https?://fe3(cr)?\.delivery\.mp\.microsoft\.com(?:$|/.*)
+  - https?://config\.messenger\.msn\.com(?:$|/.*)
+  # Windows
+  - https?://ctldl\.windowsupdate\.com(?:$|/.*)
+  # Ubuntu
+  - https?://ca\.archive\.ubuntu\.com(?:$|/.*)
+  # Office
+  - https?://schemas\.microsoft\.com(?:$|/.*)
+  # Verisign
+  - https?://(www|oscp|crl|logo|csc3-2010-(crl|aia))\.verisign\.com(?:$|/.*)
+  # Azure
+  - https?://wpad\..*/wpad\.dat
+  # Digicert
+  - https?://ocsp\.digicert\.com/.*
+  - https?://crl[0-9]\.digicert\.com/.*
+  # Symantec
+  - https?://s[a-z0-9]?\.symc[bd]\.com/.*
+  - https?://(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com/.*
+  # Thawte
+  - https?://ocsp\.thawte\.com/.*
+  # Entrust
+  - https?://ocsp\.entrust\.net/.*
+  - https?://crl\.entrust\.net/.*
+  # GlobalSign
+  - https?://ocsp[0-9]?\.globalsign\.com/.*
+  - https?://crl\.globalsign\.(com|net)/.*
+  # W3
+  - https?://www\.w3\.org/.*
+  # Google
+  - https?://www\.google\.com
+  file.path:
+  # Office
+  - (?:[a-f0-9]{2}|\~\$)[a-f0-9]{62}\.(doc|xls|ppt)x?$
+  - \\~[A-Z]{3}{[A-F0-9]{8}\-([A-F0-9]{4}\-){3}[A-F0-9]{12}\}\.tmp$
+  - \\Microsoft\\OFFICE\\DATA\\[a-z0-9]+\.dat$
+  - AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.Word\\~WRS
+  - .*\\Temp\\~\$[a-z0-9]+\.doc
+  - \\Microsoft\\Document Building Blocks\\[0-9]{4}\\
+  - AppData\\Roaming\\MicrosoftOffice\\.*\.acl$
+  - AppData\\Roaming\\Microsoft\\UProof\\CUSTOM.DIC$
+  - .*AppData\\Roaming\\Microsoft\\Proof\\\~\$CUSTOM.DIC$
+  - AppData\\Local\\Temp\\Word...\\MSForms.exd$'
+  # Meta Font
+  - \[A-F0-9\]{7,8}\.(w|e)mf$
+  # IE
+  - RecoveryStore\.([A-F0-9]{8}\-([A-F0-9]{4}\-){3}[A-F0-9]{12})\.dat$
+  - ([A-F0-9]{8}\-([A-F0-9]{4}\-){3}[A-F0-9]{12})\.dat$
+  - AppData\\Local\\Microsoft\\Windows\\Temporary Internet Files\\Content.MSO\\
+  # CryptnetCache
+  - AppData\\[^\\]+\\MicrosoftCryptnetUrlCache\\
+  # Cab File
+  - \\Temp\\Cab....\.tmp

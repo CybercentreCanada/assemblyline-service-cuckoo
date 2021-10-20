@@ -17,18 +17,19 @@ from typing import Optional, Dict, List, Any, Set
 
 from retrying import retry, RetryError
 
-from assemblyline_v4_service.common.request import ServiceRequest
-from assemblyline_v4_service.common.result import Result, ResultSection, ResultImageSection, BODY_FORMAT
+from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
+from assemblyline_v4_service.common.request import ServiceRequest
+from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection, ResultImageSection
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.constants import RECOGNIZED_TYPES
 
-from cuckoo.cuckoo_result import generate_al_result, SUPPORTED_EXTENSIONS, ANALYSIS_ERRORS, GUEST_CANNOT_REACH_HOST, SIGNATURES_SECTION_TITLE
-from cuckoo.safelist import slist_check_hash, slist_check_dropped
+from cuckoo.cuckoo_result import ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, is_safelisted, \
+    SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc|dll)$"
@@ -200,6 +201,7 @@ class Cuckoo(ServiceBase):
         self.hosts: List[Dict[str, Any]] = []
         self.routing = ""
         self.sig_highlight_min_score: int = 0
+        self.safelist: Dict[str, Dict[str, List[str]]] = {}
 
     def start(self) -> None:
         for host in self.config["remote_host_details"]["hosts"]:
@@ -211,6 +213,12 @@ class Cuckoo(ServiceBase):
         self.max_report_size = self.config.get('max_report_size', 275000000)
         self.allowed_images = self.config.get("allowed_images", [])
         self.sig_highlight_min_score = self.config.get("sig_highlight_min_score", 0)
+
+        try:
+            self.safelist = self.get_api_interface().get_safelist()
+        except ServiceAPIError as e:
+            self.log.warning(f"Couldn't retrieve safelist from service: {e}. Continuing without it..")
+
         self.log.debug("Cuckoo started!")
 
     # noinspection PyTypeChecker
@@ -393,8 +401,8 @@ class Cuckoo(ServiceBase):
 
         for subsection in parent_section.subsections:
             if subsection.title_text == ANALYSIS_ERRORS and GUEST_CANNOT_REACH_HOST in subsection.body:
-                self.log.debug("The first submission was sent to a machine that had difficulty communicating with the nest. "
-                               "Will try to resubmit again.")
+                self.log.debug("The first submission was sent to a machine that had difficulty communicating with "
+                               "the nest. Will try to resubmit again.")
                 parent_section = ResultSection(f"Resubmit -> {parent_section.title_text}")
                 self.file_res.add_section(parent_section)
                 host_to_use = self._determine_host_to_use(hosts)
@@ -432,7 +440,8 @@ class Cuckoo(ServiceBase):
             else:
                 reboot_resp = resp.json()
                 cuckoo_task.id = reboot_resp["reboot_id"]
-                self.log.debug(f"Reboot selected, task {reboot_resp['task_id']} marked for reboot {reboot_resp['reboot_id']}.")
+                self.log.debug(f"Reboot selected, task {reboot_resp['task_id']} marked for"
+                               f" reboot {reboot_resp['reboot_id']}.")
 
         self.log.debug(f"Submission succeeded. File: {cuckoo_task.file} -- Task {cuckoo_task.id}")
 
@@ -467,8 +476,8 @@ class Cuckoo(ServiceBase):
         elif status == ANALYSIS_FAILED:
             # Add a subsection detailing what's happening and then moving on
             analysis_failed_sec = ResultSection("Cuckoo Analysis Failed.",
-                                                body=f"The analysis of Cuckoo task {cuckoo_task.id} has failed. Contact the Cuckoo "
-                                                     f"administrator for details.")
+                                                body=f"The analysis of Cuckoo task {cuckoo_task.id} has failed. "
+                                                     f"Contact the Cuckoo administrator for details.")
             parent_section.add_subsection(analysis_failed_sec)
             raise AnalysisFailed()
 
@@ -767,16 +776,14 @@ class Cuckoo(ServiceBase):
             raise CuckooHostsUnavailable(f"Failed to reach any of the hosts "
                                          f"at {[host['ip'] + ':' + str(host['port']) for host in hosts_copy]}")
 
-    def check_dropped(self, cuckoo_task: CuckooTask, parent_section: ResultSection) -> None:
+    def check_dropped(self, cuckoo_task: CuckooTask) -> None:
         """
         This method retrieves a tarball containing dropped files from the Cuckoo server, and extracts them
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
-        :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: None
         """
         dropped_tar_bytes = self.query_report(cuckoo_task, 'dropped')
         added_hashes: Set[str] = set()
-        dropped_sec: Optional[ResultSection] = None
         task_dir = os.path.join(self.working_directory, f"{cuckoo_task.id}")
         if dropped_tar_bytes is not None:
             try:
@@ -790,8 +797,8 @@ class Cuckoo(ServiceBase):
                         dropped_tar.extract(tarobj, task_dir)
                         dropped_file_path = os.path.join(task_dir, tarobj.name)
                         # Check the file hash for safelisting:
-                        with open(dropped_file_path, 'rb') as file_hash:
-                            data = file_hash.read()
+                        with open(dropped_file_path, 'rb') as f:
+                            data = f.read()
                             if not self.request.task.deep_scan:
                                 ssdeep_hash = ssdeep.hash(data)
                                 skip_file = False
@@ -799,21 +806,15 @@ class Cuckoo(ServiceBase):
                                     if ssdeep.compare(ssdeep_hash, seen_hash) >= self.ssdeep_match_pct:
                                         skip_file = True
                                         break
-                                # TODO: is this necessary to display if the data is duplicated? what do users
-                                #  get out of this
-                                if skip_file is True and dropped_sec is None:
-                                    dropped_sec = ResultSection(title_text='Dropped Files Information')
-                                    dropped_sec.add_tag("file.behavior",
-                                                        "Truncated extraction set")
-                                    parent_section.add_subsection(dropped_sec)
+                                if skip_file is True:
                                     continue
                                 else:
                                     added_hashes.add(ssdeep_hash)
-                            dropped_hash = hashlib.md5(data).hexdigest()
-                            if dropped_hash == self.request.md5:
+                            dropped_hash = hashlib.sha256(data).hexdigest()
+                            if dropped_hash == self.request.sha256:
                                 continue
-                        if not (slist_check_hash(dropped_hash) or slist_check_dropped(
-                                dropped_name) or dropped_name.endswith('_info.txt')):
+                        if not is_safelisted(dropped_name, ["file.path"], self.safelist, substring=True) or \
+                                dropped_name.endswith('_info.txt'):
                             # Resubmit
                             dropped_file_name = f"{cuckoo_task.id}_{dropped_name}"
                             artifact = {
@@ -906,7 +907,8 @@ class Cuckoo(ServiceBase):
             self.query_machines()
             # The machines here are the machines that are loaded post the file being analyzed.
             machine = self._get_machine_by_name(machine_name)
-            # NOTE: There is still a possibility of the machine not existing at either point of time. So we will only try once.
+            # NOTE: There is still a possibility of the machine not existing at either point of time.
+            # So we will only try once.
             if not machine:
                 return
 
@@ -1016,7 +1018,7 @@ class Cuckoo(ServiceBase):
         else:
             # This is unknown without an extension that we accept/recognize.. no scan!
             self.log.debug(f"The file type of '{self.request.file_type}' could "
-                          f"not be identified. Tag extension: {tag_extension}")
+                           f"not be identified. Tag extension: {tag_extension}")
             return ""
 
         # Rename based on the found extension.
@@ -1267,7 +1269,7 @@ class Cuckoo(ServiceBase):
         # Submit dropped files and pcap if available:
         self._extract_console_output(cuckoo_task.id)
         self._extract_encrypted_buffers(cuckoo_task.id)
-        self.check_dropped(cuckoo_task, parent_section)
+        self.check_dropped(cuckoo_task)
         self.check_powershell(cuckoo_task.id, parent_section)
         # self.check_pcap(cuckoo_task)
 
@@ -1402,7 +1404,8 @@ class Cuckoo(ServiceBase):
             else:
                 self.report_machine_info(machine_name, cuckoo_task, parent_section)
             self.log.debug(f"Generating AL Result from Cuckoo results for task {cuckoo_task.id}.")
-            generate_al_result(cuckoo_task.report, parent_section, file_ext, self.config.get("random_ip_range"), self.routing)
+            generate_al_result(cuckoo_task.report, parent_section, file_ext, self.config.get("random_ip_range"),
+                               self.routing, self.safelist)
         except RecoverableError as e:
             self.log.error(f"Recoverable error. Error message: {repr(e)}")
             if cuckoo_task and cuckoo_task.id is not None:
@@ -1865,17 +1868,19 @@ class Cuckoo(ServiceBase):
                             sig_summary[machine_name].append({"name": sig_name, "body": sig_subsection.body})
 
         if len(sig_summary.keys()) > 0:
-            sig_highlights_sec = ResultSection("Signature Highlights", body=f"The following signatures are highlights (scored {self.sig_highlight_min_score}+) from analysis.")
+            sig_highlights_sec = ResultSection("Signature Highlights",
+                                               body=f"The following signatures are highlights (scored "
+                                                    f"{self.sig_highlight_min_score}+) from analysis.")
             for machine, signatures in sig_summary.items():
                 for sig in signatures:
-                    ResultSection(f"Signature '{sig['name']}' was observed in '{machine}'", body=sig["body"], parent=sig_highlights_sec)
+                    ResultSection(f"Signature '{sig['name']}' was observed in '{machine}'", body=sig["body"],
+                                  parent=sig_highlights_sec)
             if len(sig_highlights_sec.subsections) > 0:
                 for parent_section in self.file_res.sections:
                     parent_section.auto_collapse = True
 
                 # Put the signature hightlights section at the top of the service result
                 self.file_res.sections.insert(0, sig_highlights_sec)
-
 
 
 def generate_random_words(num_words: int) -> str:
