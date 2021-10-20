@@ -1693,9 +1693,9 @@ class TestCuckooMain:
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
     @staticmethod
-    def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
+    def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class, mocker):
         from assemblyline_v4_service.common.result import ResultSection, ResultImageSection
-
+        mocker.patch("assemblyline_v4_service.common.result.fileinfo", return_value={"type": "image"})
         tarball_file_map = {
             "buffer": "Extracted buffer",
             "extracted": "Cuckoo extracted file",
