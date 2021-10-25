@@ -1695,7 +1695,6 @@ class TestCuckooMain:
     @staticmethod
     def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class, mocker):
         from assemblyline_v4_service.common.result import ResultSection, ResultImageSection
-        mocker.patch("assemblyline_v4_service.common.result.fileinfo", return_value={"type": "image"})
         tarball_file_map = {
             "buffer": "Extracted buffer",
             "extracted": "Cuckoo extracted file",
@@ -2333,7 +2332,7 @@ class TestCuckooResult:
     @pytest.mark.parametrize(
         "processes, correct_events",
         [([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}],
-          [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah"}]),
+          [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah", "pguid": None}]),
          ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}],
           []),
          ([],
@@ -2348,14 +2347,19 @@ class TestCuckooResult:
     @staticmethod
     @pytest.mark.parametrize(
         "events, is_process_martian, correct_body",
-        [([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}],
+        [([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           False,
-          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
-         ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0}],
+          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
+         ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           True,
-          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
+          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
          ([],
-          False, None), ])
+          False, None),
+         ([{"pid": 0, "image": "C:\\Users\\buddy\\AppData\\Local\\Temp\\blah.exe", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
+          False,
+          '[{"pid": 0, "image": "?usrtmp\\\\blah.exe", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "?usrtmp\\\\blah.exe", "children": []}]'),
+         ]
+    )
     def test_build_process_tree(events, is_process_martian, correct_body):
         from cuckoo.cuckoo_result import build_process_tree
         from assemblyline_v4_service.common.result import ResultSection, Heuristic, BODY_FORMAT
@@ -2890,7 +2894,7 @@ class TestCuckooResult:
         al_result = ResultSection("blah")
         events = [{"timestamp": 1, "image": "blah", 'pid': 1, 'src_port': 1, 'dest_ip': "blah", 'src_ip': "blah",
                    'dest_port': 1, 'guid': "blah", 'protocol': "blah", 'domain': "blah"},
-                  {"pid": 1, "ppid": 1, "guid": "blah", "command_line": "blah", "image": "blah", "timestamp": 2}]
+                  {"pid": 1, "ppid": 1, "guid": "blah", "command_line": "blah", "image": "blah", "timestamp": 2, "pguid": "blah"}]
 
         correct_result_section = ResultSection(title_text="Event Log")
 
@@ -2967,7 +2971,21 @@ class TestCuckooResult:
                                           {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
                                           {"@Name": "ProcessGuid", "#text": "blah"}]}}],
                                [{'pid': 1, 'ppid': 2, 'timestamp': 43932.12, "command_line": "./blah",
-                                 "image": "blah.exe", "guid": "blah"}]), ])
+                                 "image": "blah.exe", "guid": "blah", "pguid": None}]),
+                              ([{
+                                  "EventData":
+                                      {
+                                          "Data":
+                                              [{"@Name": "ProcessId", "#text": "1"},
+                                               {"@Name": "ParentProcessId", "#text": "2"},
+                                               {"@Name": "Image", "#text": "blah.exe"},
+                                               {"@Name": "CommandLine", "#text": "./blah"},
+                                               {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
+                                               {"@Name": "ProcessGuid", "#text": "blah"},
+                                               {"@Name": "SourceProcessGuid", "#text": "blah"}]}}],
+                               [{'pid': 1, 'ppid': 2, 'timestamp': 43932.12, "command_line": "./blah",
+                                 "image": "blah.exe", "guid": "blah", "pguid": "blah"}]),
+                              ])
     def test_convert_sysmon_processes(sysmon, correct_processes, dummy_result_class_instance, mocker):
         from cuckoo.cuckoo_result import convert_sysmon_processes
         actual_events = []
