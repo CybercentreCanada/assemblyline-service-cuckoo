@@ -268,7 +268,8 @@ def convert_cuckoo_processes(events: List[Dict],
                 "image": process_path,
                 "command_line": command_line,
                 "timestamp": item["first_seen"],
-                "guid": "placeholder" if not item.get("guid") else item["guid"],  # TODO: Somehow get the GUID
+                "guid": item.get("guid"),  # TODO: Somehow get the GUID
+                "pguid": item.get("pguid")  # TODO: Somehow get the Parent GUID
             }
             events.append(ontology_process)
 
@@ -289,7 +290,7 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
     if signatures is None:
         signatures: List[Dict[str, Any]] = []
     if len(events) > 0:
-        so = SandboxOntology(events=events)
+        so = SandboxOntology(events=events, normalize_paths=True)
         process_tree = so.get_process_tree_with_signatures(signatures)
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = json.dumps(process_tree)
@@ -924,6 +925,8 @@ def convert_sysmon_processes(sysmon: List[Dict[str, Any]], events: List[Dict[str
             "image": None,
             "command_line": None,
             "timestamp": None,
+            "guid": None,
+            "pguid": None
         }
         event_data = event["EventData"]
         for data in event_data["Data"]:
@@ -944,7 +947,10 @@ def convert_sysmon_processes(sysmon: List[Dict[str, Any]], events: List[Dict[str
                 ontology_process["timestamp"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
             elif name == "ProcessGuid":
                 ontology_process["guid"] = text
+            elif name == "SourceProcessGuid":
+                ontology_process["pguid"] = text
 
+        # It is okay if the Parent GUID is None
         if any(ontology_process[key] is None for key in ["pid", "ppid", "image", "command_line", "timestamp", "guid"]):
             continue
         elif ontology_process["pid"] in existing_pids:
