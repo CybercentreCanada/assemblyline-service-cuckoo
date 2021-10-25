@@ -6,7 +6,7 @@ import json
 from tld import get_tld
 from ipaddress import ip_address, ip_network, IPv4Network
 from urllib.parse import urlparse
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
@@ -15,6 +15,7 @@ from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, URI_PATH
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, NetworkEvent, ProcessEvent
 from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, Heuristic
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
+from cuckoo.safe_process_tree_hashes import SAFE_PROCESS_TREE_HASHES
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
@@ -292,6 +293,7 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
     if len(events) > 0:
         so = SandboxOntology(events=events, normalize_paths=True)
         process_tree = so.get_process_tree_with_signatures(signatures)
+        process_tree = _filter_process_tree_against_safe_hashes(process_tree, SAFE_PROCESS_TREE_HASHES)
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = json.dumps(process_tree)
         process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
@@ -1606,3 +1608,22 @@ def is_safelisted(value: str, tags: List[str], safelist: Dict[str, Dict[str, Lis
 
     return False
 
+
+def _filter_process_tree_against_safe_hashes(process_tree: List[Dict], safe_process_tree_hashes: Set[str]) -> List[Dict]:
+    """
+    This method takes a process tree and a list of safe process tree hashes, and filters out safe process roots in the
+    tree.
+    It's logic will go as follows:
+    - Hash each root in the tree
+    - Write a supplementary file with an easily identifiable name for each root containing two items:
+        - The hash
+        - The root as a dict
+    - Check if each root is in the safe_process_tree_hashes set
+        - If so, remove it from the tree
+        - If not, leave it
+    :param process_tree: A list of processes in a tree structure
+    :param safe_process_tree_hashes: A set of hashes representing safe process trees
+    :return: A list of processes in a tree structure, with the safe branches filtered out
+    """
+    # TODO
+    return process_tree
