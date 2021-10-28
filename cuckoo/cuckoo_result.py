@@ -605,7 +605,6 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                         remote_file_access_sec.add_tag("network.dynamic.uri", http_call["uri"])
                         if not remote_file_access_sec.heuristic:
                             remote_file_access_sec.set_heuristic(1003)
-            # TODO: tag user-agent
             if any((http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
                    or sus_user_agent in http_call["request"]
                    for sus_user_agent in SUSPICIOUS_USER_AGENTS):
@@ -615,6 +614,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                                             if (http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
                                             or sus_user_agent in http_call["request"]), None)
                 if sus_user_agent_used not in sus_user_agents_used:
+                    suspicious_user_agent_sec.add_tag("network.user_agent", sus_user_agent_used)
                     sus_user_agents_used.append(sus_user_agent_used)
             # now remove path, uri, port, user-agent from the final output
             del http_call['path']
