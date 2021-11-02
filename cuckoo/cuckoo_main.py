@@ -1269,6 +1269,7 @@ class Cuckoo(ServiceBase):
         # Submit dropped files and pcap if available:
         self._extract_console_output(cuckoo_task.id)
         self._extract_encrypted_buffers(cuckoo_task.id)
+        self._extract_process_tree_details(cuckoo_task.id)
         self.check_dropped(cuckoo_task)
         self.check_powershell(cuckoo_task.id, parent_section)
         # self.check_pcap(cuckoo_task)
@@ -1465,6 +1466,27 @@ class Cuckoo(ServiceBase):
             }
             self.artifact_list.append(artifact)
             self.log.debug(f"Adding extracted file for task {task_id}: {encrypted_buffer_file}")
+
+    # TODO: Temporary method
+    def _extract_process_tree_details(self, task_id) -> None:
+        """
+        This method extracts the file containing data for safelisting process trees
+        :param task_id: An integer representing the Cuckoo Task ID
+        :return: None
+        """
+        temp_dir = "/tmp"
+        file_name = f"proc_tree_details_{task_id}.txt"
+        file_path = os.path.join(temp_dir, file_name)
+        if not os.path.isfile(file_path):
+            return
+        artifact = {
+            "name": file_name,
+            "path": file_path,
+            "description": "Process trees and corresponding hashes",
+            "to_be_extracted": False
+        }
+        self.artifact_list.append(artifact)
+        self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
 
     def _extract_artifacts(self, tar_obj: tarfile.TarFile, task_id: int, parent_section: ResultSection) -> None:
         """
