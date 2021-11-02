@@ -3,10 +3,12 @@ from logging import getLogger
 import re
 import os
 import json
+import copy
 from tld import get_tld
 from ipaddress import ip_address, ip_network, IPv4Network
 from urllib.parse import urlparse
 from typing import List, Dict, Any, Optional, Set
+from hashlib import sha256
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
@@ -1608,14 +1610,104 @@ def is_safelisted(value: str, tags: List[str], safelist: Dict[str, Dict[str, Lis
 
     return False
 
+def _create_hashed_node(parent: str, node: Dict, hashes: List[str]):
+    # Extract the two pieces of info needed from the node
+    image = node["image"]
+    children = node["children"]
 
+    info = parent + image
+
+    encoded = info.encode()
+    encoded256 = sha256(encoded)
+
+    hashes.append(encoded256)
+
+    for child in children:
+        # hexdigest() returns the SHA256 encoded string of the object, encoded256
+        _create_hashed_node(encoded256.hexdigest(), child, hashes)
+
+    # The below return statement is used when running unit tests on this method. It is not used in production.
+    # return hashes
+
+def _create_process_tree_hashes(process_tree: List[Dict]) -> List[str]:
+    # List that holds the hashes of each root in a tree
+    process_tree_hashes = []
+    
+    for root in process_tree:
+        # List to hold each hash computed using the _create_hashed_node function
+        hashes = []
+        _create_hashed_node("", root, hashes)
+        # String to hold all of hashed nodes from the tree
+        final_hash = ""
+
+        for hash in hashes:
+            final_hash += hash.hexdigest()
+
+        encoded_final_hash = final_hash.encode()
+        process_tree_hashes.append(sha256(encoded_final_hash).hexdigest())
+
+    return process_tree_hashes
+
+# Deletes key-value pairs from the nodes in the process tree
+def _strip_node(node: Dict):
+    for key in list(node):
+        # Delete all keys except the two we need
+        if key != 'image' and key != 'children':
+            node.pop(key, None)
+    
+    # Recurse on the children
+    children = node['children']
+    for child in children:
+        _strip_node(child)
+    
+    # The below return statement is used when running unit tests on this method. It is not used in production.
+    # return node
+
+# Removes all keys in the process tree except for image and children
+def _strip_process_tree(process_tree: List[Dict]) -> List[Dict]:
+    stripped_process_trees = copy.deepcopy(process_tree)
+    # Call on each root to strip each tree
+    for root in stripped_process_trees:
+        _strip_node(root)
+            
+    return stripped_process_trees
+
+# Writes the stripped process tree and hashes to a temp file for access later
+def _write_tree_and_hashes(stripped_process_tree: List[Dict], process_tree_hashes: List[str]):
+    with open('/tmp/proc_tree_details.txt', 'w') as file:
+        for index in range(len(stripped_process_tree)):
+            file.write(process_tree_hashes[index] + '\n')
+            if index == len(stripped_process_tree) - 1:
+                file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"'))
+            else:
+                file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
+    
+    file.close()
+
+# Checks each hash against the safe hashes and removes safe roots from the process tree
+def _remove_safe_roots(process_tree: List[Dict], process_tree_hashes: List[str], safe_process_tree_hashes: Set[str]):
+    num_removed = 0
+    for index in range(len(process_tree_hashes)):
+        if process_tree_hashes[index] in safe_process_tree_hashes:
+            process_tree.pop(index - num_removed)
+            num_removed += 1
+
+    
 def _filter_process_tree_against_safe_hashes(process_tree: List[Dict], safe_process_tree_hashes: Set[str]) -> List[Dict]:
+    process_tree_hashes = _create_process_tree_hashes(process_tree)
+    stripped_process_tree = _strip_process_tree(process_tree)
+    _write_tree_and_hashes(stripped_process_tree, process_tree_hashes)
+    _remove_safe_roots(process_tree, process_tree_hashes, safe_process_tree_hashes)
+
+    return process_tree
+    
     """
     This method takes a process tree and a list of safe process tree hashes, and filters out safe process roots in the
     tree.
     It's logic will go as follows:
     - Hash each root in the tree
     - Write a supplementary file with an easily identifiable name for each root containing two items:
+        - /tmp/
         - The hash
         - The root as a dict
     - Check if each root is in the safe_process_tree_hashes set
@@ -1625,5 +1717,3 @@ def _filter_process_tree_against_safe_hashes(process_tree: List[Dict], safe_proc
     :param safe_process_tree_hashes: A set of hashes representing safe process trees
     :return: A list of processes in a tree structure, with the safe branches filtered out
     """
-    # TODO
-    return process_tree
