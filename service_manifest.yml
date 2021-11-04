@@ -548,7 +548,7 @@ heuristics:
 
   - heur_id: 1007
     name: Suspicious User Agent
-    score: 500
+    score: 1
     filetype: '*'
     description: Cuckoo detected a suspicious user agent used for HTTP calls
 

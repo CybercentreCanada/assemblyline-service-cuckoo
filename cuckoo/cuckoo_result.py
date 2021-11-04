@@ -3,7 +3,7 @@ from logging import getLogger
 import re
 import os
 import json
-import copy
+from copy import deepcopy
 from tld import get_tld
 from ipaddress import ip_address, ip_network, IPv4Network
 from urllib.parse import urlparse
@@ -152,7 +152,7 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
             process_behaviour(behaviour, events, safelist)
 
     if events:
-        build_process_tree(events, al_result, is_process_martian, signatures)
+        build_process_tree(events, al_result, is_process_martian, signatures, info["id"])
 
     if network:
         process_network(network, al_result, validated_random_ip_range, routing, process_map, events, info["id"],
@@ -279,13 +279,15 @@ def convert_cuckoo_processes(events: List[Dict],
 
 def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
                        parent_result_section: Optional[ResultSection] = None, is_process_martian: bool = False,
-                       signatures: Optional[List[Dict[str, Any]]] = None) -> None:
+                       signatures: Optional[List[Dict[str, Any]]] = None,
+                       task_id: Optional[int] = None) -> None:
     """
     This method builds a process tree ResultSection
     :param events: A list of events that occurred during the analysis of the task
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
     :param is_process_martian: A boolean flag that indicates if the is_process_martian signature was raised
     :param signatures: A list of signatures to be mapped to the processes
+    :param task_id: An integer representing the Cuckoo Task ID
     :return: None
     """
     if events is None:
@@ -295,7 +297,7 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
     if len(events) > 0:
         so = SandboxOntology(events=events, normalize_paths=True)
         process_tree = so.get_process_tree_with_signatures(signatures)
-        process_tree = _filter_process_tree_against_safe_hashes(process_tree, SAFE_PROCESS_TREE_HASHES)
+        process_tree = _filter_process_tree_against_safe_hashes(process_tree, SAFE_PROCESS_TREE_HASHES, task_id)
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = json.dumps(process_tree)
         process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
@@ -609,7 +611,6 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                         remote_file_access_sec.add_tag("network.dynamic.uri", http_call["uri"])
                         if not remote_file_access_sec.heuristic:
                             remote_file_access_sec.set_heuristic(1003)
-            # TODO: tag user-agent
             if any((http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
                    or sus_user_agent in http_call["request"]
                    for sus_user_agent in SUSPICIOUS_USER_AGENTS):
@@ -619,6 +620,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                                             if (http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
                                             or sus_user_agent in http_call["request"]), None)
                 if sus_user_agent_used not in sus_user_agents_used:
+                    suspicious_user_agent_sec.add_tag("network.user_agent", sus_user_agent_used)
                     sus_user_agents_used.append(sus_user_agent_used)
             # now remove path, uri, port, user-agent from the final output
             del http_call['path']
@@ -1610,7 +1612,16 @@ def is_safelisted(value: str, tags: List[str], safelist: Dict[str, Dict[str, Lis
 
     return False
 
-def _create_hashed_node(parent: str, node: Dict, hashes: List[str]):
+
+def _create_hashed_node(parent: str, node: Dict[str, Any], hashes: List[str]) -> None:
+    """
+    This method takes a single node and hashes node attributes.
+    Recurses through children to do the same.
+    :param parent: A string representing the node hash
+    :param node: A dictionary representing the node
+    :param hashes: A list containing the hashes of the root
+    :return: None
+    """
     # Extract the two pieces of info needed from the node
     image = node["image"]
     children = node["children"]
@@ -1618,21 +1629,24 @@ def _create_hashed_node(parent: str, node: Dict, hashes: List[str]):
     info = parent + image
 
     encoded = info.encode()
-    encoded256 = sha256(encoded)
+    encoded256 = sha256(encoded).hexdigest()
 
     hashes.append(encoded256)
 
     for child in children:
         # hexdigest() returns the SHA256 encoded string of the object, encoded256
-        _create_hashed_node(encoded256.hexdigest(), child, hashes)
+        _create_hashed_node(encoded256, child, hashes)
 
-    # The below return statement is used when running unit tests on this method. It is not used in production.
-    # return hashes
 
-def _create_process_tree_hashes(process_tree: List[Dict]) -> List[str]:
+def _create_process_tree_hashes(process_tree: List[Dict[str, Any]]) -> List[str]:
+    """
+    This method creates hashes for each root in the tree
+    :param process_tree: A list of dictionaries where each dictionary represents a root.
+    :return: A list of strings representing hashes, in the same order as the provided process tree
+    """
     # List that holds the hashes of each root in a tree
     process_tree_hashes = []
-    
+
     for root in process_tree:
         # List to hold each hash computed using the _create_hashed_node function
         hashes = []
@@ -1640,80 +1654,91 @@ def _create_process_tree_hashes(process_tree: List[Dict]) -> List[str]:
         # String to hold all of hashed nodes from the tree
         final_hash = ""
 
-        for hash in hashes:
-            final_hash += hash.hexdigest()
+        for node_hash in hashes:
+            final_hash += node_hash
 
         encoded_final_hash = final_hash.encode()
         process_tree_hashes.append(sha256(encoded_final_hash).hexdigest())
 
     return process_tree_hashes
 
-# Deletes key-value pairs from the nodes in the process tree
-def _strip_node(node: Dict):
+
+def _strip_node(node: Dict[str, Any]) -> None:
+    """
+    This method deletes key-value pairs from the nodes in the process tree
+    :param node: A dictionary representing the node
+    :return: None
+    """
     for key in list(node):
         # Delete all keys except the two we need
         if key != 'image' and key != 'children':
             node.pop(key, None)
-    
     # Recurse on the children
     children = node['children']
     for child in children:
         _strip_node(child)
-    
-    # The below return statement is used when running unit tests on this method. It is not used in production.
-    # return node
 
-# Removes all keys in the process tree except for image and children
-def _strip_process_tree(process_tree: List[Dict]) -> List[Dict]:
-    stripped_process_trees = copy.deepcopy(process_tree)
+
+def _strip_process_tree(process_tree: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    This method removes all keys in the process tree except for image and children
+    :param process_tree: A list of dictionaries where each dictionary represents a root.
+    :return: A list of dictionaries where each dictionary represents a root.
+    """
+    stripped_process_trees = deepcopy(process_tree)
     # Call on each root to strip each tree
     for root in stripped_process_trees:
         _strip_node(root)
-            
+
     return stripped_process_trees
 
-# Writes the stripped process tree and hashes to a temp file for access later
-def _write_tree_and_hashes(stripped_process_tree: List[Dict], process_tree_hashes: List[str]):
-    with open('/tmp/proc_tree_details.txt', 'w') as file:
+# TODO: Temporary method
+def _write_tree_and_hashes(stripped_process_tree: List[Dict], process_tree_hashes: List[str], task_id: int) -> None:
+    """
+    This method writes the stripped process tree and hashes to a temp file for access later
+    :param stripped_process_tree: A list of dictionaries where each dictionary represents a root with only critical keys.
+    :param process_tree_hashes: A list of strings representing hashes, in the same order as the provided process tree
+    :param task_id: An integer representing the Cuckoo Task ID
+    :return: None
+    """
+    with open(f'/tmp/proc_tree_details_{task_id}.txt', 'w') as file:
         for index in range(len(stripped_process_tree)):
             file.write(process_tree_hashes[index] + '\n')
             if index == len(stripped_process_tree) - 1:
                 file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"'))
             else:
                 file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
-    
+
     file.close()
 
-# Checks each hash against the safe hashes and removes safe roots from the process tree
-def _remove_safe_roots(process_tree: List[Dict], process_tree_hashes: List[str], safe_process_tree_hashes: Set[str]):
+
+def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: List[str], safe_process_tree_hashes: Set[str]) -> None:
+    """
+    This method checks each hash against the safe hashes and removes safe roots from the process tree
+    :param process_tree: A list of dictionaries where each dictionary represents a root.
+    :param process_tree_hashes: A list of strings representing hashes, in the same order as the provided process tree
+    :param safe_process_tree_hashes: A set of strings representing hashes of safe process trees
+    :return: None
+    """
     num_removed = 0
     for index in range(len(process_tree_hashes)):
         if process_tree_hashes[index] in safe_process_tree_hashes:
             process_tree.pop(index - num_removed)
             num_removed += 1
 
-    
-def _filter_process_tree_against_safe_hashes(process_tree: List[Dict], safe_process_tree_hashes: Set[str]) -> List[Dict]:
-    process_tree_hashes = _create_process_tree_hashes(process_tree)
-    stripped_process_tree = _strip_process_tree(process_tree)
-    _write_tree_and_hashes(stripped_process_tree, process_tree_hashes)
-    _remove_safe_roots(process_tree, process_tree_hashes, safe_process_tree_hashes)
 
-    return process_tree
-    
+def _filter_process_tree_against_safe_hashes(process_tree: List[Dict[str, Any]], safe_process_tree_hashes: Set[str], task_id: int) -> List[Dict[str, Any]]:
     """
     This method takes a process tree and a list of safe process tree hashes, and filters out safe process roots in the
     tree.
-    It's logic will go as follows:
-    - Hash each root in the tree
-    - Write a supplementary file with an easily identifiable name for each root containing two items:
-        - /tmp/
-        - The hash
-        - The root as a dict
-    - Check if each root is in the safe_process_tree_hashes set
-        - If so, remove it from the tree
-        - If not, leave it
     :param process_tree: A list of processes in a tree structure
     :param safe_process_tree_hashes: A set of hashes representing safe process trees
+    :param task_id: An integer representing the Cuckoo Task ID
     :return: A list of processes in a tree structure, with the safe branches filtered out
     """
+    process_tree_hashes = _create_process_tree_hashes(process_tree)
+    stripped_process_tree = _strip_process_tree(process_tree)
+    _write_tree_and_hashes(stripped_process_tree, process_tree_hashes, task_id)
+    _remove_safe_roots(process_tree, process_tree_hashes, safe_process_tree_hashes)
+
+    return process_tree
