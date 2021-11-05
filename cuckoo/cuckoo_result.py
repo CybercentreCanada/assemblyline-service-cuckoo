@@ -1712,7 +1712,7 @@ def _write_tree_and_hashes(stripped_process_tree: List[Dict], process_tree_hashe
     file.close()
 
 
-def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: List[str], safe_process_tree_hashes: Set[str]) -> None:
+def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: List[str], safe_process_tree_hashes: Dict[str, Any]) -> None:
     """
     This method checks each hash against the safe hashes and removes safe roots from the process tree
     :param process_tree: A list of dictionaries where each dictionary represents a root.
