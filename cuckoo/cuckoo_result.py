@@ -1787,6 +1787,9 @@ def _write_tree_and_leaf_hashes(stripped_paths: List[List[Dict[str, Any]]], leaf
                     file.write(str(stripped_paths[index][index2]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
 
 
+# TODO: Method to remove safe leaves, but only used when we aren't removing safe roots from the process tree (found above)
+# def _remove_safe_leaves(process_tree: List[Dict[str, Any]], leaf_hashes: List[str], safe_leaf_hashes: Dict[str, Any]) -> None:
+
 
 def _filter_process_tree_against_safe_hashes(process_tree: List[Dict[str, Any]], safe_process_tree_hashes: Set[str], task_id: int) -> List[Dict[str, Any]]:
     """
