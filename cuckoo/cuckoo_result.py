@@ -1662,7 +1662,6 @@ def _create_process_tree_hashes(process_tree: List[Dict[str, Any]]) -> List[str]
 
     return process_tree_hashes
 
-
 def _strip_node(node: Dict[str, Any]) -> None:
     """
     This method deletes key-value pairs from the nodes in the process tree
@@ -1671,7 +1670,7 @@ def _strip_node(node: Dict[str, Any]) -> None:
     """
     for key in list(node):
         # Delete all keys except the two we need
-        if key != 'image' and key != 'children':
+        if key != 'image' and key != 'children' and key != 'command_line':
             node.pop(key, None)
     # Recurse on the children
     children = node['children']
@@ -1709,8 +1708,6 @@ def _write_tree_and_hashes(stripped_process_tree: List[Dict], process_tree_hashe
             else:
                 file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
 
-    file.close()
-
 
 def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: List[str], safe_process_tree_hashes: Dict[str, Any]) -> None:
     """
@@ -1726,6 +1723,70 @@ def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: 
             process_tree.pop(index - num_removed)
             num_removed += 1
 
+def _create_hashed_leaf(parent: str, node: Dict[str, Any], hashes: List[str]) -> None:
+    # Extract the two pieces of info needed from the node
+    image = node["image"]
+    children = node["children"]
+
+    info = parent + image
+
+    encoded = info.encode()
+    # hexdigest() returns the SHA256 encoded string of the object, encoded256
+    encoded256 = sha256(encoded).hexdigest()
+
+    if not children:
+        hashes.append(encoded256)
+    for child in children:
+        _create_hashed_leaf(encoded256, child, hashes)
+
+def _create_leaf_hashes(process_tree: List[Dict[str, Any]]) -> List[List[str]]:
+    # List that holds the hashes of each leaf in a tree
+    leaf_hashes = []
+
+    for root in process_tree:
+        hashes = []
+        _create_hashed_leaf("", root, hashes)
+        leaf_hashes.append(hashes)
+
+    return leaf_hashes
+
+def _create_stripped_paths(stripped_process_tree: Dict[str, Any], cur={}) -> List[Dict[str, Any]]:
+    if not cur:
+        cur = stripped_process_tree
+    if not stripped_process_tree or not stripped_process_tree['children']:
+        yield cur
+    else:
+        for child in stripped_process_tree['children'][:]:
+            stripped_process_tree['children'] = [child]
+            for path in _create_stripped_paths(child, cur):
+                yield path
+
+def _create_root_leaf_paths(stripped_process_tree: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+    path_hashes = []
+    for root in stripped_process_tree:
+        paths = []
+
+        for path in _create_stripped_paths(root):
+            path_copy = deepcopy(path)
+            paths.append(path_copy)
+
+        path_hashes.append(paths)
+    
+    return path_hashes
+
+
+# TODO: Temporary method
+def _write_tree_and_leaf_hashes(stripped_paths: List[List[Dict[str, Any]]], leaf_hashes: List[List[str]], task_id: int) -> None:
+    with open(f'/tmp/proc_tree_leaf_details_{task_id}.txt', 'w') as file:
+        for index in range(len(stripped_paths)):
+            for index2 in range(len(stripped_paths[index])):
+                file.write(leaf_hashes[index][index2] + '\n')
+                if index == len(stripped_paths) - 1 and index2 == len(stripped_paths[index]) - 1:
+                    file.write(str(stripped_paths[index][index2]).replace('\\\\', '\\').replace('\'', '\"'))
+                else:
+                    file.write(str(stripped_paths[index][index2]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
+
+
 
 def _filter_process_tree_against_safe_hashes(process_tree: List[Dict[str, Any]], safe_process_tree_hashes: Set[str], task_id: int) -> List[Dict[str, Any]]:
     """
@@ -1736,8 +1797,11 @@ def _filter_process_tree_against_safe_hashes(process_tree: List[Dict[str, Any]],
     :param task_id: An integer representing the Cuckoo Task ID
     :return: A list of processes in a tree structure, with the safe branches filtered out
     """
-    process_tree_hashes = _create_process_tree_hashes(process_tree)
     stripped_process_tree = _strip_process_tree(process_tree)
+    process_tree_hashes = _create_process_tree_hashes(stripped_process_tree)
+    leaf_hashes = _create_leaf_hashes(stripped_process_tree)
+    stripped_root_leaf_paths = _create_root_leaf_paths(stripped_process_tree)
+    _write_tree_and_leaf_hashes(stripped_root_leaf_paths, leaf_hashes, task_id)
     _write_tree_and_hashes(stripped_process_tree, process_tree_hashes, task_id)
     _remove_safe_roots(process_tree, process_tree_hashes, safe_process_tree_hashes)
 

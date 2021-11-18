@@ -1488,6 +1488,27 @@ class Cuckoo(ServiceBase):
         self.artifact_list.append(artifact)
         self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
 
+        # TODO: Temporary method
+    def _extract_process_tree_leaf_hashes(self, task_id) -> None:
+        """
+        This method extracts the file containing data for safelisting process trees
+        :param task_id: An integer representing the Cuckoo Task ID
+        :return: None
+        """
+        temp_dir = "/tmp"
+        file_name = f"proc_tree_leaf_details_{task_id}.txt"
+        file_path = os.path.join(temp_dir, file_name)
+        if not os.path.isfile(file_path):
+            return
+        artifact = {
+            "name": file_name,
+            "path": file_path,
+            "description": "Process trees and corresponding root-to-leaf hashes",
+            "to_be_extracted": False
+        }
+        self.artifact_list.append(artifact)
+        self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
+
     def _extract_artifacts(self, tar_obj: tarfile.TarFile, task_id: int, parent_section: ResultSection) -> None:
         """
         This method extracts certain artifacts from that tarball
@@ -1843,7 +1864,7 @@ class Cuckoo(ServiceBase):
         temp_dir = "/tmp"
         for file in os.listdir(temp_dir):
             file_path = os.path.join(temp_dir, file)
-            if any(leftover_file_name in file_path for leftover_file_name in ["_console_output", "_encrypted_buffer_", "proc_tree_details_"]):
+            if any(leftover_file_name in file_path for leftover_file_name in ["_console_output", "_encrypted_buffer_", "proc_tree_details_", "proc_tree_leaf_details_"]):
                 os.remove(file_path)
 
     def _get_machine_by_name(self, machine_name) -> Optional[Dict[str, Any]]:
