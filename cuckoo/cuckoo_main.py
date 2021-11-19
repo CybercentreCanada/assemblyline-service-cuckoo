@@ -1468,7 +1468,7 @@ class Cuckoo(ServiceBase):
             self.log.debug(f"Adding extracted file for task {task_id}: {encrypted_buffer_file}")
 
     # TODO: Temporary method
-    def _extract_process_tree_details(self, task_id) -> None:
+    def _extract_process_tree_details(self, task_id: int) -> None:
         """
         This method extracts the file containing data for safelisting process trees
         :param task_id: An integer representing the Cuckoo Task ID
@@ -1489,9 +1489,10 @@ class Cuckoo(ServiceBase):
         self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
 
         # TODO: Temporary method
-    def _extract_process_tree_leaf_hashes(self, task_id) -> None:
+    def _extract_process_tree_leaf_hashes(self, task_id: int) -> None:
         """
-        This method extracts the file containing data for safelisting process trees
+        This method extracts the file containing data for safelisting root-to-leaf path hashes
+        in a process tree
         :param task_id: An integer representing the Cuckoo Task ID
         :return: None
         """
