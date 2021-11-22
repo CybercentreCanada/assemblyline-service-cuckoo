@@ -1720,22 +1720,23 @@ def _write_tree_and_hashes(stripped_process_tree: List[Dict], process_tree_hashe
         task_id (int): An integer representing the Cuckoo Task ID
     """
 
-    with open(f'/tmp/proc_tree_details_{task_id}.txt', 'w') as file:
-        for index in range(len(stripped_process_tree)):
-            file.write(process_tree_hashes[index] + '\n')
-            if index == len(stripped_process_tree) - 1:
-                file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"'))
-            else:
-                file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
-    
-    with open(f'/tmp/proc_tree_leaf_details_{task_id}.txt', 'w') as file:
-        for index in range(len(stripped_paths)):
-            for index2 in range(len(stripped_paths[index])):
-                file.write(leaf_hashes[index][index2] + '\n')
-                if index == len(stripped_paths) - 1 and index2 == len(stripped_paths[index]) - 1:
-                    file.write(str(stripped_paths[index][index2]).replace('\\\\', '\\').replace('\'', '\"'))
+    if stripped_process_tree:
+        with open(f'/tmp/proc_tree_details_{task_id}.txt', 'w') as file:
+            for index in range(len(stripped_process_tree)):
+                file.write(process_tree_hashes[index] + '\n')
+                if index == len(stripped_process_tree) - 1:
+                    file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"'))
                 else:
-                    file.write(str(stripped_paths[index][index2]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
+                    file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
+    if stripped_paths:
+        with open(f'/tmp/proc_tree_leaf_details_{task_id}.txt', 'w') as file:
+            for index in range(len(stripped_paths)):
+                for index2 in range(len(stripped_paths[index])):
+                    file.write(leaf_hashes[index][index2] + '\n')
+                    if index == len(stripped_paths) - 1 and index2 == len(stripped_paths[index]) - 1:
+                        file.write(str(stripped_paths[index][index2]).replace('\\\\', '\\').replace('\'', '\"'))
+                    else:
+                        file.write(str(stripped_paths[index][index2]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
 
 
 def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: List[str], safe_process_tree_hashes: Dict[str, Any]) -> None:
@@ -1753,7 +1754,7 @@ def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: 
             num_removed += 1
 
 
-def _create_stripped_paths(stripped_process_tree: Dict[str, Any], cur={}) -> List[Dict[str, Any]]:
+def _create_stripped_paths(stripped_process_tree: Dict[str, Any], cur: Dict[str, Any]={}) -> List[Dict[str, Any]]:
     """
     This method generates all of the root-to-leaf paths of a given stripped process tree dictionary
 

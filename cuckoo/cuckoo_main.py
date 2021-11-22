@@ -1270,6 +1270,7 @@ class Cuckoo(ServiceBase):
         self._extract_console_output(cuckoo_task.id)
         self._extract_encrypted_buffers(cuckoo_task.id)
         self._extract_process_tree_details(cuckoo_task.id)
+        self._extract_process_tree_leaf_hashes(cuckoo_task.id)
         self.check_dropped(cuckoo_task)
         self.check_powershell(cuckoo_task.id, parent_section)
         # self.check_pcap(cuckoo_task)
@@ -1504,7 +1505,7 @@ class Cuckoo(ServiceBase):
         artifact = {
             "name": file_name,
             "path": file_path,
-            "description": "Process trees and corresponding root-to-leaf hashes",
+            "description": "Process tree root-to-leaf paths and corresponding hashes",
             "to_be_extracted": False
         }
         self.artifact_list.append(artifact)
