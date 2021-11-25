@@ -1843,7 +1843,7 @@ class Cuckoo(ServiceBase):
         temp_dir = "/tmp"
         for file in os.listdir(temp_dir):
             file_path = os.path.join(temp_dir, file)
-            if any(leftover_file_name in file_path for leftover_file_name in ["_console_output", "_encrypted_buffer_", "proc_tree_details_"]):
+            if any(leftover_file_name in file_path for leftover_file_name in ["_console_output", "_encrypted_buffer_"]):
                 os.remove(file_path)
 
     def _get_machine_by_name(self, machine_name) -> Optional[Dict[str, Any]]:

@@ -2087,10 +2087,8 @@ class TestCuckooMain:
             f.write("blah")
         with open("/tmp/blah_encrypted_buffer_blah.txt", "w") as f:
             f.write("blah")
-        with open("/tmp/proc_tree_details_1.txt", "w") as f:
-            f.write("blah")
         number_of_files_in_tmp_post_write = len(os.listdir(temp_dir))
-        assert number_of_files_in_tmp_post_write == number_of_files_in_tmp_pre_call + 3
+        assert number_of_files_in_tmp_post_write == number_of_files_in_tmp_pre_call + 2
         cuckoo_class_instance._cleanup_leftovers()
         number_of_files_in_tmp_post_call = len(os.listdir(temp_dir))
         assert number_of_files_in_tmp_post_call == number_of_files_in_tmp_pre_call
