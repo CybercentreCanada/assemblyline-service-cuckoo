@@ -3287,7 +3287,7 @@ class TestCuckooResult:
         _create_hashed_node(parent, node, hashes)
 
         for x in range(len(hashes)):
-            assert hashes[x] == expected_hashes[x]
+            assert hashes[x].hexdigest() == expected_hashes[x]
 
     @staticmethod
     @pytest.mark.parametrize(
