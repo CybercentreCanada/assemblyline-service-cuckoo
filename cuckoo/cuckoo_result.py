@@ -19,7 +19,7 @@ from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DR
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
 # Custom regex for finding uris in a text blob
-URL_REGEX = re.compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#]\S*)?")
+URL_REGEX = re.compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#][^\s,\\\\]*)?")
 UNIQUE_IP_LIMIT = 100
 SCORE_TRANSLATION = {
     1: 10,
@@ -475,7 +475,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         # If there is only UDP and no TCP traffic, then we need to tag the domains here:
         for dns_call in dns_calls:
             domain = dns_call["request"]
-            if not is_safelisted(domain, ["network.dynamic.domain"], safelist):
+            if not is_safelisted(domain, ["network.dynamic.domain"], safelist) and re.match(DOMAIN_REGEX, domain):
                 dns_res_sec.add_tag("network.dynamic.domain", safe_str(domain))
 
     resolved_ips = _get_dns_map(dns_calls, process_map, routing)
@@ -1555,7 +1555,8 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_
         if tld is None or f".{tld}" == file_ext:
             continue
         safe_domain = safe_str(domain)
-        result_section.add_tag("network.dynamic.domain", safe_domain)
+        if re.match(DOMAIN_REGEX, safe_domain):
+            result_section.add_tag("network.dynamic.domain", safe_domain)
     for uri in uris:
         if not any(protocol in uri for protocol in ["http", "ftp", "icmp", "ssh"]):
             tld = get_tld(f"http://{uri}", fail_silently=True)
