@@ -2163,7 +2163,7 @@ class TestCuckooResult:
             ANALYSIS_ERRORS, GUEST_LOSING_CONNNECTIVITY, GUEST_CANNOT_REACH_HOST, GUEST_LOST_CONNECTIVITY
         assert DOMAIN_REGEX == base_domain_regex
         assert IP_REGEX == base_ip_regex
-        assert URL_REGEX == compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#]\S*)?")
+        assert URL_REGEX == compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#][^\s,\\\\]*)?")
         assert UNIQUE_IP_LIMIT == 100
         assert SCORE_TRANSLATION == {1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000}
         assert SKIPPED_MARK_ITEMS == ["type", "suspicious_features", "entropy", "process", "useragent"]
