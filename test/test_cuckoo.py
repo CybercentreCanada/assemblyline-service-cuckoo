@@ -3246,23 +3246,11 @@ class TestCuckooResult:
              False),
             ("www.google.com", ["network.dynamic.domain"], {"match": {"network.dynamic.domain": ["google.com"]}}, True,
              True),
-            ("www.google.com", ["network.dynamic.domain"], {"blah": {"network.dynamic.domain": ["google.com"]}}, True,
-             False),
         ]
     )
     def test_is_safelisted(value, tags, safelist, substring, expected_output):
         from cuckoo.cuckoo_result import is_safelisted
         assert is_safelisted(value, tags, safelist, substring) == expected_output
-
-    # TODO
-    @staticmethod
-    @pytest.mark.parametrize(
-        "process_tree, safe_process_tree_hashes, expected_process_tree",
-        [([], set(), [])]
-    )
-    def _filter_process_tree_against_safe_hashes(process_tree, safe_process_tree_hashes, expected_process_tree):
-        from cuckoo.cuckoo_result import _filter_process_tree_against_safe_hashes
-        assert _filter_process_tree_against_safe_hashes(process_tree, safe_process_tree_hashes) == expected_process_tree
 
 
 class TestSignatures:
