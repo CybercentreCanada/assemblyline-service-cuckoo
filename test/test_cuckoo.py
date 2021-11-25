@@ -1693,7 +1693,7 @@ class TestCuckooMain:
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
     @staticmethod
-    def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class, mocker):
+    def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
         from assemblyline_v4_service.common.result import ResultSection, ResultImageSection
         tarball_file_map = {
             "buffer": "Extracted buffer",
@@ -2156,7 +2156,7 @@ class TestCuckooResult:
     @staticmethod
     def test_constants():
         from re import compile
-        from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex, MD5_REGEX as base_md5_regex
+        from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex
         from cuckoo.cuckoo_result import DOMAIN_REGEX, IP_REGEX, URL_REGEX, UNIQUE_IP_LIMIT, \
             SCORE_TRANSLATION, SKIPPED_MARK_ITEMS, SKIPPED_CATEGORY_IOCS, SKIPPED_FAMILIES, SKIPPED_PATHS, SILENT_IOCS, \
             INETSIM, DNS_API_CALLS, HTTP_API_CALLS, BUFFER_API_CALLS, SUSPICIOUS_USER_AGENTS, SUPPORTED_EXTENSIONS, \
@@ -3246,6 +3246,8 @@ class TestCuckooResult:
              False),
             ("www.google.com", ["network.dynamic.domain"], {"match": {"network.dynamic.domain": ["google.com"]}}, True,
              True),
+            ("www.google.com", ["network.dynamic.domain"], {"blah": {"network.dynamic.domain": ["google.com"]}}, True,
+             False),
         ]
     )
     def test_is_safelisted(value, tags, safelist, substring, expected_output):
