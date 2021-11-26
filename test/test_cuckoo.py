@@ -2175,8 +2175,7 @@ class TestCuckooResult:
         assert HTTP_API_CALLS == ["send", "InternetConnectW", "InternetConnectA"]
         assert BUFFER_API_CALLS == ["send"]
         assert SUSPICIOUS_USER_AGENTS == [
-            "Microsoft BITS", "Microsoft Office Existence Discovery", "Microsoft-WebDAV-MiniRedir",
-            "Microsoft Office Protocol Discovery", "Excel Service",
+            "Microsoft BITS", "Excel Service",
         ]
         assert SUPPORTED_EXTENSIONS == [
             'bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe', 'hta', 'htm', 'html',
