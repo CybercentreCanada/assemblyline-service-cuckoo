@@ -45,8 +45,7 @@ DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddr
 HTTP_API_CALLS = ["send", "InternetConnectW", "InternetConnectA"]
 BUFFER_API_CALLS = ["send"]
 SUSPICIOUS_USER_AGENTS = [
-    "Microsoft BITS", "Microsoft Office Existence Discovery", "Microsoft-WebDAV-MiniRedir",
-    "Microsoft Office Protocol Discovery", "Excel Service",
+    "Microsoft BITS", "Excel Service"
 ]
 SUPPORTED_EXTENSIONS = [
     'bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe', 'hta', 'htm', 'html',
