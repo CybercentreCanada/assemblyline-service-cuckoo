@@ -1731,11 +1731,13 @@ class Cuckoo(ServiceBase):
             try:
                 resp = self.session.get(host_status_url, headers=host["auth_header"], timeout=self.timeout)
             except requests.exceptions.Timeout:
-                raise CuckooTimeoutException(f"{host_status_url} timed out after {self.timeout}s")
+                self.log.warning(f"{host_status_url} timed out after {self.timeout}s")
+                continue
             except requests.ConnectionError:
-                raise Exception(f"Unable to reach the Cuckoo nest while trying to {host_status_url}")
+                self.log.warning(f"Unable to reach the Cuckoo nest while trying to GET {host_status_url}")
+                continue
             if resp.status_code != 200:
-                self.log.error(f"Failed to {host_status_url}. Status code: {resp.status_code}")
+                self.log.error(f"Failed to GET {host_status_url}. Status code: {resp.status_code}")
             else:
                 resp_dict = resp.json()
                 queue_size = resp_dict["tasks"]["pending"]

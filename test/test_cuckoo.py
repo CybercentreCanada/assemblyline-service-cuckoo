@@ -1978,7 +1978,7 @@ class TestCuckooMain:
 
     @staticmethod
     def test_determine_host_to_use(cuckoo_class_instance):
-        from cuckoo.cuckoo_main import CUCKOO_API_QUERY_HOST, CuckooTimeoutException, CuckooVMBusyException
+        from cuckoo.cuckoo_main import CUCKOO_API_QUERY_HOST, CuckooVMBusyException
         from requests import Session, exceptions, ConnectionError
         cuckoo_class_instance.session = Session()
         hosts = [
@@ -1992,17 +1992,15 @@ class TestCuckooMain:
                 m.get(host_status_url, json={"tasks": {"pending": 1}})
             test_result = cuckoo_class_instance._determine_host_to_use(hosts)
             assert any(host == test_result for host in hosts)
-            m.get(host_status_url, exc=exceptions.Timeout)
-            with pytest.raises(CuckooTimeoutException):
-                cuckoo_class_instance._determine_host_to_use(hosts)
-            m.get(host_status_url, exc=ConnectionError)
-            with pytest.raises(Exception):
-                cuckoo_class_instance._determine_host_to_use(hosts)
-            for host in hosts:
-                host_status_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_HOST}"
-                m.get(host_status_url, status_code=404)
-            with pytest.raises(CuckooVMBusyException):
-                cuckoo_class_instance._determine_host_to_use(hosts)
+            for key, val in [("exc", exceptions.Timeout), ("exc", ConnectionError), ("status_code", 404)]:
+                for host in hosts:
+                    host_status_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_HOST}"
+                    if key == "exc":
+                        m.get(host_status_url, exc=val)
+                    elif key == "status_code":
+                        m.get(host_status_url, status_code=404)
+                with pytest.raises(CuckooVMBusyException):
+                    cuckoo_class_instance._determine_host_to_use(hosts)
 
     @staticmethod
     def test_is_invalid_analysis_timeout(cuckoo_class_instance, dummy_request_class):
