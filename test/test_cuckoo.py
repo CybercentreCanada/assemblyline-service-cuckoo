@@ -3323,9 +3323,6 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _create_hashes
         hashes = _create_hashes(process_tree, 'root')
 
-        with open('/home/vjohar/assemblyline-service-cuckoo/haha.txt', 'w') as f:
-            f.write(str(process_tree))
-
         for x in range(len(hashes)):
             assert hashes[x] == expected_process_tree_hashes[x]
         
