@@ -18,6 +18,7 @@ from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntolog
 from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, Heuristic
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 from cuckoo.safe_process_tree_hashes import SAFE_PROCESS_TREE_HASHES
+from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
@@ -297,7 +298,7 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
     if len(events) > 0:
         so = SandboxOntology(events=events, normalize_paths=True)
         process_tree = so.get_process_tree_with_signatures(signatures)
-        process_tree = _filter_process_tree_against_safe_hashes(process_tree, SAFE_PROCESS_TREE_HASHES, task_id)
+        process_tree = _filter_process_tree_against_safe_hashes(process_tree, SAFE_PROCESS_TREE_HASHES, SAFE_PROCESS_TREE_LEAF_HASHES, task_id)
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = json.dumps(process_tree)
         process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
@@ -1633,6 +1634,8 @@ def _create_hashed_node(parent: str, node: Dict[str, Any], hashes: List[str], ha
     # hexdigest() returns the SHA256 encoded string of the object, encoded256
     encoded256 = sha256(encoded).hexdigest()
 
+    node['node_hash'] = encoded256
+
     if hash_type == 'root':
         hashes.append(encoded256)
     elif hash_type == 'leaf': 
@@ -1676,70 +1679,7 @@ def _create_hashes(process_tree: List[Dict[str, Any]], hash_type: str) -> Union[
     return process_tree_hashes
 
 
-def _strip_node(node: Dict[str, Any]) -> None:
-    """
-    This method deletes key-value pairs from the nodes in the process tree
-    :param node: A dictionary representing the node
-    :return: None
-    """
-    for key in list(node):
-        # Delete all keys except the two we need
-        if key not in ['image', 'children', 'command_line']:
-            node.pop(key, None)
-    # Recurse on the children
-    children = node['children']
-    for child in children:
-        _strip_node(child)
-
-
-def _strip_process_tree(process_tree: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    This method removes all keys in the process tree except for image and children
-    :param process_tree: A list of dictionaries where each dictionary represents a root.
-    :return: A list of dictionaries where each dictionary represents a root.
-    """
-    stripped_process_trees = deepcopy(process_tree)
-    # Call on each root to strip each tree
-    for root in stripped_process_trees:
-        _strip_node(root)
-
-    return stripped_process_trees
-
-
-# TODO: Temporary method
-def _write_tree_and_hashes(stripped_process_tree: List[Dict], process_tree_hashes: List[str], stripped_paths: List[List[Dict[str, Any]]], leaf_hashes: List[List[str]], task_id: int) -> None:
-    """
-    This method writes the stripped process tree and hashes, or stripped paths and hashes, 
-    to a temp file for access later
-
-    Args:
-        stripped_process_tree (List[Dict]): A list of dictionaries where each dictionary represents a root with only critical keys.
-        process_tree_hashes (List[str]): A list of strings representing hashes, in the same order as the provided process tree
-        stripped_paths (List[List[Dict[str, Any]]]): A list of lists containing the root-to-leaf paths for the given stripped_process_tree
-        leaf_hashes (List[List[str]]): A list of lists containing the hashes for each root-to-leaf path in the given stripped_process_tree
-        task_id (int): An integer representing the Cuckoo Task ID
-    """
-
-    if stripped_process_tree:
-        with open(f'/tmp/proc_tree_details_{task_id}.txt', 'w') as file:
-            for index in range(len(stripped_process_tree)):
-                file.write(process_tree_hashes[index] + '\n')
-                if index == len(stripped_process_tree) - 1:
-                    file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"'))
-                else:
-                    file.write(str(stripped_process_tree[index]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
-    if stripped_paths:
-        with open(f'/tmp/proc_tree_leaf_details_{task_id}.txt', 'w') as file:
-            for index in range(len(stripped_paths)):
-                for index2 in range(len(stripped_paths[index])):
-                    file.write(leaf_hashes[index][index2] + '\n')
-                    if index == len(stripped_paths) - 1 and index2 == len(stripped_paths[index]) - 1:
-                        file.write(str(stripped_paths[index][index2]).replace('\\\\', '\\').replace('\'', '\"'))
-                    else:
-                        file.write(str(stripped_paths[index][index2]).replace('\\\\', '\\').replace('\'', '\"') + '\n')
-
-
-def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: List[str], safe_process_tree_hashes: Dict[str, Any]) -> None:
+def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: List[str], safe_process_tree_hashes: Dict[str, Dict[str, Any]]) -> None:
     """
     This method checks each hash against the safe hashes and removes safe roots from the process tree
     :param process_tree: A list of dictionaries where each dictionary represents a root.
@@ -1749,62 +1689,60 @@ def _remove_safe_roots(process_tree: List[Dict[str, Any]], process_tree_hashes: 
     """
     num_removed = 0
     for index in range(len(process_tree_hashes)):
-        if process_tree_hashes[index] in safe_process_tree_hashes:
+        if process_tree_hashes[index] in list(safe_process_tree_hashes):
             process_tree.pop(index - num_removed)
             num_removed += 1
 
 
-def _create_stripped_paths(stripped_process_tree: Dict[str, Any], cur: Dict[str, Any]={}) -> List[Dict[str, Any]]:
+def _remove_safe_leaves_helper(node: Dict[str, Any], leaf_hashes: List[str], safe_leaf_hashes: Dict[str, Dict[str, Any]]) -> Union[str, None]:
     """
-    This method generates all of the root-to-leaf paths of a given stripped process tree dictionary
+    This method is used to recursively remove safe branches from the given node. It removes a branch from the leaf 
+    up until it is no longer safelisted
 
     Args:
-        stripped_process_tree (Dict[str, Any]): A dictionary representing a stripped-down process tree
-        cur (dict, optional): An iterator used to generate the paths. Defaults to {}.
-
-    Yields:
-        Iterator[List[Dict[str, Any]]]: Yields paths back to the calling function 
-    """
-    if not cur:
-        cur = stripped_process_tree
-    if not stripped_process_tree or not stripped_process_tree['children']:
-        yield cur
-    else:
-        for child in stripped_process_tree['children'][:]:
-            stripped_process_tree['children'] = [child]
-            for path in _create_stripped_paths(child, cur):
-                yield path
-
-
-def _create_root_leaf_paths(stripped_process_tree: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
-    """
-    This method uses the above helper method to generate all of the root-to-leaf
-    paths from a stripped process tree
-
-    Args:
-        stripped_process_tree (List[Dict[str, Any]]): A list of stripped process trees
+        node (Dict[str, Any]): A dictionary of a process tree node (root)
+        leaf_hashes (List[str]): The hashes of all of the leaves in the tree
+        safe_leaf_hashes (Dict[str, Dict[str, Any]]): All of the safe leaf hashes (the safelist)
 
     Returns:
-        List[List[Dict[str, Any]]]: Returns a list of lists containing the paths for each process tree
-        in the stripped_process_tree
+        Union[str, None]: Returns the string representing the node's hash for the purpose of recursive removal, 
+                            or returns None if the removal is complete
     """
-    path_hashes = []
-    for root in stripped_process_tree:
-        paths = []
+    children = node['children']
+    num_removed = 0
+    for index in range(len(children)):
+        hash_to_remove = _remove_safe_leaves_helper(children[index - num_removed], leaf_hashes, safe_leaf_hashes)
+        if hash_to_remove == children[index - num_removed]['node_hash']:
+            children.pop(index - num_removed)
+            num_removed += 1
+            if not children:    
+                node["node_hash"] = hash_to_remove
 
-        for path in _create_stripped_paths(root):
-            path_copy = deepcopy(path)
-            paths.append(path_copy)
-
-        path_hashes.append(paths)
+    if not children:
+        if node['node_hash'] in list(safe_leaf_hashes):
+            return node['node_hash']
+        else:
+            return None
     
-    return path_hashes
 
-# TODO: Method to remove safe leaves, but only used when we aren't removing safe roots from the process tree (found above)
-# def _remove_safe_leaves(process_tree: List[Dict[str, Any]], leaf_hashes: List[str], safe_leaf_hashes: Dict[str, Any]) -> None:
+def _remove_safe_leaves(process_tree: List[Dict[str, Any]], leaf_hashes: List[List[str]], safe_leaf_hashes: Dict[str, Dict[str, Any]]) -> None:
+    """
+    This method checks each leaf's hash against the safe hashes and removes safe branches from the process tree
+
+    Args:
+        process_tree (List[Dict[str, Any]]): A list of dictionaries where each dictionary represents a root.
+        leaf_hashes (List[str]): A list of strings representing hashes of each branch in the process tree
+        safe_leaf_hashes (Dict[str, Dict[str, Any]]): A dictionary containing the hashes of each safe branch and their corresponding branches
+    """
+    num_removed = 0
+    for index in range(len(process_tree)):
+        _remove_safe_leaves_helper(process_tree[index - num_removed], leaf_hashes[index - num_removed], safe_leaf_hashes)
+        if process_tree[index - num_removed]['node_hash'] in list(safe_leaf_hashes):
+            process_tree.pop(index - num_removed)
+            num_removed += 1
 
 
-def _filter_process_tree_against_safe_hashes(process_tree: List[Dict[str, Any]], safe_process_tree_hashes: Set[str], task_id: int) -> List[Dict[str, Any]]:
+def _filter_process_tree_against_safe_hashes(process_tree: List[Dict[str, Any]], safe_process_tree_hashes: Dict[str, Dict[str, Any]], safe_leaf_hashes: Dict[str, Dict[str, Any]], task_id: int) -> List[Dict[str, Any]]:
     """
     This method takes a process tree and a list of safe process tree hashes, and filters out safe process roots in the
     tree.
@@ -1813,11 +1751,9 @@ def _filter_process_tree_against_safe_hashes(process_tree: List[Dict[str, Any]],
     :param task_id: An integer representing the Cuckoo Task ID
     :return: A list of processes in a tree structure, with the safe branches filtered out
     """
-    stripped_process_tree = _strip_process_tree(process_tree)
-    process_tree_hashes = _create_hashes(stripped_process_tree, 'root')
-    leaf_hashes = _create_hashes(stripped_process_tree, 'leaf')
-    stripped_root_leaf_paths = _create_root_leaf_paths(stripped_process_tree)
-    _write_tree_and_hashes(stripped_process_tree, process_tree_hashes, stripped_root_leaf_paths, leaf_hashes, task_id)
+    process_tree_hashes = _create_hashes(process_tree, 'root')
+    leaf_hashes = _create_hashes(process_tree, 'leaf')
     # _remove_safe_roots(process_tree, process_tree_hashes, safe_process_tree_hashes)
+    _remove_safe_leaves(process_tree, leaf_hashes, safe_leaf_hashes)
 
     return process_tree
