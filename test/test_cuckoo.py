@@ -1797,38 +1797,25 @@ class TestCuckooMain:
         assert cuckoo_class_instance._safely_get_param(param) == correct_value
 
     @staticmethod
-    @pytest.mark.parametrize("file_type, possible_images, auto_architecture, correct_result",
-                             [("blah", [],
-                               {},
-                               []),
-                              ("blah", ["blah"],
-                               {},
-                               []),
-                              ("blah", ["winblahx64"],
-                               {},
-                               ["winblahx64"]),
-                              ("executable/linux/elf32", [],
-                               {},
-                               []),
-                              ("executable/linux/elf32", ["ubblahx86"],
-                               {},
-                               ["ubblahx86"]),
-                              ("executable/linux/elf32", ["ubblahx64"],
-                               {"ub": {"x86": ["ubblahx64"]}},
-                               ["ubblahx64"]),
-                              ("executable/windows/pe32", ["winblahx86"],
-                               {},
-                               ["winblahx86"]),
-                              ("executable/windows/pe32", ["winblahx86", "winblahblahx86"],
-                               {"win": {"x86": ["winblahblahx86"]}},
-                               ["winblahblahx86"]),
-                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"],
-                               {"win": {"x64": ["winblahx64"]}},
-                               ["winblahx64"]), ])
+    @pytest.mark.parametrize("file_type, possible_images, auto_architecture, all_relevant, correct_result",
+                             [("blah", [], {}, False, []),
+                              ("blah", ["blah"], {}, False, []),
+                              ("blah", ["winblahx64"], {}, False, ["winblahx64"]),
+                              ("executable/linux/elf32", [], {}, False, []),
+                              ("executable/linux/elf32", ["ubblahx86"], {}, False, ["ubblahx86"]),
+                              ("executable/linux/elf32", ["ubblahx64"], {"ub": {"x86": ["ubblahx64"]}}, False, ["ubblahx64"]),
+                              ("executable/windows/pe32", ["winblahx86"], {}, False, ["winblahx86"]),
+                              ("executable/windows/pe32", ["winblahx86", "winblahblahx86"], {"win": {"x86": ["winblahblahx86"]}}, False, ["winblahblahx86"]),
+                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {"win": {"x64": ["winblahx64"]}}, False, ["winblahx64"]),
+                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {"win": {"x64": ["winblahx64"]}}, True, ["winblahx64", "winblahblahx64"]),
+                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {}, True, ["winblahx64", "winblahblahx64"]),
+                              ("executable/linux/elf64", ["winblahx64", "winblahblahx64"], {}, True, []),
+                              ("executable/linux/elf64", ["winblahx64", "winblahblahx64", "ub1804x64"], {}, True, ["ub1804x64"]),
+                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64", "ub1804x64"], {}, True, ["winblahx64", "winblahblahx64"]),])
     def test_determine_relevant_images(
-            file_type, possible_images, correct_result, auto_architecture, cuckoo_class_instance):
+            file_type, possible_images, correct_result, auto_architecture, all_relevant, cuckoo_class_instance):
         assert cuckoo_class_instance._determine_relevant_images(
-            file_type, possible_images, auto_architecture) == correct_result
+            file_type, possible_images, auto_architecture, all_relevant) == correct_result
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1920,42 +1907,15 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body",
-        [(False, False, [],
-          [],
-          (False, {}),
-          None),
-         (False, True, [],
-          [],
-          (False, {}),
-          None),
-         ("blah", False, [],
-          [],
-          (True, {}),
-          'The requested image \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-         ("blah", True, [],
-          [],
-          (True, {"blah": ["blah"]}),
-          None),
-         ("auto", False, [],
-          [],
-          (True, {}),
-          'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-         ("auto", False, ["blah"],
-          [],
-          (True, {}),
-          'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-         ("auto", True, ["blah"],
-          [],
-          (True, {"blah": ["blah"]}),
-          None),
-         ("all", True, [],
-          ["blah"],
-          (True, {"blah": ["blah"]}),
-          None),
-         ("all", False, [],
-          [],
-          (True, {}),
-          'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'), ])
+        [(False, False, [], [], (False, {}), None),
+         (False, True, [], [], (False, {}), None),
+         ("blah", False, [], [], (True, {}), 'The requested image \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+         ("blah", True, [], [], (True, {"blah": ["blah"]}), None),
+         ("auto", False, [], [], (True, {}), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+         ("auto", False, ["blah"], [], (True, {}), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+         ("auto", True, ["blah"], [], (True, {"blah": ["blah"]}), None),
+         ("all", True, [], ["blah"], (True, {"blah": ["blah"]}), None),
+         ("all", False, [], [], (True, {}), 'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'), ])
     def test_handle_specific_image(
             image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body,
             cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):

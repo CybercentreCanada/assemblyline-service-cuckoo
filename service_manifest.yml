@@ -61,13 +61,13 @@ submission_params:
     type: int
     value: 0
 
-  # value = auto + all + allowed_images
+  # value = auto + auto_all + all + allowed_images
   # This has the third-highest precedence when submitting a file
-  - default: ""
+  - default: "auto_all"
     name: specific_image
     type: list
-    value: ""
-    list: []
+    value: "auto"
+    list: ["auto", "auto_all", "all"]
 
   - default: ""
     name: dll_function
