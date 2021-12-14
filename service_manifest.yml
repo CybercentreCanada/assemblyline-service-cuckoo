@@ -63,7 +63,7 @@ submission_params:
 
   # value = auto + auto_all + all + allowed_images
   # This has the third-highest precedence when submitting a file
-  - default: "auto_all"
+  - default: "auto"
     name: specific_image
     type: list
     value: "auto"
