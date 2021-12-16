@@ -2132,7 +2132,7 @@ class TestCuckooResult:
                                "uses_windows_utilities", "creates_exe", "deletes_executed_files"]
         assert INETSIM == "INetSim"
         assert DNS_API_CALLS == ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
-        assert HTTP_API_CALLS == ["send", "InternetConnectW", "InternetConnectA"]
+        assert HTTP_API_CALLS == ["send", "InternetConnectW", "InternetConnectA", "URLDownloadToFileW"]
         assert BUFFER_API_CALLS == ["send"]
         assert SUSPICIOUS_USER_AGENTS == [
             "Microsoft BITS", "Excel Service",
@@ -2616,7 +2616,7 @@ class TestCuckooResult:
             ("uses_windows_utilities", {"ioc": "blah", "category": "blah"}, {}, {}, None),
             ("creates_exe", {"ioc": "blah", "category": "blah"}, {}, {}, None),
             ("deletes_executed_files", {"ioc": "blah", "category": "blah"}, {}, {}, None),
-            ("p2p_cnc", {"ioc": "blah", "category": "blah"}, {}, {"network.dynamic.ip": ["blah"]}, '\tIOC: blah'),
+            ("p2p_cnc", {"ioc": "10.10.10.10", "category": "blah"}, {}, {"network.dynamic.ip": ["10.10.10.10"]}, '\tIOC: 10.10.10.10'),
             ("blah", {"ioc": "1", "category": "blah"}, {}, {}, '\tIOC: 1'),
             ("blah", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: blah'),
             ("blah", {"ioc": "blah", "category": "file"}, {}, {"dynamic.process.file_name": ["blah"]}, '\tIOC: blah'),
@@ -2801,6 +2801,7 @@ class TestCuckooResult:
             ({1: {"network_calls": [{"send": {"service": 3}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'blah', 'uri': 'blah', 'user-agent': None}]),
             ({1: {"network_calls": [{"InternetConnectW": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'check me', 'uri': 'blah', 'user-agent': None}]),
             ({1: {"network_calls": [{"InternetConnectA": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'check me', 'uri': 'blah', 'user-agent': None}]),
+            ({1: {"network_calls": [{"URLDownloadToFileW": {"url": "bad.evil"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "bad.evil", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'check me', 'uri': 'bad.evil', 'user-agent': None}]),
         ]
     )
     def test_process_http_calls(process_map, http_level_flows, expected_req_table):
@@ -3145,6 +3146,7 @@ class TestCuckooResult:
             ([{"process_name": "blah.exe", "calls": [{"category": "crypto", "api": "CryptDecrypt", "arguments": {"buffer": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': [{"CryptDecrypt": {"buffer": "blah"}}]}}),
             ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
             ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "cfg:blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': [{"OutputDebugStringA": {"string": "cfg:blah"}}]}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "URLDownloadToFileW", "arguments": {"url": "bad.evil"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"URLDownloadToFileW": {"url": "bad.evil"}}], 'decrypted_buffers': []}}),
         ]
     )
     def test_get_process_map(processes, correct_process_map):
@@ -3210,6 +3212,49 @@ class TestCuckooResult:
     def test_is_safelisted(value, tags, safelist, substring, expected_output):
         from cuckoo.cuckoo_result import is_safelisted
         assert is_safelisted(value, tags, safelist, substring) == expected_output
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "value, expected_tags",
+        [
+            ("", {}),
+            ("blah", {"blah": ["blah"]}),
+            ([], {}),
+            (["blah"], {"blah": ["blah"]}),
+            (["blah", "blahblah"], {"blah": ["blah", "blahblah"]})
+        ]
+    )
+    def test_add_tag(value, expected_tags):
+        from assemblyline_v4_service.common.result import ResultSection
+        from cuckoo.cuckoo_result import add_tag
+        res_sec = ResultSection("blah")
+        tag = "blah"
+        add_tag(res_sec, tag, value)
+        assert res_sec.tags == expected_tags
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "tag, value, inetsim_network, expected_tags",
+        [
+            ("", "", None, {}),
+            ("blah", "", None, {}),
+            ("blah", "blah", None, {"blah": ["blah"]}),
+            ("domain", "blah", None, {}),
+            ("domain", "blah.blah", None, {"domain": ["blah.blah"]}),
+            ("uri_path", "/blah", None, {"uri_path": ["/blah"]}),
+            ("uri", "http://blah.blah/blah", None, {"uri": ["http://blah.blah/blah"]}),
+            ("ip", "blah", None, {}),
+            ("ip", "192.0.2.21", "192.0.2.0/24", {}),
+            ("ip", "1.1.1.1", "192.0.2.0/24", {"ip": ["1.1.1.1"]}),
+        ]
+    )
+    def test_validate_tag(tag, value, inetsim_network, expected_tags):
+        from ipaddress import ip_network
+        from assemblyline_v4_service.common.result import ResultSection
+        from cuckoo.cuckoo_result import add_tag
+        res_sec = ResultSection("blah")
+        add_tag(res_sec, tag, value, ip_network(inetsim_network) if inetsim_network else None)
+        assert res_sec.tags == expected_tags
 
 
 class TestSignatures:
