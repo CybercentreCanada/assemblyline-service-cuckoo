@@ -28,7 +28,7 @@ from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.constants import RECOGNIZED_TYPES
 
-from cuckoo.cuckoo_result import ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, is_safelisted, \
+from cuckoo.cuckoo_result import add_tag, ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, is_safelisted, \
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
@@ -940,19 +940,18 @@ class Cuckoo(ServiceBase):
         :return: None
         """
         if platform:
-            machine_section.add_tag("dynamic.operating_system.platform", platform.capitalize())
+            add_tag(machine_section, "dynamic.operating_system.platform", platform.capitalize())
         if any(processor_tag in machine_name for processor_tag in [x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX]):
             if x86_IMAGE_SUFFIX in machine_name:
-                machine_section.add_tag("dynamic.operating_system.processor", x86_IMAGE_SUFFIX)
+                add_tag(machine_section, "dynamic.operating_system.processor", x86_IMAGE_SUFFIX)
             elif x64_IMAGE_SUFFIX in machine_name:
-                machine_section.add_tag("dynamic.operating_system.processor", x64_IMAGE_SUFFIX)
+                add_tag(machine_section, "dynamic.operating_system.processor", x64_IMAGE_SUFFIX)
 
         # The assumption here is that a machine's name will contain somewhere in it the
         # pattern: <platform prefix><version><processor>
         m = re.compile(MACHINE_NAME_REGEX).search(machine_name)
         if m and len(m.groups()) == 1:
-            version = m.group(1)
-            machine_section.add_tag("dynamic.operating_system.version", version)
+            add_tag(machine_section, "dynamic.operating_system.version", m.group(1))
 
     def _decode_mime_encoded_file_name(self) -> None:
         """
