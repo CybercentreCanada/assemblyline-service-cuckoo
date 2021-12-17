@@ -3,12 +3,10 @@ from logging import getLogger
 import re
 import os
 import json
-from copy import deepcopy
 from tld import get_tld
 from ipaddress import ip_address, ip_network, IPv4Network
 from urllib.parse import urlparse
-from typing import List, Dict, Any, Optional, Set, Union
-from hashlib import sha256
+from typing import List, Dict, Any, Optional
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
@@ -17,7 +15,6 @@ from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, URI_PATH
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, NetworkEvent, ProcessEvent
 from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, Heuristic
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
-from cuckoo.safe_process_tree_hashes import SAFE_PROCESS_TREE_HASHES
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
