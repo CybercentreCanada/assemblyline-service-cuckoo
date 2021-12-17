@@ -238,7 +238,8 @@ regex:
   # Comodo
   - .*\.comodoca\.com$
   # .arpa
-  - \[0-9a-f\.\]+\.ip6\.arpa$
+  - [0-9a-f\.]+\.ip6\.arpa$
+  - [0-9\.]+\.in-addr\.arpa$
   # Oracle
   - (www\.)?java\.com$
   - sldc-esd\.oracle\.com$
