@@ -1269,7 +1269,6 @@ class Cuckoo(ServiceBase):
         # Submit dropped files and pcap if available:
         self._extract_console_output(cuckoo_task.id)
         self._extract_encrypted_buffers(cuckoo_task.id)
-        self._extract_process_tree_details(cuckoo_task.id)
         self.check_dropped(cuckoo_task)
         self.check_powershell(cuckoo_task.id, parent_section)
         # self.check_pcap(cuckoo_task)

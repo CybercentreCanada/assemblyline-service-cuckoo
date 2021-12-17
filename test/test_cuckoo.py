@@ -1506,8 +1506,6 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, 'query_report', return_value=tar_report)
         mocker.patch.object(Cuckoo, '_extract_console_output', return_value=None)
         mocker.patch.object(Cuckoo, '_extract_encrypted_buffers', return_value=None)
-        mocker.patch.object(Cuckoo, '_extract_process_tree_details', return_value=None)
-        mocker.patch.object(Cuckoo, '_extract_process_tree_leaf_hashes', return_value=None)
         mocker.patch.object(Cuckoo, 'check_dropped', return_value=None)
         mocker.patch.object(Cuckoo, 'check_powershell', return_value=None)
         mocker.patch.object(Cuckoo, '_unpack_tar', return_value=None)
@@ -1693,28 +1691,6 @@ class TestCuckooMain:
         assert cuckoo_class_instance.artifact_list[0]["name"] == "/tmp/1_1_encrypted_buffer_0.txt"
         assert cuckoo_class_instance.artifact_list[0]["description"] == "Encrypted Buffer Observed in Network Traffic"
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
-
-    @staticmethod
-    def test_extract_process_tree_details(cuckoo_class_instance, mocker):
-        mocker.patch('os.path.isfile', return_value=True)
-        cuckoo_class_instance.artifact_list = []
-        task_id = 1
-        cuckoo_class_instance._extract_process_tree_details(task_id)
-        assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/proc_tree_details_1.txt"
-        assert cuckoo_class_instance.artifact_list[0]["name"] == "proc_tree_details_1.txt"
-        assert cuckoo_class_instance.artifact_list[0]["description"] == "Process trees and corresponding hashes"
-        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] is False
-
-    @staticmethod
-    def test_extract_process_tree_leaf_hashes(cuckoo_class_instance, mocker):
-        mocker.patch('os.path.isfile', return_value=True)
-        cuckoo_class_instance.artifact_list = []
-        task_id = 1
-        cuckoo_class_instance._extract_process_tree_leaf_hashes(task_id)
-        assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/proc_tree_leaf_details_1.txt"
-        assert cuckoo_class_instance.artifact_list[0]["name"] == "proc_tree_leaf_details_1.txt"
-        assert cuckoo_class_instance.artifact_list[0]["description"] == "Process tree root-to-leaf paths and corresponding hashes"
-        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] is False
 
     @staticmethod
     def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class,
@@ -2099,10 +2075,8 @@ class TestCuckooMain:
             f.write("blah")
         with open("/tmp/blah_encrypted_buffer_blah.txt", "w") as f:
             f.write("blah")
-        with open("/tmp/proc_tree_details_1.txt", "w") as f:
-            f.write("blah")
         number_of_files_in_tmp_post_write = len(os.listdir(temp_dir))
-        assert number_of_files_in_tmp_post_write == number_of_files_in_tmp_pre_call + 3
+        assert number_of_files_in_tmp_post_write == number_of_files_in_tmp_pre_call + 2
         cuckoo_class_instance._cleanup_leftovers()
         number_of_files_in_tmp_post_call = len(os.listdir(temp_dir))
         assert number_of_files_in_tmp_post_call == number_of_files_in_tmp_pre_call
