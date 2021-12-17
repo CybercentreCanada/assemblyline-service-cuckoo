@@ -1693,8 +1693,7 @@ class TestCuckooMain:
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
     @staticmethod
-    def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class,
-                               mocker):
+    def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
         from assemblyline_v4_service.common.result import ResultSection, ResultImageSection
         tarball_file_map = {
             "buffer": "Extracted buffer",
@@ -1798,38 +1797,25 @@ class TestCuckooMain:
         assert cuckoo_class_instance._safely_get_param(param) == correct_value
 
     @staticmethod
-    @pytest.mark.parametrize("file_type, possible_images, auto_architecture, correct_result",
-                             [("blah", [],
-                               {},
-                               []),
-                              ("blah", ["blah"],
-                               {},
-                               []),
-                              ("blah", ["winblahx64"],
-                               {},
-                               ["winblahx64"]),
-                              ("executable/linux/elf32", [],
-                               {},
-                               []),
-                              ("executable/linux/elf32", ["ubblahx86"],
-                               {},
-                               ["ubblahx86"]),
-                              ("executable/linux/elf32", ["ubblahx64"],
-                               {"ub": {"x86": ["ubblahx64"]}},
-                               ["ubblahx64"]),
-                              ("executable/windows/pe32", ["winblahx86"],
-                               {},
-                               ["winblahx86"]),
-                              ("executable/windows/pe32", ["winblahx86", "winblahblahx86"],
-                               {"win": {"x86": ["winblahblahx86"]}},
-                               ["winblahblahx86"]),
-                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"],
-                               {"win": {"x64": ["winblahx64"]}},
-                               ["winblahx64"]), ])
+    @pytest.mark.parametrize("file_type, possible_images, auto_architecture, all_relevant, correct_result",
+                             [("blah", [], {}, False, []),
+                              ("blah", ["blah"], {}, False, []),
+                              ("blah", ["winblahx64"], {}, False, ["winblahx64"]),
+                              ("executable/linux/elf32", [], {}, False, []),
+                              ("executable/linux/elf32", ["ubblahx86"], {}, False, ["ubblahx86"]),
+                              ("executable/linux/elf32", ["ubblahx64"], {"ub": {"x86": ["ubblahx64"]}}, False, ["ubblahx64"]),
+                              ("executable/windows/pe32", ["winblahx86"], {}, False, ["winblahx86"]),
+                              ("executable/windows/pe32", ["winblahx86", "winblahblahx86"], {"win": {"x86": ["winblahblahx86"]}}, False, ["winblahblahx86"]),
+                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {"win": {"x64": ["winblahx64"]}}, False, ["winblahx64"]),
+                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {"win": {"x64": ["winblahx64"]}}, True, ["winblahx64", "winblahblahx64"]),
+                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {}, True, ["winblahx64", "winblahblahx64"]),
+                              ("executable/linux/elf64", ["winblahx64", "winblahblahx64"], {}, True, []),
+                              ("executable/linux/elf64", ["winblahx64", "winblahblahx64", "ub1804x64"], {}, True, ["ub1804x64"]),
+                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64", "ub1804x64"], {}, True, ["winblahx64", "winblahblahx64"]),])
     def test_determine_relevant_images(
-            file_type, possible_images, correct_result, auto_architecture, cuckoo_class_instance):
+            file_type, possible_images, correct_result, auto_architecture, all_relevant, cuckoo_class_instance):
         assert cuckoo_class_instance._determine_relevant_images(
-            file_type, possible_images, auto_architecture) == correct_result
+            file_type, possible_images, auto_architecture, all_relevant) == correct_result
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1921,42 +1907,15 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body",
-        [(False, False, [],
-          [],
-          (False, {}),
-          None),
-         (False, True, [],
-          [],
-          (False, {}),
-          None),
-         ("blah", False, [],
-          [],
-          (True, {}),
-          'The requested image \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-         ("blah", True, [],
-          [],
-          (True, {"blah": ["blah"]}),
-          None),
-         ("auto", False, [],
-          [],
-          (True, {}),
-          'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-         ("auto", False, ["blah"],
-          [],
-          (True, {}),
-          'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-         ("auto", True, ["blah"],
-          [],
-          (True, {"blah": ["blah"]}),
-          None),
-         ("all", True, [],
-          ["blah"],
-          (True, {"blah": ["blah"]}),
-          None),
-         ("all", False, [],
-          [],
-          (True, {}),
-          'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'), ])
+        [(False, False, [], [], (False, {}), None),
+         (False, True, [], [], (False, {}), None),
+         ("blah", False, [], [], (True, {}), 'The requested image \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+         ("blah", True, [], [], (True, {"blah": ["blah"]}), None),
+         ("auto", False, [], [], (True, {}), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+         ("auto", False, ["blah"], [], (True, {}), 'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+         ("auto", True, ["blah"], [], (True, {"blah": ["blah"]}), None),
+         ("all", True, [], ["blah"], (True, {"blah": ["blah"]}), None),
+         ("all", False, [], [], (True, {}), 'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'), ])
     def test_handle_specific_image(
             image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body,
             cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
@@ -1979,7 +1938,7 @@ class TestCuckooMain:
 
     @staticmethod
     def test_determine_host_to_use(cuckoo_class_instance):
-        from cuckoo.cuckoo_main import CUCKOO_API_QUERY_HOST, CuckooTimeoutException, CuckooVMBusyException
+        from cuckoo.cuckoo_main import CUCKOO_API_QUERY_HOST, CuckooVMBusyException
         from requests import Session, exceptions, ConnectionError
         cuckoo_class_instance.session = Session()
         hosts = [
@@ -1993,17 +1952,15 @@ class TestCuckooMain:
                 m.get(host_status_url, json={"tasks": {"pending": 1}})
             test_result = cuckoo_class_instance._determine_host_to_use(hosts)
             assert any(host == test_result for host in hosts)
-            m.get(host_status_url, exc=exceptions.Timeout)
-            with pytest.raises(CuckooTimeoutException):
-                cuckoo_class_instance._determine_host_to_use(hosts)
-            m.get(host_status_url, exc=ConnectionError)
-            with pytest.raises(Exception):
-                cuckoo_class_instance._determine_host_to_use(hosts)
-            for host in hosts:
-                host_status_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_HOST}"
-                m.get(host_status_url, status_code=404)
-            with pytest.raises(CuckooVMBusyException):
-                cuckoo_class_instance._determine_host_to_use(hosts)
+            for key, val in [("exc", exceptions.Timeout), ("exc", ConnectionError), ("status_code", 404)]:
+                for host in hosts:
+                    host_status_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_HOST}"
+                    if key == "exc":
+                        m.get(host_status_url, exc=val)
+                    elif key == "status_code":
+                        m.get(host_status_url, status_code=404)
+                with pytest.raises(CuckooVMBusyException):
+                    cuckoo_class_instance._determine_host_to_use(hosts)
 
     @staticmethod
     def test_is_invalid_analysis_timeout(cuckoo_class_instance, dummy_request_class):
@@ -2157,14 +2114,14 @@ class TestCuckooResult:
     @staticmethod
     def test_constants():
         from re import compile
-        from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex, MD5_REGEX as base_md5_regex
+        from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex
         from cuckoo.cuckoo_result import DOMAIN_REGEX, IP_REGEX, URL_REGEX, UNIQUE_IP_LIMIT, \
             SCORE_TRANSLATION, SKIPPED_MARK_ITEMS, SKIPPED_CATEGORY_IOCS, SKIPPED_FAMILIES, SKIPPED_PATHS, SILENT_IOCS, \
             INETSIM, DNS_API_CALLS, HTTP_API_CALLS, BUFFER_API_CALLS, SUSPICIOUS_USER_AGENTS, SUPPORTED_EXTENSIONS, \
             ANALYSIS_ERRORS, GUEST_LOSING_CONNNECTIVITY, GUEST_CANNOT_REACH_HOST, GUEST_LOST_CONNECTIVITY
         assert DOMAIN_REGEX == base_domain_regex
         assert IP_REGEX == base_ip_regex
-        assert URL_REGEX == compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#]\S*)?")
+        assert URL_REGEX == compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#][^\s,\\\\]*)?")
         assert UNIQUE_IP_LIMIT == 100
         assert SCORE_TRANSLATION == {1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000}
         assert SKIPPED_MARK_ITEMS == ["type", "suspicious_features", "entropy", "process", "useragent"]
@@ -2175,11 +2132,10 @@ class TestCuckooResult:
                                "uses_windows_utilities", "creates_exe", "deletes_executed_files"]
         assert INETSIM == "INetSim"
         assert DNS_API_CALLS == ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
-        assert HTTP_API_CALLS == ["send", "InternetConnectW", "InternetConnectA"]
+        assert HTTP_API_CALLS == ["send", "InternetConnectW", "InternetConnectA", "URLDownloadToFileW"]
         assert BUFFER_API_CALLS == ["send"]
         assert SUSPICIOUS_USER_AGENTS == [
-            "Microsoft BITS", "Microsoft Office Existence Discovery", "Microsoft-WebDAV-MiniRedir",
-            "Microsoft Office Protocol Discovery", "Excel Service",
+            "Microsoft BITS", "Excel Service",
         ]
         assert SUPPORTED_EXTENSIONS == [
             'bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe', 'hta', 'htm', 'html',
@@ -2660,7 +2616,7 @@ class TestCuckooResult:
             ("uses_windows_utilities", {"ioc": "blah", "category": "blah"}, {}, {}, None),
             ("creates_exe", {"ioc": "blah", "category": "blah"}, {}, {}, None),
             ("deletes_executed_files", {"ioc": "blah", "category": "blah"}, {}, {}, None),
-            ("p2p_cnc", {"ioc": "blah", "category": "blah"}, {}, {"network.dynamic.ip": ["blah"]}, '\tIOC: blah'),
+            ("p2p_cnc", {"ioc": "10.10.10.10", "category": "blah"}, {}, {"network.dynamic.ip": ["10.10.10.10"]}, '\tIOC: 10.10.10.10'),
             ("blah", {"ioc": "1", "category": "blah"}, {}, {}, '\tIOC: 1'),
             ("blah", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: blah'),
             ("blah", {"ioc": "blah", "category": "file"}, {}, {"dynamic.process.file_name": ["blah"]}, '\tIOC: blah'),
@@ -2845,6 +2801,7 @@ class TestCuckooResult:
             ({1: {"network_calls": [{"send": {"service": 3}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'blah', 'uri': 'blah', 'user-agent': None}]),
             ({1: {"network_calls": [{"InternetConnectW": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'check me', 'uri': 'blah', 'user-agent': None}]),
             ({1: {"network_calls": [{"InternetConnectA": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'check me', 'uri': 'blah', 'user-agent': None}]),
+            ({1: {"network_calls": [{"URLDownloadToFileW": {"url": "bad.evil"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "bad.evil", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'check me', 'uri': 'bad.evil', 'user-agent': None}]),
         ]
     )
     def test_process_http_calls(process_map, http_level_flows, expected_req_table):
@@ -3189,6 +3146,7 @@ class TestCuckooResult:
             ([{"process_name": "blah.exe", "calls": [{"category": "crypto", "api": "CryptDecrypt", "arguments": {"buffer": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': [{"CryptDecrypt": {"buffer": "blah"}}]}}),
             ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
             ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "cfg:blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': [{"OutputDebugStringA": {"string": "cfg:blah"}}]}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "URLDownloadToFileW", "arguments": {"url": "bad.evil"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"URLDownloadToFileW": {"url": "bad.evil"}}], 'decrypted_buffers': []}}),
         ]
     )
     def test_get_process_map(processes, correct_process_map):
@@ -3254,6 +3212,50 @@ class TestCuckooResult:
     def test_is_safelisted(value, tags, safelist, substring, expected_output):
         from cuckoo.cuckoo_result import is_safelisted
         assert is_safelisted(value, tags, safelist, substring) == expected_output
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "value, expected_tags",
+        [
+            ("", {}),
+            ("blah", {"blah": ["blah"]}),
+            ([], {}),
+            (["blah"], {"blah": ["blah"]}),
+            (["blah", "blahblah"], {"blah": ["blah", "blahblah"]})
+        ]
+    )
+    def test_add_tag(value, expected_tags):
+        from assemblyline_v4_service.common.result import ResultSection
+        from cuckoo.cuckoo_result import add_tag
+        res_sec = ResultSection("blah")
+        tag = "blah"
+        add_tag(res_sec, tag, value)
+        assert res_sec.tags == expected_tags
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "tag, value, inetsim_network, expected_tags",
+        [
+            ("", "", None, {}),
+            ("blah", "", None, {}),
+            ("blah", "blah", None, {"blah": ["blah"]}),
+            ("domain", "blah", None, {}),
+            ("domain", "blah.blah", None, {"domain": ["blah.blah"]}),
+            ("uri_path", "/blah", None, {"uri_path": ["/blah"]}),
+            ("uri", "http://blah.blah/blah", None, {"uri": ["http://blah.blah/blah"]}),
+            ("ip", "blah", None, {}),
+            ("ip", "192.0.2.21", "192.0.2.0/24", {}),
+            ("ip", "1.1.1.1", "192.0.2.0/24", {"ip": ["1.1.1.1"]}),
+        ]
+    )
+    def test_validate_tag(tag, value, inetsim_network, expected_tags):
+        from ipaddress import ip_network
+        from assemblyline_v4_service.common.result import ResultSection
+        from cuckoo.cuckoo_result import add_tag
+        res_sec = ResultSection("blah")
+        add_tag(res_sec, tag, value, ip_network(inetsim_network) if inetsim_network else None)
+        assert res_sec.tags == expected_tags
+
 
 class TestSignatures:
     @staticmethod
