@@ -294,7 +294,7 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
         signatures: List[Dict[str, Any]] = []
     if len(events) > 0:
         so = SandboxOntology(events=events, normalize_paths=True)
-        process_tree = so.get_process_tree_with_signatures(signatures, SAFE_PROCESS_TREE_LEAF_HASHES)
+        process_tree = so.get_process_tree_with_signatures(signatures, SAFE_PROCESS_TREE_LEAF_HASHES.keys())
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
         process_tree_section.body = json.dumps(process_tree)
         process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
