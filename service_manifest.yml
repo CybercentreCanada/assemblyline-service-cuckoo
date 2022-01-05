@@ -61,13 +61,13 @@ submission_params:
     type: int
     value: 0
 
-  # value = auto + all + allowed_images
+  # value = auto + auto_all + all + allowed_images
   # This has the third-highest precedence when submitting a file
-  - default: ""
+  - default: "auto"
     name: specific_image
     type: list
-    value: ""
-    list: []
+    value: "auto"
+    list: ["auto", "auto_all", "all"]
 
   - default: ""
     name: dll_function
@@ -439,6 +439,8 @@ heuristics:
     attack_id: T1047
     name: WMI
     score: 250
+    signature_score_map:
+      office_uses_wmi: 250  # This signature is a 5 -> 750
     filetype: '*'
     description: Leverages Windows Management Instrumentation (WMI) to gather information and/or execute a process.
 

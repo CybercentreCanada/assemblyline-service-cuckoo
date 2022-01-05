@@ -28,7 +28,7 @@ from assemblyline.common.identify import tag_to_extension
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.constants import RECOGNIZED_TYPES
 
-from cuckoo.cuckoo_result import ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, is_safelisted, \
+from cuckoo.cuckoo_result import add_tag, ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, is_safelisted, \
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
@@ -55,6 +55,7 @@ x86_IMAGE_SUFFIX = "x86"
 x64_IMAGE_SUFFIX = "x64"
 RELEVANT_IMAGE_TAG = "auto"
 ALL_IMAGES_TAG = "all"
+ALL_RELEVANT_IMAGES_TAG = "auto_all"
 NO_PLATFORM = "none"
 WINDOWS_PLATFORM = "windows"
 LINUX_PLATFORM = "linux"
@@ -940,19 +941,18 @@ class Cuckoo(ServiceBase):
         :return: None
         """
         if platform:
-            machine_section.add_tag("dynamic.operating_system.platform", platform.capitalize())
+            add_tag(machine_section, "dynamic.operating_system.platform", platform.capitalize())
         if any(processor_tag in machine_name for processor_tag in [x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX]):
             if x86_IMAGE_SUFFIX in machine_name:
-                machine_section.add_tag("dynamic.operating_system.processor", x86_IMAGE_SUFFIX)
+                add_tag(machine_section, "dynamic.operating_system.processor", x86_IMAGE_SUFFIX)
             elif x64_IMAGE_SUFFIX in machine_name:
-                machine_section.add_tag("dynamic.operating_system.processor", x64_IMAGE_SUFFIX)
+                add_tag(machine_section, "dynamic.operating_system.processor", x64_IMAGE_SUFFIX)
 
         # The assumption here is that a machine's name will contain somewhere in it the
         # pattern: <platform prefix><version><processor>
         m = re.compile(MACHINE_NAME_REGEX).search(machine_name)
         if m and len(m.groups()) == 1:
-            version = m.group(1)
-            machine_section.add_tag("dynamic.operating_system.version", version)
+            add_tag(machine_section, "dynamic.operating_system.version", m.group(1))
 
     def _decode_mime_encoded_file_name(self) -> None:
         """
@@ -1569,15 +1569,16 @@ class Cuckoo(ServiceBase):
 
     @staticmethod
     def _determine_relevant_images(file_type: str, possible_images: List[str],
-                                   auto_architecture: Dict[str, Dict[str, List]]) -> List[str]:
+                                   auto_architecture: Dict[str, Dict[str, List]],
+                                   all_relevant: bool = False) -> List[str]:
         """
         This method determines the relevant images that a file should be sent to based on its type
         :param file_type: The type of file to be submitted
         :param possible_images: A list of images available
         :param auto_architecture: A dictionary indicating an override to relevant images selected
+        :param all_relevant: A boolean representing if we want all relevant images
         :return: A list of images that the file should be sent to
         """
-        images_to_send_file_to: List[str] = []
         if auto_architecture == {}:
             auto_architecture = {
                 WINDOWS_IMAGE_PREFIX: {x64_IMAGE_SUFFIX: [], x86_IMAGE_SUFFIX: []},
@@ -1597,13 +1598,12 @@ class Cuckoo(ServiceBase):
             platform = WINDOWS_IMAGE_PREFIX
             arch = x64_IMAGE_SUFFIX
 
-        if len(auto_architecture[platform][arch]) > 0:
-            temp_images = [image for image in auto_architecture[platform][arch]
-                           if image in possible_images]
+        if not all_relevant and len(auto_architecture[platform][arch]) > 0:
+            images_to_send_file_to = [image for image in auto_architecture[platform][arch]
+                                      if image in possible_images]
         else:
-            temp_images = [image for image in possible_images
-                           if all(item in image for item in [platform, arch])]
-        images_to_send_file_to.extend(temp_images)
+            images_to_send_file_to = [image for image in possible_images
+                                      if all(item in image for item in [platform, arch])]
         return images_to_send_file_to
 
     def _handle_specific_machine(self, kwargs: Dict[str, Any]) -> (bool, bool):
@@ -1695,9 +1695,11 @@ class Cuckoo(ServiceBase):
         specific_image = self._safely_get_param("specific_image")
         if specific_image:
             image_requested = True
-            if specific_image == RELEVANT_IMAGE_TAG:
+            if specific_image in [RELEVANT_IMAGE_TAG, ALL_RELEVANT_IMAGES_TAG]:
+                all_relevant = specific_image == ALL_RELEVANT_IMAGES_TAG
                 relevant_images_list = self._determine_relevant_images(self.request.file_type, self.allowed_images,
-                                                                       self.config.get("auto_architecture", {}))
+                                                                       self.config.get("auto_architecture", {}),
+                                                                       all_relevant)
                 for relevant_image in relevant_images_list:
                     self._set_hosts_that_contain_image(relevant_image, relevant_images)
             elif specific_image == ALL_IMAGES_TAG:
@@ -1731,11 +1733,13 @@ class Cuckoo(ServiceBase):
             try:
                 resp = self.session.get(host_status_url, headers=host["auth_header"], timeout=self.timeout)
             except requests.exceptions.Timeout:
-                raise CuckooTimeoutException(f"{host_status_url} timed out after {self.timeout}s")
+                self.log.warning(f"{host_status_url} timed out after {self.timeout}s")
+                continue
             except requests.ConnectionError:
-                raise Exception(f"Unable to reach the Cuckoo nest while trying to {host_status_url}")
+                self.log.warning(f"Unable to reach the Cuckoo nest while trying to GET {host_status_url}")
+                continue
             if resp.status_code != 200:
-                self.log.error(f"Failed to {host_status_url}. Status code: {resp.status_code}")
+                self.log.error(f"Failed to GET {host_status_url}. Status code: {resp.status_code}")
             else:
                 resp_dict = resp.json()
                 queue_size = resp_dict["tasks"]["pending"]
