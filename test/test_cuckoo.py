@@ -2306,15 +2306,15 @@ class TestCuckooResult:
         "events, is_process_martian, correct_body",
         [([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           False,
-          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
+          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": [], "tree_id": "8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52"}]'),
          ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           True,
-          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": []}]'),
+          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": [], "tree_id": "8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52"}]'),
          ([],
           False, None),
          ([{"pid": 0, "image": "C:\\Users\\buddy\\AppData\\Local\\Temp\\blah.exe", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           False,
-          '[{"pid": 0, "image": "?usrtmp\\\\blah.exe", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "?usrtmp\\\\blah.exe", "children": []}]'),
+          '[{"pid": 0, "image": "?usrtmp\\\\blah.exe", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "?usrtmp\\\\blah.exe", "children": [], "tree_id": "b39a28232192d3ac06b6195e383853f2ef24fa3b0e857d1a51eb12e4b338110d"}]'),
          ]
     )
     def test_build_process_tree(events, is_process_martian, correct_body):
