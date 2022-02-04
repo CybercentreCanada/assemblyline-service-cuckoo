@@ -83,7 +83,6 @@ ANALYSIS_FAILED = "analysis_failed"
 ANALYSIS_EXCEEDED_TIMEOUT = "analysis_exceeded_timeout"
 
 MACHINE_INFORMATION_SECTION_TITLE = 'Machine Information'
-SIGNATURE_HIGHLIGHTS_SECTION_TITLE = "Signature Highlights"
 
 
 class CuckooTimeoutException(Exception):
@@ -201,7 +200,6 @@ class Cuckoo(ServiceBase):
         self.artifact_list: Optional[List[Dict[str, str]]] = None
         self.hosts: List[Dict[str, Any]] = []
         self.routing = ""
-        self.sig_highlight_min_score: int = 0
         self.safelist: Dict[str, Dict[str, List[str]]] = {}
 
     def start(self) -> None:
@@ -213,7 +211,6 @@ class Cuckoo(ServiceBase):
         self.timeout = self.config.get("rest_timeout_in_seconds", 120)
         self.max_report_size = self.config.get('max_report_size', 275000000)
         self.allowed_images = self.config.get("allowed_images", [])
-        self.sig_highlight_min_score = self.config.get("sig_highlight_min_score", 0)
 
         try:
             self.safelist = self.get_api_interface().get_safelist()
@@ -280,7 +277,7 @@ class Cuckoo(ServiceBase):
             for relevant_image, host_list in relevant_images.items():
                 hosts = [host for host in self.hosts if host["ip"] in host_list]
                 submission_specific_kwargs = kwargs.copy()
-                parent_section = ResultSection(f"Analysis Environment Target: {relevant_image}")
+                parent_section = ResultSection(f"Analysis Environment Target: {relevant_image}", auto_collapse=True)
                 self.file_res.add_section(parent_section)
                 submission_specific_kwargs["tags"] = relevant_image
                 thr = SubmissionThread(
@@ -293,13 +290,15 @@ class Cuckoo(ServiceBase):
             for thread in submission_threads:
                 thread.join()
         elif image_requested and len(relevant_images_keys) == 1:
-            parent_section = ResultSection(f"Analysis Environment Target: {relevant_images_keys[0]}")
+            parent_section = ResultSection(
+                f"Analysis Environment Target: {relevant_images_keys[0]}", auto_collapse=True)
             self.file_res.add_section(parent_section)
             kwargs["tags"] = relevant_images_keys[0]
             hosts = [host for host in self.hosts if host["ip"] in relevant_images[relevant_images_keys[0]]]
             self._general_flow(kwargs, file_ext, parent_section, hosts)
         elif platform_requested and len(hosts_with_platform[next(iter(hosts_with_platform))]) > 0:
-            parent_section = ResultSection(f"Analysis Environment Target: {next(iter(hosts_with_platform))}")
+            parent_section = ResultSection(
+                f"Analysis Environment Target: {next(iter(hosts_with_platform))}", auto_collapse=True)
             self.file_res.add_section(parent_section)
             hosts = [host for host in self.hosts if host["ip"] in hosts_with_platform[next(iter(hosts_with_platform))]]
             self._general_flow(kwargs, file_ext, parent_section, hosts)
@@ -311,9 +310,10 @@ class Cuckoo(ServiceBase):
                     hosts = [host for host in self.hosts if host["ip"] == host_ip]
                 else:
                     hosts = self.hosts
-                parent_section = ResultSection(f"Analysis Environment Target: {kwargs['machine']}")
+                parent_section = ResultSection(f"Analysis Environment Target: {kwargs['machine']}", auto_collapse=True)
             else:
-                parent_section = ResultSection("Analysis Environment Target: First Machine Available")
+                parent_section = ResultSection(
+                    "Analysis Environment Target: First Machine Available", auto_collapse=True)
                 hosts = self.hosts
             self.file_res.add_section(parent_section)
             self._general_flow(kwargs, file_ext, parent_section, hosts)
@@ -332,9 +332,6 @@ class Cuckoo(ServiceBase):
             section_heur_map = {}
             for section in self.file_res.sections:
                 self._get_subsection_heuristic_map(section.subsections, section_heur_map)
-
-        # Bring signatures to the top of the service result and collapse per-env sections
-        self._collect_signatures()
 
     def _general_flow(self, kwargs: Dict[str, Any], file_ext: str, parent_section: ResultSection,
                       hosts: List[Dict[str, Any]], reboot: bool = False, parent_task_id: int = 0,
@@ -357,7 +354,7 @@ class Cuckoo(ServiceBase):
 
         if reboot:
             host_to_use = hosts[0]
-            parent_section = ResultSection(f"Reboot Analysis -> {parent_section.title_text}")
+            parent_section = ResultSection(f"Reboot Analysis -> {parent_section.title_text}", auto_collapse=True)
             self.file_res.add_section(parent_section)
         else:
             self._set_task_parameters(kwargs, file_ext, parent_section)
@@ -404,7 +401,7 @@ class Cuckoo(ServiceBase):
             if subsection.title_text == ANALYSIS_ERRORS and GUEST_CANNOT_REACH_HOST in subsection.body:
                 self.log.debug("The first submission was sent to a machine that had difficulty communicating with "
                                "the nest. Will try to resubmit again.")
-                parent_section = ResultSection(f"Resubmit -> {parent_section.title_text}")
+                parent_section = ResultSection(f"Resubmit -> {parent_section.title_text}", auto_collapse=True)
                 self.file_res.add_section(parent_section)
                 host_to_use = self._determine_host_to_use(hosts)
                 self._general_flow(kwargs, file_ext, parent_section, [host_to_use], resubmit=True)
@@ -1846,45 +1843,6 @@ class Cuckoo(ServiceBase):
         else:
             self.log.info(f"Machine {machine_name} does not exist in {machines}.")
             return None
-
-    def _collect_signatures(self):
-        """
-        This method collects all signatures that score high enough, and add them to a section at the top
-        of the service result. Sets parent sections to default as closed if signature highlights section exists.
-        :return: None
-        """
-        sig_summary: Dict[str, List] = {}
-        for parent_section in self.file_res.sections:
-            machine_name = None
-            for subsection in parent_section.subsections:
-                if subsection.title_text == MACHINE_INFORMATION_SECTION_TITLE:
-                    body = json.loads(subsection.body)
-                    machine_name = body['Name']
-                    sig_summary[machine_name] = []
-                elif subsection.title_text == SIGNATURES_SECTION_TITLE and machine_name:
-                    for sig_subsection in subsection.subsections:
-                        if sig_subsection.heuristic is None:
-                            continue
-                        if sig_subsection.heuristic.score < self.sig_highlight_min_score:
-                            continue
-                        sig_name = next((iter(sig_subsection.heuristic.signatures)), None)
-                        if sig_name:
-                            sig_summary[machine_name].append({"name": sig_name, "body": sig_subsection.body})
-
-        if len(sig_summary.keys()) > 0:
-            sig_highlights_sec = ResultSection("Signature Highlights",
-                                               body=f"The following signatures are highlights (scored "
-                                                    f"{self.sig_highlight_min_score}+) from analysis.")
-            for machine, signatures in sig_summary.items():
-                for sig in signatures:
-                    ResultSection(f"Signature '{sig['name']}' was observed in '{machine}'", body=sig["body"],
-                                  parent=sig_highlights_sec)
-            if len(sig_highlights_sec.subsections) > 0:
-                for parent_section in self.file_res.sections:
-                    parent_section.auto_collapse = True
-
-                # Put the signature hightlights section at the top of the service result
-                self.file_res.sections.insert(0, sig_highlights_sec)
 
 
 def generate_random_words(num_words: int) -> str:
