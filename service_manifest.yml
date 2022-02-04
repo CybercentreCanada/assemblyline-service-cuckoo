@@ -513,12 +513,6 @@ heuristics:
     filetype: '*'
     description: Cuckoo detected Domains
 
-  - heur_id: 1001
-    name: Host detected
-    score: 100
-    filetype: '*'
-    description: Cuckoo detected Hosts
-
   - heur_id: 1002
     name: HTTP/HTTPS detected
     score: 10
