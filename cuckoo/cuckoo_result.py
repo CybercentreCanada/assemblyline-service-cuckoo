@@ -1419,7 +1419,7 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
                     break
         sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
 
-    if mark["category"] == "file" and signature_name != "ransomware_mass_file_delete":
+    if mark["category"] in ["file", "dll"] and signature_name != "ransomware_mass_file_delete":
         add_tag(sig_res, "dynamic.process.file_name", ioc)
     elif mark["category"] == "cmdline":
         add_tag(sig_res, "dynamic.process.command_line", ioc)
