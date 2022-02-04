@@ -2181,7 +2181,7 @@ class TestCuckooResult:
         assert INETSIM == "INetSim"
         assert DNS_API_CALLS == ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
         assert HTTP_API_CALLS == ["send", "InternetConnectW", "InternetConnectA", "URLDownloadToFileW"]
-        assert BUFFER_API_CALLS == ["send"]
+        assert BUFFER_API_CALLS == ["send", "WSASend"]
         assert SUSPICIOUS_USER_AGENTS == [
             "Microsoft BITS", "Excel Service",
         ]
@@ -2384,23 +2384,6 @@ class TestCuckooResult:
         else:
             build_process_tree(events, actual_res_sec, is_process_martian)
             assert actual_res_sec.subsections == []
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "sysmon, correct_index",
-        [
-            ([], 0),
-            ([{"EventData": {"Data": []}}], 0),
-            ([{"EventData": {"Data": [{"@Name": "blah"}]}}], 0),
-            ([{"EventData": {"Data": [{"@Name": "blah", "#text": "blah"}]}}], 0),
-            ([{"EventData": {"Data": [{"@Name": "CurrentDirectory", "#text": "Current"}]}}], 0),
-            ([{"EventData": {"Data": [{"@Name": "blah", "#text": "C:\\Users\\buddy\\AppData\\Local\\Temp\\"}]}}], 0),
-            ([{"EventData": {"Data": []}}, {"EventData": {"Data": [{"@Name": "ParentCommandLine", "#text": "C:\\Users\\buddy\\AppData\\Local\\Temp\\"}]}}], 1),
-        ]
-    )
-    def test_get_trimming_index(sysmon, correct_index):
-        from cuckoo.cuckoo_result import _get_trimming_index
-        assert _get_trimming_index(sysmon) == correct_index
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -3006,7 +2989,6 @@ class TestCuckooResult:
     def test_convert_sysmon_processes(sysmon, correct_processes, dummy_result_class_instance, mocker):
         from cuckoo.cuckoo_result import convert_sysmon_processes
         actual_events = []
-        mocker.patch("cuckoo.cuckoo_result._get_trimming_index", return_value=0)
         safelist = {}
         convert_sysmon_processes(sysmon, actual_events, safelist)
         assert actual_events == correct_processes
@@ -3123,7 +3105,6 @@ class TestCuckooResult:
     )
     def test_convert_sysmon_network(sysmon, actual_network, correct_network, dummy_result_class_instance, mocker):
         from cuckoo.cuckoo_result import convert_sysmon_network
-        mocker.patch("cuckoo.cuckoo_result._get_trimming_index", return_value=0)
         safelist = {}
         convert_sysmon_network(sysmon, actual_network, safelist)
         assert actual_network == correct_network
@@ -3206,6 +3187,7 @@ class TestCuckooResult:
             ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
             ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "cfg:blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': [{"OutputDebugStringA": {"string": "cfg:blah"}}]}}),
             ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "URLDownloadToFileW", "arguments": {"url": "bad.evil"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"URLDownloadToFileW": {"url": "bad.evil"}}], 'decrypted_buffers': []}}),
+            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "WSASend", "arguments": {"buffer": "blahblahblah bad.evil blahblahblah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [{"WSASend": {"buffer": "blahblahblah bad.evil blahblahblah"}}], 'decrypted_buffers': []}}),
         ]
     )
     def test_get_process_map(processes, correct_process_map):

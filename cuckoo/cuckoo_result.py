@@ -22,7 +22,8 @@ log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
 # Global variable used for containing the system safelist
 global_safelist: Optional[Dict[str, Dict[str, List[str]]]] = None
 # Custom regex for finding uris in a text blob
-URL_REGEX = re.compile("(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#][^\s,\\\\]*)?")
+URL_REGEX = re.compile(
+    "(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#][^\s,\\\\]*)?")
 UNIQUE_IP_LIMIT = 100
 SCORE_TRANSLATION = {
     1: 10,
@@ -46,7 +47,7 @@ SILENT_IOCS = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_pr
 INETSIM = "INetSim"
 DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
 HTTP_API_CALLS = ["send", "InternetConnectW", "InternetConnectA", "URLDownloadToFileW"]
-BUFFER_API_CALLS = ["send"]
+BUFFER_API_CALLS = ["send", "WSASend"]
 SUSPICIOUS_USER_AGENTS = [
     "Microsoft BITS", "Excel Service"
 ]
@@ -132,8 +133,9 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
         target = api_report.get("target", {})
         target_file = target.get("file", {})
         target_filename = target_file.get("name", "missing_name")
-        is_process_martian = process_signatures(sigs, al_result, validated_random_ip_range, target_filename, process_map,
-                                                info["id"], file_ext, signatures, safelist)
+        is_process_martian = process_signatures(
+            sigs, al_result, validated_random_ip_range, target_filename, process_map, info["id"],
+            file_ext, signatures, safelist)
 
     if sysmon:
         convert_sysmon_processes(sysmon, events, safelist)
@@ -309,27 +311,6 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
         parent_result_section.add_subsection(process_tree_section)
 
 
-def _get_trimming_index(sysmon: List[Dict[str, Any]]) -> int:
-    """
-    Find index after which isn't mainly noise
-    :param sysmon: List of Sysmon events
-    :return: The index in the list of Sysmon events where events that we care about start
-    """
-    index = 0
-    for event in sysmon:
-        event_data = event["EventData"]
-        for data in event_data["Data"]:
-            val = data["@Name"]
-            if not data.get("#text"):
-                continue
-            if val == "ParentCommandLine" and 'C:\\Users\\buddy\\AppData\\Local\\Temp\\' in data["#text"]:
-                # Okay now we have our baseline, everything before this was noise
-                # get index of eventdata
-                index = sysmon.index(event)
-                return index
-    return index
-
-
 def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: ResultSection, inetsim_network: IPv4Network,
                        target_filename: str, process_map: Dict[int, Dict[str, Any]], task_id: int, file_ext: str,
                        signatures: List[Dict[str, Any]], safelist: Dict[str, Dict[str, List[str]]]) -> bool:
@@ -393,7 +374,8 @@ def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: Result
             if mark["type"] == "generic":
                 _tag_and_describe_generic_signature(sig_name, mark, sig_res, inetsim_network, safelist)
             elif mark["type"] == "ioc" and mark.get("category") not in SKIPPED_CATEGORY_IOCS:
-                _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network, process_map, file_ext, safelist)
+                _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network,
+                                                process_map, file_ext, safelist)
             elif mark["type"] == "call" and process_name is not None and len(process_names) == 0:
                 sig_res.add_line(f'\tProcess Name: {safe_str(process_name)}')
                 process_names.append(process_name)
@@ -511,7 +493,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                     process_details = process_map[process]
                     for network_call in process_details["network_calls"]:
                         connect = network_call.get("connect", {}) or network_call.get("InternetConnectW", {}) or \
-                                  network_call.get("InternetConnectA", {})
+                            network_call.get("InternetConnectA", {})
                         if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or
                                               connect.get("hostname", "") == network_flow["dest_ip"]) and \
                                 connect["port"] == network_flow["dest_port"]:
@@ -780,7 +762,11 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                 port = http_call["port"]
                 uri = http_call["uri"]
                 proto = protocol
-            if is_safelisted(host, ["network.dynamic.ip", "network.dynamic.domain"], safelist) or is_safelisted(uri, ["network.dynamic.uri"], safelist):
+            if is_safelisted(
+                    host, ["network.dynamic.ip", "network.dynamic.domain"],
+                    safelist) or is_safelisted(
+                    uri, ["network.dynamic.uri"],
+                    safelist):
                 continue
             req = {
                 "protocol": proto,
@@ -796,14 +782,17 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
             for process, process_details in process_map.items():
                 for network_call in process_details["network_calls"]:
                     send = next((network_call[api_call] for api_call in HTTP_API_CALLS if api_call in network_call), {})
-                    if send != {} and (send.get("service", 0) == 3 or send.get("buffer", "") == req["request"]) or send.get("url", "") == req["uri"]:
+                    if send != {} and (
+                            send.get("service", 0) == 3 or send.get("buffer", "") == req["request"]) or send.get(
+                            "url", "") == req["uri"]:
                         req["process_name"] = f"{process_details['name']} ({str(process)})"
             if req not in req_table:
                 req_table.append(req)
     return req_table
 
 
-def process_all_events(parent_result_section: ResultSection, file_ext: str, events: Optional[List[Dict]] = None) -> None:
+def process_all_events(
+        parent_result_section: ResultSection, file_ext: str, events: Optional[List[Dict]] = None) -> None:
     """
     This method converts all events to a table that is sorted by timestamp
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
@@ -852,7 +841,9 @@ def process_all_events(parent_result_section: ResultSection, file_ext: str, even
     parent_result_section.add_subsection(events_section)
 
 
-def process_curtain(curtain: Dict[str, Any], parent_result_section: ResultSection, process_map: Dict[int, Dict[str, Any]]) -> None:
+def process_curtain(
+        curtain: Dict[str, Any],
+        parent_result_section: ResultSection, process_map: Dict[int, Dict[str, Any]]) -> None:
     """
     This method processes the Curtain section of the Cuckoo report and adds anything noteworthy to the
     Assemblyline report
@@ -893,9 +884,7 @@ def convert_sysmon_processes(sysmon: List[Dict[str, Any]], events: List[Dict[str
     """
     existing_pids = [proc["pid"] for proc in events]
 
-    index = _get_trimming_index(sysmon)
-    trimmed_sysmon = sysmon[index:]
-    for event in trimmed_sysmon:
+    for event in sysmon:
         ontology_process = {
             "pid": None,
             "ppid": None,
@@ -924,7 +913,7 @@ def convert_sysmon_processes(sysmon: List[Dict[str, Any]], events: List[Dict[str
                 ontology_process["timestamp"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
             elif name == "ProcessGuid":
                 ontology_process["guid"] = text
-            elif name == "SourceProcessGuid":
+            elif name == "SourceProcessGuid" or name == "ParentProcessGuid":
                 ontology_process["pguid"] = text
 
         # It is okay if the Parent GUID is None
@@ -945,9 +934,7 @@ def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any]
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :return: None
     """
-    index = _get_trimming_index(sysmon)
-    trimmed_sysmon = sysmon[index:]
-    for event in trimmed_sysmon:
+    for event in sysmon:
         event_id = int(event["System"]["EventID"])
 
         # There are two main EventIDs that describe network events: 3 (Network connection) and 22 (DNS query)
@@ -1131,6 +1118,7 @@ def get_process_map(processes: List[Dict[str, Any]],
         "InternetConnectA": ["username", "service", "password", "hostname", "port"],
         # DNS and Connecting to IP, if service = 3 then HTTP
         "send": ["buffer"],  # HTTP Request
+        "WSASend": ["buffer"],  # Socket connection
         # "HttpOpenRequestW": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
         # "HttpOpenRequestA": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
         # "InternetOpenW": ["user-agent"],  # HTTP Request TODO not sure what to do with this yet
@@ -1223,7 +1211,10 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
             if contains_safelisted_value(http_string[1], safelist):
                 fp_count += 1
         elif name == "nolookup_communication" and mark["type"] == "generic":
-            if contains_safelisted_value(mark["host"], safelist) or (is_ip(mark["host"]) and ip_address(mark["host"]) in inetsim_network):
+            if contains_safelisted_value(
+                    mark["host"],
+                    safelist) or (
+                    is_ip(mark["host"]) and ip_address(mark["host"]) in inetsim_network):
                 fp_count += 1
         elif name not in ["network_cnc_http", "nolookup_communication", "suspicious_powershell", "exploit_heapspray"] \
                 and mark["type"] == "generic":
@@ -1331,7 +1322,8 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
                 if api_call in network_call:
                     buffer = network_call[api_call]["buffer"]
                     _extract_iocs_from_text_blob(buffer, encrypted_buffer_result_section)
-                    encrypted_buffer_file_path = os.path.join("/tmp", f"{task_id}_{pid}_encrypted_buffer_{buffer_count}.txt")
+                    encrypted_buffer_file_path = os.path.join(
+                        "/tmp", f"{task_id}_{pid}_encrypted_buffer_{buffer_count}.txt")
                     buffers.add(encrypted_buffer_file_path)
                     with open(encrypted_buffer_file_path, "wb") as f:
                         f.write(buffer.encode())
@@ -1346,8 +1338,9 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
         network_res.add_subsection(encrypted_buffer_result_section)
 
 
-def _tag_and_describe_generic_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultSection,
-                                        inetsim_network: IPv4Network, safelist: Dict[str, Dict[str, List[str]]]) -> None:
+def _tag_and_describe_generic_signature(
+        signature_name: str, mark: Dict[str, Any],
+        sig_res: ResultSection, inetsim_network: IPv4Network, safelist: Dict[str, Dict[str, List[str]]]) -> None:
     """
     This method adds the appropriate tags and descriptions for "generic" signatures
     :param signature_name: The name of the signature
@@ -1360,7 +1353,8 @@ def _tag_and_describe_generic_signature(signature_name: str, mark: Dict[str, Any
     if signature_name == "network_cnc_http":
         http_string = mark["suspicious_request"].split()
         if not contains_safelisted_value(http_string[1], safelist):
-            sig_res.add_line(f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
+            sig_res.add_line(
+                f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
             add_tag(sig_res, "network.dynamic.uri", http_string[1])
     elif signature_name == "nolookup_communication":
         add_tag(sig_res, "network.dynamic.ip", mark["host"], inetsim_network)
@@ -1538,7 +1532,10 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_
         add_tag(result_section, "network.dynamic.uri_path", [uri_path for uri_path in re.findall(URI_PATH, uri)])
 
 
-def is_safelisted(value: str, tags: List[str], safelist: Dict[str, Dict[str, List[str]]], substring: bool = False) -> bool:
+def is_safelisted(
+        value: str, tags: List[str],
+        safelist: Dict[str, Dict[str, List[str]]],
+        substring: bool = False) -> bool:
     """
     Safelists of data that may come up in analysis that is "known good", and we can ignore in the Assemblyline report.
     This method determines if a given value has any safelisted components
@@ -1574,7 +1571,9 @@ def is_safelisted(value: str, tags: List[str], safelist: Dict[str, Dict[str, Lis
     return False
 
 
-def add_tag(result_section: ResultSection, tag: str, value: Union[Any, List[Any]], inetsim_network: IPv4Network = None) -> None:
+def add_tag(
+        result_section: ResultSection, tag: str, value: Union[Any, List[Any]],
+        inetsim_network: IPv4Network = None) -> None:
     """
     This method adds the value(s) as a tag to the ResultSection. Can take a list of values or a single value.
     :param result_section: The ResultSection that the tag will be added to
