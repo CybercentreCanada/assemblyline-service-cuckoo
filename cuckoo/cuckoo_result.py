@@ -465,11 +465,6 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     network_flows_table, netflows_sec = _get_low_level_flows(resolved_ips, low_level_flows, safelist)
     dns_servers = network.get("dns_servers", [])
 
-    protocol_res_sec: Optional[ResultSection] = None
-    if len(network_flows_table) > 0:
-        protocol_res_sec = ResultSection(title_text="Protocol: TCP/UDP")
-        protocol_res_sec.set_heuristic(1004)
-
     # We have to copy the network table so that we can iterate through the copy
     # and remove items from the real one at the same time
     copy_of_network_table = network_flows_table[:]
@@ -499,17 +494,13 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                                 connect["port"] == network_flow["dest_port"]:
                             network_flow["image"] = process_details["name"] + " (" + str(process) + ")"
 
-            # Host is only detected if the ip was hardcoded, otherwise it is noise
-            if protocol_res_sec is not None and protocol_res_sec.heuristic is None and dest_ip not in resolved_ips:
-                protocol_res_sec.set_heuristic(1001)
-
             # If the record has not been removed then it should be tagged for protocol, domain, ip, and port
             add_tag(dns_res_sec, "network.dynamic.domain", network_flow["domain"])
-            add_tag(protocol_res_sec, "network.protocol", network_flow["protocol"])
-            add_tag(protocol_res_sec, "network.dynamic.ip", network_flow["dest_ip"], inetsim_network)
-            add_tag(protocol_res_sec, "network.dynamic.ip", network_flow["src_ip"], inetsim_network)
-            add_tag(protocol_res_sec, "network.port", network_flow["dest_port"])
-            add_tag(protocol_res_sec, "network.port", network_flow["src_port"])
+            add_tag(netflows_sec, "network.protocol", network_flow["protocol"])
+            add_tag(netflows_sec, "network.dynamic.ip", network_flow["dest_ip"], inetsim_network)
+            add_tag(netflows_sec, "network.dynamic.ip", network_flow["src_ip"], inetsim_network)
+            add_tag(netflows_sec, "network.port", network_flow["dest_port"])
+            add_tag(netflows_sec, "network.port", network_flow["src_port"])
 
             # add a shallow copy of network flow to the events list
             events.append(network_flow.copy())
@@ -519,8 +510,6 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
 
     if dns_res_sec and len(dns_res_sec.tags.get("network.dynamic.domain", [])) > 0:
         network_res.add_subsection(dns_res_sec)
-    if protocol_res_sec and len(protocol_res_sec.tags) > 0:
-        network_res.add_subsection(protocol_res_sec)
     unique_netflows: List[Dict[str, Any]] = []
     if len(network_flows_table) > 0:
         # Need to convert each dictionary to a string in order to get the set of network_flows_table, since
