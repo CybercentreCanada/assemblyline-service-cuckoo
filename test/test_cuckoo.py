@@ -241,7 +241,8 @@ def check_section_equality(this, that) -> bool:
         this.depth == that.depth and \
         len(this.subsections) == len(that.subsections) and \
         this.title_text == that.title_text and \
-        this.tags == that.tags
+        this.tags == that.tags and \
+        this.auto_collapse == that.auto_collapse
 
     if not current_section_equality:
         return False
@@ -2078,75 +2079,6 @@ class TestCuckooMain:
         cuckoo_class_instance.hosts = hosts
         test_result = cuckoo_class_instance._get_machine_by_name(name)
         assert test_result == expected_result
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "scores",
-        [
-            [10, 100, 250, 500, 750, 1000], [10, 10, 10, 10, 10, 10], [10000, 10, 10, 10, 10, 10]
-        ]
-    )
-    def test_collect_signatures(scores, cuckoo_class_instance):
-        from assemblyline_v4_service.common.result import Result, ResultSection, Heuristic
-        from cuckoo.cuckoo_main import SIGNATURES_SECTION_TITLE, MACHINE_INFORMATION_SECTION_TITLE, SIGNATURE_HIGHLIGHTS_SECTION_TITLE
-        all_sig_highlights = [
-            {"title": "Signature 'blah1' was observed in 'cuckoo-victim-win7x64_0'", "body": "yaba"},
-            {"title": "Signature 'blah2' was observed in 'cuckoo-victim-win10x64_0'", "body": "daba"},
-            {"title": "Signature 'blah3' was observed in 'cuckoo-victim-win10x64_0'", "body": "daba"},
-            {"title": "Signature 'blah4' was observed in 'cuckoo-victim-win10x64_0'", "body": "daba"},
-            {"title": "Signature 'blah5' was observed in 'cuckoo-victim-ub1804x64_0'", "body": "doo"},
-            {"title": "Signature 'blah6' was observed in 'cuckoo-victim-ub1804x64_0'", "body": "doo"}]
-        cuckoo_class_instance.file_res = Result()
-        win7x64_res_sec = ResultSection("Analysis Environment Target: win7x64")
-        _ = ResultSection(MACHINE_INFORMATION_SECTION_TITLE, body=json.dumps(
-            {"Name": "cuckoo-victim-win7x64_0"}), parent=win7x64_res_sec)
-        win7x64_sigs_res_sec = ResultSection(SIGNATURES_SECTION_TITLE, parent=win7x64_res_sec)
-        _ = ResultSection("Signature: blah1", body="yaba", heuristic=Heuristic(
-            1, signatures={"blah1": 1}, score_map={"blah1": scores[0]}), parent=win7x64_sigs_res_sec)
-        cuckoo_class_instance.file_res.add_section(win7x64_res_sec)
-
-        win10x64_res_sec = ResultSection("Analysis Environment Target: win10x64")
-        _ = ResultSection(MACHINE_INFORMATION_SECTION_TITLE, body=json.dumps(
-            {"Name": "cuckoo-victim-win10x64_0"}), parent=win10x64_res_sec)
-        win10x64_sigs_res_sec = ResultSection(SIGNATURES_SECTION_TITLE, parent=win10x64_res_sec)
-        _ = ResultSection("Signature: blah2", body="daba", heuristic=Heuristic(
-            1, signatures={"blah2": 1}, score_map={"blah2": scores[1]}), parent=win10x64_sigs_res_sec)
-        _ = ResultSection("Signature: blah3", body="daba", heuristic=Heuristic(
-            1, signatures={"blah3": 1}, score_map={"blah3": scores[2]}), parent=win10x64_sigs_res_sec)
-        _ = ResultSection("Signature: blah4", body="daba", heuristic=Heuristic(
-            1, signatures={"blah4": 1}, score_map={"blah4": scores[3]}), parent=win10x64_sigs_res_sec)
-        cuckoo_class_instance.file_res.add_section(win10x64_res_sec)
-
-        win7x86_res_sec = ResultSection("Analysis Environment Target: win7x86")
-        _ = ResultSection(MACHINE_INFORMATION_SECTION_TITLE, body=json.dumps(
-            {"Name": "cuckoo-victim-win7x86_0"}), parent=win7x86_res_sec)
-        cuckoo_class_instance.file_res.add_section(win7x86_res_sec)
-
-        ub1804x64_res_sec = ResultSection("Analysis Environment Target: ub1804x64")
-        _ = ResultSection(MACHINE_INFORMATION_SECTION_TITLE, body=json.dumps(
-            {"Name": "cuckoo-victim-ub1804x64_0"}), parent=ub1804x64_res_sec)
-        ub1804x64_sigs_res_sec = ResultSection(SIGNATURES_SECTION_TITLE, parent=ub1804x64_res_sec)
-        _ = ResultSection("Signature: blah5", body="doo", heuristic=Heuristic(
-            1, signatures={"blah5": 1}, score_map={"blah5": scores[4]}), parent=ub1804x64_sigs_res_sec)
-        _ = ResultSection("Signature: blah6", body="doo", heuristic=Heuristic(
-            1, signatures={"blah6": 1}, score_map={"blah6": scores[5]}), parent=ub1804x64_sigs_res_sec)
-        cuckoo_class_instance.file_res.add_section(ub1804x64_res_sec)
-
-        cuckoo_class_instance._collect_signatures()
-        correct_result = ResultSection(
-            SIGNATURE_HIGHLIGHTS_SECTION_TITLE,
-            body=f"The following signatures are highlights (scored {cuckoo_class_instance.sig_highlight_min_score}+) from analysis.")
-        for index, item in enumerate(all_sig_highlights):
-            if scores[index] < cuckoo_class_instance.sig_highlight_min_score:
-                continue
-            else:
-                correct_result.add_subsection(ResultSection(item["title"], body=item["body"]))
-        if len(correct_result.subsections) > 0:
-            assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result)
-        else:
-            assert all(
-                section.title_text != SIGNATURE_HIGHLIGHTS_SECTION_TITLE
-                for section in cuckoo_class_instance.file_res.sections)
 
 
 class TestCuckooResult:
