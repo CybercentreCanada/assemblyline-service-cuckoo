@@ -2671,6 +2671,7 @@ class TestCuckooResult:
             ("blah", {"ioc": "1", "category": "blah"}, {}, {}, '\tIOC: 1'),
             ("blah", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: blah'),
             ("blah", {"ioc": "blah", "category": "file"}, {}, {"dynamic.process.file_name": ["blah"]}, '\tIOC: blah'),
+            ("blah", {"ioc": "blah", "category": "dll"}, {}, {"dynamic.process.file_name": ["blah"]}, '\tIOC: blah'),
             ("blah", {"ioc": "blah", "category": "cmdline"}, {}, {"dynamic.process.command_line": ["blah"]}, '\tIOC: blah'),
             ("process_interest", {"ioc": "blah", "category": "process: super bad file"}, {}, {}, '\tIOC: blah is a super bad file.'),
         ]
