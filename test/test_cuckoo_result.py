@@ -607,6 +607,26 @@ class TestCuckooResult:
         pass
 
     @staticmethod
+    def test_get_dns_sec():
+        from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection
+        from cuckoo.cuckoo_result import _get_dns_sec
+        from json import dumps
+        resolved_ips = {}
+        assert _get_dns_sec(resolved_ips) is None
+        resolved_ips = {"1.1.1.1": {"domain": "blah.com"}}
+        expected_res_sec = ResultSection(
+            "Protocol: DNS",
+            body_format=BODY_FORMAT.TABLE,
+            body=dumps([{"domain": "blah.com", "ip": "1.1.1.1"}])
+        )
+        expected_res_sec.set_heuristic(1000)
+        expected_res_sec.add_tag("network.protocol", "dns")
+        expected_res_sec.add_tag("network.dynamic.ip", "1.1.1.1")
+        expected_res_sec.add_tag("network.dynamic.domain", "blah.com")
+        actual_res_sec = _get_dns_sec(resolved_ips)
+        assert check_section_equality(actual_res_sec, expected_res_sec)
+
+    @staticmethod
     @pytest.mark.parametrize(
         "dns_calls, process_map, routing, expected_return",
         [
