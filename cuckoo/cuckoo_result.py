@@ -451,24 +451,17 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     """
     network_res = ResultSection(title_text="Network Activity")
 
-    # DNS Section
-    dns_calls = network.get("dns", [])
-    dns_res_sec: Optional[ResultSection] = None
-    if len(dns_calls) > 0:
-        title_text = "Protocol: DNS"
-        dns_res_sec = ResultSection(title_text=title_text)
-        dns_res_sec.set_heuristic(1000)
-        add_tag(dns_res_sec, "network.protocol", "dns")
-        # If there is only UDP and no TCP traffic, then we need to tag the domains here:
-        add_tag(dns_res_sec, "network.dynamic.domain", [dns_call["request"] for dns_call in dns_calls])
+    # DNS
+    dns_servers = network.get("dns_servers", [])
+    dns_calls: List[Dict[str, Any]] = network.get("dns", [])
+    resolved_ips: Dict[str, Dict[str, Any]] = _get_dns_map(dns_calls, process_map, routing)
+    dns_res_sec: Optional[ResultSection] = _get_dns_sec(resolved_ips)
 
-    resolved_ips = _get_dns_map(dns_calls, process_map, routing)
     low_level_flows = {
         "udp": network.get("udp", []),
         "tcp": network.get("tcp", [])
     }
     network_flows_table, netflows_sec = _get_low_level_flows(resolved_ips, low_level_flows, safelist)
-    dns_servers = network.get("dns_servers", [])
 
     # We have to copy the network table so that we can iterate through the copy
     # and remove items from the real one at the same time
@@ -500,7 +493,6 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                             network_flow["image"] = process_details["name"] + " (" + str(process) + ")"
 
             # If the record has not been removed then it should be tagged for protocol, domain, ip, and port
-            add_tag(dns_res_sec, "network.dynamic.domain", network_flow["domain"])
             add_tag(netflows_sec, "network.protocol", network_flow["protocol"])
             add_tag(netflows_sec, "network.dynamic.ip", network_flow["dest_ip"], inetsim_network)
             add_tag(netflows_sec, "network.dynamic.ip", network_flow["src_ip"], inetsim_network)
@@ -591,6 +583,32 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
 
     if len(network_res.subsections) > 0:
         parent_result_section.add_subsection(network_res)
+
+
+def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]]) -> ResultSection:
+    """
+    This method creates the result section for DNS traffic
+    :param resolved_ips: the mapping of resolved IPs and their corresponding domains
+    :return: the result section containing details that we care about
+    """
+    if len(resolved_ips.keys()) == 0:
+        return None
+    dns_res_sec = ResultSection("Protocol: DNS")
+    dns_res_sec.set_heuristic(1000)
+    dns_body: List[Dict[str, str]] = []
+    add_tag(dns_res_sec, "network.protocol", "dns")
+    for answer, request_dict in resolved_ips.items():
+        request = request_dict["domain"]
+        add_tag(dns_res_sec, "network.dynamic.ip", answer)
+        add_tag(dns_res_sec, "network.dynamic.domain", request)
+        # If there is only UDP and no TCP traffic, then we need to tag the domains here:
+        dns_request = {
+            "domain": request,
+            "ip": answer,
+        }
+        dns_body.append(dns_request)
+    dns_res_sec.set_body(json.dumps(dns_body), BODY_FORMAT.TABLE)
+    return dns_res_sec
 
 
 def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[str, Any]],
