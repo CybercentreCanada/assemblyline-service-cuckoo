@@ -6,7 +6,7 @@ import json
 from tld import get_tld
 from ipaddress import ip_address, ip_network, IPv4Network
 from urllib.parse import urlparse
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Tuple
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
@@ -102,9 +102,8 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
             'Routing': routing,
             'Cuckoo Version': info['version']
         }
-        info_res = ResultSection(title_text='Analysis Information',
-                                 body_format=BODY_FORMAT.KEY_VALUE,
-                                 body=json.dumps(body))
+        info_res = ResultSection(title_text='Analysis Information')
+        info_res.set_body(json.dumps(body), BODY_FORMAT.KEY_VALUE)
         al_result.add_subsection(info_res)
 
     debug: Dict[str, Any] = api_report.get('debug', {})
@@ -299,8 +298,7 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
         so = SandboxOntology(events=events, normalize_paths=True)
         process_tree = so.get_process_tree_with_signatures(signatures, SAFE_PROCESS_TREE_LEAF_HASHES.keys())
         process_tree_section = ResultSection(title_text="Spawned Process Tree")
-        process_tree_section.body = json.dumps(process_tree)
-        process_tree_section.body_format = BODY_FORMAT.PROCESS_TREE
+        process_tree_section.set_body(json.dumps(process_tree), BODY_FORMAT.PROCESS_TREE)
         if is_process_martian:
             sig_name = "process_martian"
             heur_id = get_category_id(sig_name)
@@ -517,8 +515,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         for item in network_flows_table:
             if item not in unique_netflows:  # Remove duplicates
                 unique_netflows.append(item)
-        netflows_sec.body = json.dumps(unique_netflows)
-        netflows_sec.body_format = BODY_FORMAT.TABLE
+        netflows_sec.set_body(json.dumps(unique_netflows), BODY_FORMAT.TABLE)
         network_res.add_subsection(netflows_sec)
 
     # HTTP/HTTPS section
@@ -573,12 +570,11 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             del http_call['user-agent']
             del http_call["host"]
             del http_call["method"]
-        http_sec.body = json.dumps(req_table)
-        http_sec.body_format = BODY_FORMAT.TABLE
+        http_sec.set_body(json.dumps(req_table), BODY_FORMAT.TABLE)
         if remote_file_access_sec.heuristic:
             http_sec.add_subsection(remote_file_access_sec)
         if suspicious_user_agent_sec.heuristic:
-            suspicious_user_agent_sec.body = ' | '.join(sus_user_agents_used)
+            suspicious_user_agent_sec.set_body(' | '.join(sus_user_agents_used))
             http_sec.add_subsection(suspicious_user_agent_sec)
         network_res.add_subsection(http_sec)
     else:
@@ -656,7 +652,7 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
 
 def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
                          flows: Dict[str, List[Dict[str, Any]]],
-                         safelist: Dict[str, Dict[str, List[str]]]) -> (List[Dict[str, Any]], ResultSection):
+                         safelist: Dict[str, Dict[str, List[str]]]) -> Tuple[List[Dict[str, Any]], ResultSection]:
     """
     This method converts low level network calls to a general format
     :param resolved_ips: A map of process IDs to process names, network calls, and decrypted buffers
@@ -680,9 +676,9 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
                 if len(network_calls_made_to_unique_ips) >= UNIQUE_IP_LIMIT:
                     # BAIL! Too many to put in a table
                     too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
-                    too_many_unique_ips_sec.body = f"The number of TCP calls displayed has been capped " \
-                                                   f"at {UNIQUE_IP_LIMIT}. The full results can be found " \
-                                                   f"in the supplementary PCAP file included with the analysis."
+                    too_many_unique_ips_sec.set_body(f"The number of TCP calls displayed has been capped "
+                                                     f"at {UNIQUE_IP_LIMIT}. The full results can be found "
+                                                     f"in the supplementary PCAP file included with the analysis.")
                     netflows_sec.add_subsection(too_many_unique_ips_sec)
                     break
                 dst_port_pair = json.dumps({network_call["dst"]: network_call["dport"]})
@@ -825,8 +821,7 @@ def process_all_events(
             })
         else:
             raise ValueError(f"{event.convert_event_to_dict()} is not of type NetworkEvent or ProcessEvent.")
-    events_section.body = json.dumps(event_table)
-    events_section.body_format = BODY_FORMAT.TABLE
+    events_section.set_body(json.dumps(event_table), BODY_FORMAT.TABLE)
     parent_result_section.add_subsection(events_section)
 
 
@@ -842,7 +837,7 @@ def process_curtain(
     :return: None
     """
     curtain_body: List[Dict[str, Any]] = []
-    curtain_res = ResultSection(title_text="PowerShell Activity", body_format=BODY_FORMAT.TABLE)
+    curtain_res = ResultSection(title_text="PowerShell Activity")
     for pid in curtain.keys():
         process_name = process_map[int(pid)]["name"] if process_map.get(int(pid)) else "powershell.exe"
         for event in curtain[pid]["events"]:
@@ -858,7 +853,7 @@ def process_curtain(
                 curtain_body.append(curtain_item)
         add_tag(curtain_res, "file.powershell.cmdlet", [behaviour for behaviour in curtain[pid]["behaviors"]])
     if len(curtain_body) > 0:
-        curtain_res.body = json.dumps(curtain_body)
+        curtain_res.set_body(json.dumps(curtain_body), BODY_FORMAT.TABLE)
         parent_result_section.add_subsection(curtain_res)
 
 
@@ -1034,9 +1029,9 @@ def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: 
     """
     # TODO: obviously a huge work in progress
     hollowshunter_body: List[Any] = []
-    hollowshunter_res = ResultSection(title_text="HollowsHunter Analysis", body_format=BODY_FORMAT.TABLE)
+    hollowshunter_res = ResultSection(title_text="HollowsHunter Analysis")
     if len(hollowshunter_body) > 0:
-        hollowshunter_res.body = json.dumps(hollowshunter_body)
+        hollowshunter_res.set_body(json.dumps(hollowshunter_body), BODY_FORMAT.TABLE)
         parent_result_section.add_subsection(hollowshunter_res)
 
 
@@ -1049,7 +1044,7 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
     :param file_ext: The file extension of the file to be submitted
     :return:
     """
-    buffer_res = ResultSection(title_text="Decrypted Buffers", body_format=BODY_FORMAT.TABLE)
+    buffer_res = ResultSection(title_text="Decrypted Buffers")
     buffer_body = []
 
     for process in process_map:
@@ -1068,7 +1063,7 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
             if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
                 buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
     if len(buffer_body) > 0:
-        buffer_res.body = json.dumps(buffer_body)
+        buffer_res.set_body(json.dumps(buffer_body), BODY_FORMAT.TABLE)
         parent_result_section.add_subsection(buffer_res)
 
 
@@ -1466,8 +1461,7 @@ def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netfl
             add_tag(non_http_traffic_result_section, "network.port", netflow["dest_port"])
     if len(non_http_list) > 0:
         non_http_traffic_result_section.set_heuristic(1005)
-        non_http_traffic_result_section.body_format = BODY_FORMAT.TABLE
-        non_http_traffic_result_section.body = json.dumps(non_http_list)
+        non_http_traffic_result_section.set_body(json.dumps(non_http_list), BODY_FORMAT.TABLE)
         network_res.add_subsection(non_http_traffic_result_section)
 
 

@@ -13,7 +13,7 @@ import sys
 import requests
 import tempfile
 from threading import Thread
-from typing import Optional, Dict, List, Any, Set
+from typing import Optional, Dict, List, Any, Set, Tuple
 
 from retrying import retry, RetryError
 
@@ -921,9 +921,8 @@ class Cuckoo(ServiceBase):
         for tag in machine.get('tags', []):
             body['Tags'].append(safe_str(tag).replace('_', ' '))
 
-        machine_section = ResultSection(title_text=MACHINE_INFORMATION_SECTION_TITLE,
-                                        body_format=BODY_FORMAT.KEY_VALUE,
-                                        body=json.dumps(body))
+        machine_section = ResultSection(title_text=MACHINE_INFORMATION_SECTION_TITLE)
+        machine_section.set_body(json.dumps(body), BODY_FORMAT.KEY_VALUE)
 
         self._add_operating_system_tags(machine_name, platform, machine_section)
         parent_section.add_subsection(machine_section)
@@ -1492,6 +1491,7 @@ class Cuckoo(ServiceBase):
         task_dir = os.path.join(self.working_directory, f"{task_id}")
         for key, value in tarball_file_map.items():
             key_hits = [x for x in tar_obj_members if x.startswith(key)]
+            key_hits.sort()
             for f in key_hits:
                 destination_file_path = os.path.join(task_dir, f)
                 tar_obj.extract(f, path=task_dir)
@@ -1516,7 +1516,6 @@ class Cuckoo(ServiceBase):
                 self.artifact_list.append(artifact)
                 self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
         if len(image_section.body) > 0:
-            image_section.body = sorted(image_section.body, key=lambda image: image["img"]["name"])
             parent_section.add_subsection(image_section)
 
     def _extract_hollowshunter(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
@@ -1637,9 +1636,9 @@ class Cuckoo(ServiceBase):
                 kwargs["machine"] = specific_machine
             else:
                 no_machine_sec = ResultSection(title_text='Requested Machine Does Not Exist')
-                no_machine_sec.body = f"The requested machine '{specific_machine}' is currently unavailable.\n\n" \
-                                      f"General Information:\nAt the moment, the current machine options for this " \
-                                      f"Cuckoo deployment include {machine_names}."
+                no_machine_sec.set_body(f"The requested machine '{specific_machine}' is currently unavailable.\n\n"
+                                        f"General Information:\nAt the moment, the current machine options for this "
+                                        f"Cuckoo deployment include {machine_names}.")
                 self.file_res.add_section(no_machine_sec)
         return machine_requested, machine_exists
 
@@ -1671,15 +1670,15 @@ class Cuckoo(ServiceBase):
 
         if platform_requested and not hosts_with_platform[specific_platform]:
             no_platform_sec = ResultSection(title_text='Requested Platform Does Not Exist')
-            no_platform_sec.body = f"The requested platform '{specific_platform}' is currently unavailable.\n\n" \
-                                   f"General Information:\nAt the moment, the current platform options for this " \
-                                   f"Cuckoo deployment include {sorted(machine_platform_set)}."
+            no_platform_sec.set_body(f"The requested platform '{specific_platform}' is currently unavailable.\n\n"
+                                     f"General Information:\nAt the moment, the current platform options for this "
+                                     f"Cuckoo deployment include {sorted(machine_platform_set)}.")
             self.file_res.add_section(no_platform_sec)
         else:
             kwargs["platform"] = specific_platform
         return platform_requested, hosts_with_platform
 
-    def _handle_specific_image(self) -> (bool, Dict[str, List[str]]):
+    def _handle_specific_image(self) -> Tuple[bool, Dict[str, List[str]]]:
         """
         This method handles if a specific image was requested
         :return: A tuple containing if a specific image was requested, and a map of images with hosts that contain
@@ -1708,9 +1707,9 @@ class Cuckoo(ServiceBase):
                 all_machines = [machine for host in self.hosts for machine in host["machines"]]
                 available_images = self._get_available_images(all_machines, self.allowed_images)
                 no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
-                no_image_sec.body = f"The requested image '{specific_image}' is currently unavailable.\n\n" \
-                                    f"General Information:\nAt the moment, the current image options for this " \
-                                    f"Cuckoo deployment include {available_images}."
+                no_image_sec.set_body(f"The requested image '{specific_image}' is currently unavailable.\n\n"
+                                      f"General Information:\nAt the moment, the current image options for this "
+                                      f"Cuckoo deployment include {available_images}.")
                 self.file_res.add_section(no_image_sec)
         return image_requested, relevant_images
 
