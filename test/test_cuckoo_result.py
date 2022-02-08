@@ -730,11 +730,12 @@ class TestCuckooResult:
                          {"dest_port": 443, "dest_ip": "127.0.0.2", "domain": "blah2.blah"}]
         correct_result_section = ResultSection("Non-HTTP Traffic Over HTTP Ports")
         correct_result_section.set_heuristic(1005)
-        correct_result_section.tags = {
-            "network.dynamic.ip": ["127.0.0.1", "127.0.0.2"],
-            "network.dynamic.domain": ["blah.blah", "blah2.blah"],
-            "network.port": [80, 443],
-        }
+        correct_result_section.add_tag("network.dynamic.ip", "127.0.0.1")
+        correct_result_section.add_tag("network.dynamic.ip", "127.0.0.2")
+        correct_result_section.add_tag("network.dynamic.domain", "blah.blah")
+        correct_result_section.add_tag("network.dynamic.domain", "blah2.blah")
+        correct_result_section.add_tag("network.port", 80)
+        correct_result_section.add_tag("network.port", 443)
         correct_result_section.set_body(dumps(network_flows), BODY_FORMAT.TABLE)
         _process_non_http_traffic_over_http(test_parent_section, network_flows)
         assert check_section_equality(test_parent_section.subsections[0], correct_result_section)
@@ -1009,7 +1010,9 @@ class TestCuckooResult:
         else:
             correct_result_section = ResultSection(title_text="Decrypted Buffers")
             correct_result_section.set_body(correct_buffer_body, BODY_FORMAT.TABLE)
-            correct_result_section.tags = correct_tags
+            for tag, values in correct_tags.items():
+                for value in values:
+                    correct_result_section.add_tag(tag, value)
             assert check_section_equality(parent_section.subsections[0], correct_result_section)
 
     @staticmethod
