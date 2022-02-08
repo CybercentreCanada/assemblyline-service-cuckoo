@@ -1152,7 +1152,7 @@ class TestCuckooMain:
             for tag in machine.get('tags', []):
                 body['Tags'].append(safe_str(tag).replace('_', ' '))
             correct_result_section.set_body(json.dumps(body), BODY_FORMAT.KEY_VALUE)
-            correct_result_section.tags = {'dynamic.operating_system.platform': ['Blah']}
+            correct_result_section.add_tag('dynamic.operating_system.platform', 'Blah')
             cuckoo_class_instance.report_machine_info(machine_name, cuckoo_task, parent_section)
             assert check_section_equality(correct_result_section, parent_section.subsections[0])
         else:
