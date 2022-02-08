@@ -224,15 +224,14 @@ class TestCuckooResult:
     )
     def test_build_process_tree(events, is_process_martian, correct_body):
         from cuckoo.cuckoo_result import build_process_tree
-        from assemblyline_v4_service.common.result import ResultSection, Heuristic, BODY_FORMAT
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
         correct_res_sec = ResultSection(title_text="Spawned Process Tree")
         actual_res_sec = ResultSection("blah")
         if correct_body:
             correct_res_sec.set_body(correct_body, BODY_FORMAT.PROCESS_TREE)
             if is_process_martian:
-                heuristic = Heuristic(19)
-                heuristic.add_signature_id("process_martian", score=10)
-                correct_res_sec.heuristic = heuristic
+                correct_res_sec.set_heuristic(19)
+                correct_res_sec.heuristic.add_signature_id("process_martian", score=10)
             build_process_tree(events, actual_res_sec, is_process_martian)
             assert check_section_equality(actual_res_sec.subsections[0], correct_res_sec)
         else:
@@ -276,7 +275,7 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import process_signatures
         from assemblyline.common.attack_map import revoke_map
         from ipaddress import ip_network
-        from assemblyline_v4_service.common.result import ResultSection, Heuristic
+        from assemblyline_v4_service.common.result import ResultSection
         al_result = ResultSection("blah")
         task_id = 1
         file_ext = ".exe"
@@ -291,21 +290,22 @@ class TestCuckooResult:
             correct_result_section = ResultSection(title_text="Signatures")
             if sig_name == "attack_id":
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
-                correct_subsection.heuristic = Heuristic(9999, signatures={sig_name: 1}, score_map={sig_name: 10})
-                correct_subsection.heuristic.frequency = 1
-                correct_subsection.heuristic.attack_ids = [revoke_map.get(sigs[0]["ttp"][0], sigs[0]["ttp"][0])]
+                correct_subsection.set_heuristic(9999)
+                correct_subsection.heuristic.add_signature_id(sig_name, 10)
+                correct_subsection.heuristic.add_attack_id(revoke_map.get(sigs[0]["ttp"][0], sigs[0]["ttp"][0]))
                 correct_result_section.add_subsection(correct_subsection)
             elif sig_name == "console_output":
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
-                correct_subsection.heuristic = Heuristic(35, signatures={sig_name: 1}, score_map={sig_name: 10})
-                correct_subsection.heuristic.frequency = 1
-                correct_subsection.heuristic.attack_ids = ['T1003', 'T1005']
+                correct_subsection.set_heuristic(35)
+                correct_subsection.heuristic.add_signature_id(sig_name, 10)
+                correct_subsection.heuristic.add_attack_id('T1003')
+                correct_subsection.heuristic.add_attack_id('T1005')
                 correct_result_section.add_subsection(correct_subsection)
                 os.remove(f"/tmp/{task_id}_console_output.txt")
             elif sig_name in ["network_cnc_http", "nolookup_communication"]:
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
-                correct_subsection.heuristic = Heuristic(22, signatures={sig_name: 1}, score_map={sig_name: 10})
-                correct_subsection.heuristic.frequency = 1
+                correct_subsection.set_heuristic(22)
+                correct_subsection.heuristic.add_signature_id(sig_name, 10)
                 if sig_name == "network_cnc_http":
                     correct_subsection.add_tag('network.dynamic.uri', '11.11.11.11')
                 elif sig_name == "nolookup_communication":
@@ -313,13 +313,13 @@ class TestCuckooResult:
                 correct_result_section.add_subsection(correct_subsection)
             elif sig_name == "injection_explorer":
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
-                correct_subsection.heuristic = Heuristic(17, signatures={sig_name: 1}, score_map={sig_name: 10})
-                correct_subsection.heuristic.frequency = 1
+                correct_subsection.set_heuristic(17)
+                correct_subsection.heuristic.add_signature_id(sig_name, 10)
                 correct_result_section.add_subsection(correct_subsection)
             else:
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
-                correct_subsection.heuristic = Heuristic(9999, signatures={sig_name: 1}, score_map={sig_name: 10})
-                correct_subsection.heuristic.frequency = 1
+                correct_subsection.set_heuristic(9999)
+                correct_subsection.heuristic.add_signature_id(sig_name, 10)
                 correct_result_section.add_subsection(correct_subsection)
             assert check_section_equality(al_result.subsections[0], correct_result_section)
 
@@ -396,15 +396,14 @@ class TestCuckooResult:
     def test_create_signature_result_section(
             name, signature, expected_tags, expected_heuristic_id, expected_description, expected_attack_ids):
         from cuckoo.cuckoo_result import _create_signature_result_section, SCORE_TRANSLATION
-        from assemblyline_v4_service.common.result import ResultSection, Heuristic
+        from assemblyline_v4_service.common.result import ResultSection
         expected_result = ResultSection(f"Signature: {name}", body=expected_description)
-        sig_heur = Heuristic(expected_heuristic_id)
-        sig_heur.add_signature_id(name, score=10)
+        expected_result.set_heuristic(expected_heuristic_id)
+        expected_result.heuristic.add_signature_id(name, score=10)
         for attack_id in expected_attack_ids:
-            sig_heur.add_attack_id(attack_id)
+            expected_result.heuristic.add_attack_id(attack_id)
         for tag in expected_tags:
             expected_result.add_tag("dynamic.signature.family", tag)
-        expected_result.heuristic = sig_heur
         translated_score = SCORE_TRANSLATION[signature["severity"]]
 
         assert check_section_equality(_create_signature_result_section(

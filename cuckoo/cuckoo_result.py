@@ -13,7 +13,7 @@ from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
 from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, URI_PATH
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, NetworkEvent, ProcessEvent
-from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, Heuristic
+from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 
@@ -302,10 +302,9 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
         if is_process_martian:
             sig_name = "process_martian"
             heur_id = get_category_id(sig_name)
-            process_martian_heur = Heuristic(heur_id)
+            process_tree_section.set_heuristic(heur_id)
             # Let's keep this heuristic as informational
-            process_martian_heur.add_signature_id(sig_name, score=10)
-            process_tree_section.heuristic = process_martian_heur
+            process_tree_section.heuristic.add_signature_id(sig_name, score=10)
         parent_result_section.add_subsection(process_tree_section)
 
 
@@ -1249,19 +1248,17 @@ def _create_signature_result_section(name: str, signature: Dict[str, Any], trans
         log.warning(f"Unknown signature detected: {signature}")
 
     # Creating heuristic
-    sig_heur = Heuristic(sig_id)
+    sig_res.set_heuristic(sig_id)
 
     # Adding signature and score
-    sig_heur.add_signature_id(name, score=translated_score)
+    sig_res.heuristic.add_signature_id(name, score=translated_score)
 
     # Setting the Mitre ATT&CK ID for the heuristic
     attack_ids = signature.get('ttp', {})
     for attack_id in attack_ids:
         if attack_id in revoke_map:
             attack_id = revoke_map[attack_id]
-        sig_heur.add_attack_id(attack_id)
-
-    sig_res.heuristic = sig_heur
+        sig_res.heuristic.add_attack_id(attack_id)
 
     # Getting the signature family and tagging it
     sig_families = [family for family in signature.get('families', []) if family not in SKIPPED_FAMILIES]

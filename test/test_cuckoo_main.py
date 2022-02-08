@@ -1993,12 +1993,11 @@ class TestCuckooMain:
         ]
     )
     def test_get_subsection_heuristic_map(title_heur_tuples, correct_section_heur_map, cuckoo_class_instance):
-        from assemblyline_v4_service.common.result import ResultSection, Heuristic
+        from assemblyline_v4_service.common.result import ResultSection
         subsections = []
         for title, heur_id in title_heur_tuples:
             subsection = ResultSection(title)
-            sub_heur = Heuristic(heur_id)
-            subsection.heuristic = sub_heur
+            subsection.set_heuristic(heur_id)
             if title == "blah3":
                 subsections[0].add_subsection(subsection)
             else:
