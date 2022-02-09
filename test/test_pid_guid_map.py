@@ -10,7 +10,7 @@ class TestProcess:
         assert p.pid == 1
         assert p.start_time == 0.0
         assert p.end_time == 1.0
-        assert p.guid == UUID("{12345678-1234-5678-1234-567812345678}")
+        assert p.guid == str(UUID("{12345678-1234-5678-1234-567812345678}"))
 
         with pytest.raises(ValueError):
             Process("a", 0.0, 1.0, "guid")
@@ -30,7 +30,7 @@ class TestProcess:
         from uuid import UUID
         p = Process(**{"pid": 1, "start_time": 0.0, "end_time": 1.0, "guid": "{12345678-1234-5678-1234-567812345678}"})
         p.assign_guid()
-        assert isinstance(p.guid, UUID)
+        assert str(UUID(p.guid))
 
 
 class TestPidGuidMap:
@@ -39,11 +39,11 @@ class TestPidGuidMap:
         from cuckoo.pid_guid_map import PidGuidMap, Process
         pgm = PidGuidMap()
         assert pgm.processes == []
-        assert pgm.pid_guid_map == {}
+        assert pgm.guid_pid_map == {}
 
         pgm = PidGuidMap([])
         assert pgm.processes == []
-        assert pgm.pid_guid_map == {}
+        assert pgm.guid_pid_map == {}
 
         pgm = PidGuidMap([{"pid": 1, "start_time": 0.0, "end_time": 1.0,
                          "guid": "{12345678-1234-5678-1234-567812345678}"}])
@@ -56,8 +56,8 @@ class TestPidGuidMap:
         from uuid import UUID
         pgm = PidGuidMap()
         # if not p.guid and p.pid not in pids:
-        assert isinstance(pgm._validate_processes([{"pid": 1, "start_time": 0.0, "end_time": 1.0,
-                                                    "guid": None}])[0].guid, UUID)
+        assert str(UUID(pgm._validate_processes([{"pid": 1, "start_time": 0.0, "end_time": 1.0,
+                                                  "guid": None}])[0].guid))
 
         # else
         assert pgm._validate_processes([{"pid": 2, "start_time": 0.0, "end_time": 1.0,
@@ -124,12 +124,12 @@ class TestPidGuidMap:
             **{"pid": 1, "start_time": 0.0, "end_time": 1.0, "guid": "{12345678-1234-5678-1234-567812345678}"})
 
     @staticmethod
-    def test_get_guid_by_pid():
+    def test_get_guid_by_pid_and_time():
         from cuckoo.pid_guid_map import PidGuidMap
         from uuid import UUID
         pgm = PidGuidMap()
         with pytest.raises(ValueError):
-            pgm.get_guid_by_pid("blah")
+            pgm.get_guid_by_pid_and_time("blah", 0.0)
         pgm.add_process({"pid": 1, "start_time": 0.0, "end_time": 1.0,
                          "guid": "{12345678-1234-5678-1234-567812345678}"})
-        assert pgm.get_guid_by_pid(1) == UUID("{12345678-1234-5678-1234-567812345678}")
+        assert pgm.get_guid_by_pid_and_time(1, 0.5) == str(UUID("{12345678-1234-5678-1234-567812345678}"))
