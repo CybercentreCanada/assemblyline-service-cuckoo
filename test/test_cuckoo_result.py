@@ -66,13 +66,15 @@ class TestCuckooResult:
            {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"},
            "debug": "blah", "signatures": [{"name": "blah"}],
            "network": "blah", "behavior": {"blah": "blah"},
-           "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
+           "curtain": "blah", "sysmon": {},
+           "hollowshunter": "blah"},
           None),
          ({"info":
            {"id": "blah", "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"},
            "debug": "blah", "signatures": [{"name": "ransomware"}],
            "network": "blah", "behavior": {"blah": "blah"},
-           "curtain": "blah", "sysmon": "blah", "hollowshunter": "blah"},
+           "curtain": "blah", "sysmon": {},
+           "hollowshunter": "blah"},
           None),
          ({"signatures": [{"name": "blah"}],
            "info":
@@ -98,6 +100,7 @@ class TestCuckooResult:
         mocker.patch("cuckoo.cuckoo_result.process_debug")
         mocker.patch("cuckoo.cuckoo_result.get_process_map", return_value=correct_process_map)
         mocker.patch("cuckoo.cuckoo_result.process_signatures", return_value=False)
+        mocker.patch("cuckoo.cuckoo_result.add_processes_to_pgm", return_value=None)
         mocker.patch("cuckoo.cuckoo_result.convert_sysmon_processes", return_value=None)
         mocker.patch("cuckoo.cuckoo_result.convert_sysmon_network", return_value=None)
         mocker.patch("cuckoo.cuckoo_result.process_behaviour", return_value=["blah"])
@@ -171,10 +174,12 @@ class TestCuckooResult:
     )
     def test_process_behaviour(behaviour, events, mocker):
         from cuckoo.cuckoo_result import process_behaviour
+        from cuckoo.pid_guid_map import PidGuidMap
         mocker.patch("cuckoo.cuckoo_result.get_process_api_sums", return_value={"blah": "blah"})
         mocker.patch("cuckoo.cuckoo_result.convert_cuckoo_processes")
         safelist = {}
-        process_behaviour(behaviour, events, safelist)
+        pgm = PidGuidMap()
+        process_behaviour(behaviour, events, safelist, pgm)
         # Code coverage!
         assert True
 
@@ -191,19 +196,33 @@ class TestCuckooResult:
         assert get_process_api_sums(apistats) == correct_api_sums
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "processes, correct_events",
-        [([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}],
-          [{"pid": 0, "timestamp": 1.0, "guid": "blah", "ppid": 1, "image": "blah", "command_line": "blah", "pguid": None}]),
-         ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1, "guid": "blah", "first_seen": 1.0}],
-          []),
-         ([],
-          [])])
+    @pytest.mark.parametrize("processes, correct_events",
+                             [([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1,
+                                 "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
+                               [{"pid": 0, "timestamp": 1.0, "guid": "{12345678-1234-5678-1234-567812345678}",
+                                 "ppid": 1, "image": "blah", "command_line": "blah", "pguid": None}]),
+                              ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1,
+                                 "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
+                               []),
+                              ([],
+                               [])])
     def test_convert_cuckoo_processes(processes, correct_events):
         from cuckoo.cuckoo_result import convert_cuckoo_processes
+        from cuckoo.pid_guid_map import PidGuidMap
+        from uuid import UUID
         actual_events = []
         safelist = {}
-        convert_cuckoo_processes(actual_events, processes, safelist)
+        pgm = PidGuidMap()
+        for process in processes:
+            pgm.add_process(
+                {"pid": process["pid"],
+                 "guid": process["guid"],
+                 "start_time": float("-inf"),
+                 "end_time": float("inf")})
+
+        convert_cuckoo_processes(actual_events, processes, safelist, pgm)
+        for correct_event in correct_events:
+            correct_event["guid"] = str(UUID(correct_event["guid"]))
         assert actual_events == correct_events
 
     @staticmethod
@@ -1162,3 +1181,68 @@ class TestCuckooResult:
         res_sec = ResultSection("blah")
         add_tag(res_sec, tag, value, ip_network(inetsim_network) if inetsim_network else None)
         assert res_sec.tags == expected_tags
+
+    @staticmethod
+    @pytest.mark.parametrize("sysmon, expected_pgm_procs",
+                             [([],
+                               []),
+                              ([{"System": {"EventID": 0}, "EventData": {"Data": [{"@Name": "blah"}]}}],
+                               []),
+                              ([{"System": {"EventID": 1},
+                                 "EventData": {"Data": [{"@Name": "blah"}]}}],
+                               []),
+                              ([{"System": {"EventID": 1},
+                                 "EventData":
+                                 {
+                                  "Data":
+                                  [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
+                                   {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
+                                   {"@Name": "ProcessId", "#text": "123"}]}}],
+                               [{"pid": 123, "guid": "{12345678-1234-5678-1234-567812345678}", "start_time": 45630.123,
+                                 "end_time": float("inf")}]),
+                              ([{"System": {"EventID": 1},
+                                 "EventData":
+                                 {
+                                  "Data":
+                                  [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
+                                   {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
+                                   {"@Name": "ProcessId", "#text": "123"}]}},
+                                {"System": {"EventID": 5},
+                                 "EventData":
+                                 {
+                                    "Data":
+                                    [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:31.123"},
+                                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
+                                        {"@Name": "ProcessId", "#text": "123"}]}}],
+                               [{"pid": 123, "guid": "{12345678-1234-5678-1234-567812345678}", "start_time": 45630.123,
+                                 "end_time": 45631.123}]),
+                              ([{"System": {"EventID": 5},
+                                 "EventData":
+                                 {
+                                  "Data":
+                                  [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
+                                   {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
+                                   {"@Name": "ProcessId", "#text": "123"}]}},
+                                {"System": {"EventID": 1},
+                                 "EventData":
+                                 {
+                                    "Data":
+                                    [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:31.123"},
+                                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"},
+                                        {"@Name": "ProcessId", "#text": "123"}]}}],
+                               [{"pid": 123, "guid": "{12345678-1234-5678-1234-567812345678}",
+                                 "start_time": float("-inf"),
+                                 "end_time": 45630.123},
+                                {"pid": 123, "guid": "{12345678-1234-5678-1234-567812345679}", "start_time": 45631.123,
+                                 "end_time": float("inf")}]), ])
+    def test_add_processes_to_pgm(sysmon, expected_pgm_procs):
+        from cuckoo.cuckoo_result import add_processes_to_pgm
+        from cuckoo.pid_guid_map import PidGuidMap
+        actual_pgm = PidGuidMap()
+        add_processes_to_pgm(sysmon, actual_pgm)
+        expected_pgm = PidGuidMap()
+        for pgm_proc in expected_pgm_procs:
+            expected_pgm.add_process(pgm_proc)
+        assert len(actual_pgm.processes) == len(expected_pgm.processes)
+        for index, proc in enumerate(actual_pgm.processes):
+            assert proc == expected_pgm.processes[index]

@@ -17,16 +17,18 @@ class Process:
         :return: None
         """
         # Firs validate that the pid exists and is a valid type
-        if not pid or not isinstance(pid, int):
+        if pid is None or not isinstance(pid, int):
             raise ValueError(f"{pid} is an invalid pid.")
         self.pid: int = pid
+        if start_time > end_time:
+            raise ValueError(f"Start time {start_time} cannot be greater than end time {end_time}.")
         self.start_time: float = start_time
         self.end_time: float = end_time
         # If there is no guid assigned, assign one. Otherwise, validate it's value.
         if not guid:
             self.guid = self.assign_guid()
         else:
-            self.guid: UUID = UUID(guid)
+            self.guid: str = str(UUID(guid))
 
     def __eq__(self, that) -> bool:
         """
@@ -46,7 +48,7 @@ class Process:
         This method assigns the GUID for the process object
         :return: None
         """
-        self.guid: UUID = uuid4()
+        self.guid: str = str(uuid4())
 
 
 class PidGuidMap:
@@ -60,7 +62,7 @@ class PidGuidMap:
         :param processes: A list of dictionaries that represent Process objects
         :return: None
         """
-        self.pid_guid_map: Dict[int, str] = {}
+        self.guid_pid_map: Dict[str, Dict[str, Any]] = {}
         self.processes: List[Process] = self._validate_processes(processes)
 
     def _validate_processes(self, processes: List[Dict[str, Any]]) -> List[Process]:
@@ -72,8 +74,8 @@ class PidGuidMap:
         valid_processes: List[Process] = []
 
         # Grab pids and guids to use for validation
-        pids: List[int] = list(self.pid_guid_map.keys())
-        guids: List[str] = list(self.pid_guid_map.values())
+        pids: List[int] = [values["pid"] for values in self.guid_pid_map.values()]
+        guids: List[str] = list(self.guid_pid_map.keys())
 
         for process in processes:
             p = Process(**process)
@@ -91,7 +93,7 @@ class PidGuidMap:
             elif p.guid not in guids and p.pid in pids:
                 # We can have two items in the table that share PIDs that don't share GUIDs
                 # Further validation is required
-                self._handle_pid_match(process)
+                self._handle_pid_match(p)
             else:
                 # p.guid and p.guid not in guids and p.pid not in pids
                 # We have a unique process that is not yet in the lookup table and has a GUID.
@@ -132,17 +134,23 @@ class PidGuidMap:
         # Step 1: Validate
         p = self._validate_processes([process])[0]
         # Step 2: Add to lookup table
-        self.pid_guid_map[p.pid] = p.guid
+        self.guid_pid_map[p.guid] = {"pid": p.pid, "start_time": p.start_time, "end_time": p.end_time}
         # Step 3: Add to processes for tracking times
         self.processes.append(p)
 
-    def get_guid_by_pid(self, pid: int) -> UUID:
+    def get_guid_by_pid_and_time(self, pid: int, timestamp: float) -> str:
         """
-        This method allows the rtrieval of GUIDs based on a process ID
+        This method allows the rtrieval of GUIDs based on a process ID and timestamp
         :param pid: The process ID
+        :param timestamp: A timestamp between the creation and termination of a process
         :return: The GUID for the given process ID
         """
-        if pid in self.pid_guid_map:
-            return self.pid_guid_map[pid]
-        else:
+        guids: List[str] = [guid for guid, values in self.guid_pid_map.items()
+                            if values["pid"] == pid and timestamp <= values["end_time"] and timestamp >= values["start_time"]]
+
+        if not guids:
             raise ValueError(f"{pid} was not assigned to a process in the table.")
+        elif len(guids) > 1:
+            raise ValueError("Map is invalid.")
+        else:
+            return guids[0]
