@@ -222,7 +222,7 @@ class TestCuckooResult:
 
         convert_cuckoo_processes(actual_events, processes, safelist, pgm)
         for correct_event in correct_events:
-            correct_event["guid"] = str(UUID(correct_event["guid"]))
+            correct_event["guid"] = f"{{{str(UUID(correct_event['guid']))}}}"
         assert actual_events == correct_events
 
     @staticmethod
@@ -230,21 +230,21 @@ class TestCuckooResult:
         "events, is_process_martian, correct_body",
         [([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           False,
-          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": [], "tree_id": "8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52"}]'),
+          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "pguid": "blah", "signatures": {}, "ppid": 1, "command_line": "blah", "process_pid": 0, "process_name": "blah", "children": [], "tree_id": "8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52"}]'),
          ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           True,
-          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "blah", "children": [], "tree_id": "8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52"}]'),
+          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "pguid": "blah", "signatures": {}, "ppid": 1, "command_line": "blah", "process_pid": 0, "process_name": "blah", "children": [], "tree_id": "8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52"}]'),
          ([],
           False, None),
          ([{"pid": 0, "image": "C:\\Users\\buddy\\AppData\\Local\\Temp\\blah.exe", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           False,
-          '[{"pid": 0, "image": "?usrtmp\\\\blah.exe", "timestamp": 1.0, "guid": "blah", "ppid": 1, "pguid": "blah", "command_line": "blah", "signatures": {}, "process_pid": 0, "process_name": "?usrtmp\\\\blah.exe", "children": [], "tree_id": "b39a28232192d3ac06b6195e383853f2ef24fa3b0e857d1a51eb12e4b338110d"}]'),
+          '[{"pid": 0, "image": "?usrtmp\\\\blah.exe", "timestamp": 1.0, "guid": "blah", "pguid": "blah", "signatures": {}, "ppid": 1, "command_line": "blah", "process_pid": 0, "process_name": "?usrtmp\\\\blah.exe", "children": [], "tree_id": "b39a28232192d3ac06b6195e383853f2ef24fa3b0e857d1a51eb12e4b338110d"}]'),
          ]
     )
     def test_build_process_tree(events, is_process_martian, correct_body):
         from cuckoo.cuckoo_result import build_process_tree
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
-        correct_res_sec = ResultSection(title_text="Spawned Process Tree")
+        correct_res_sec = ResultSection(title_text="Spawned Event Tree")
         actual_res_sec = ResultSection("blah")
         if correct_body:
             correct_res_sec.set_body(correct_body, BODY_FORMAT.PROCESS_TREE)
@@ -632,25 +632,27 @@ class TestCuckooResult:
         [
             ([], {}, "", {}),
             ([{"answers": []}], {}, "", {}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "INetSim", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "INetSim", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
             ([{"answers": [{"data": "answer"}], "request": "request", "type": "PTR"}], {}, "INetSim", {}),
             ([{"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa", "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer'}}),
-            ([{"answers": [{"data": "10.10.10.10"}], "request": "answer", "type": "A"}, {"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa", "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+            ([{"answers": [{"data": "10.10.10.10"}], "request": "answer", "type": "A"}, {"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa", "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer', "guid": None, "process_id": None, "process_name": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
             ([{"answers": [{"data": "answer"}], "request": "ya:ba:da:ba:do:oo.ip6.arpa", "type": "PTR"}], {}, "Internet", {}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"network_calls": [{"blah": {"hostname": "blah"}}]}}, "", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"blah": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"getaddrinfo": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectA": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"GetAddrInfoW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
-            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"network_calls": [{"blah": {"hostname": "blah"}}]}}, "", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"blah": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"getaddrinfo": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"InternetConnectA": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"GetAddrInfoW": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
+            ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, 'guid': '{blah}', 'pguid': None}}),
             ([{"answers": []}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {}),
         ]
     )
-    def test_get_dns_map(dns_calls, process_map, routing, expected_return):
+    def test_get_dns_map(dns_calls, process_map, routing, expected_return, mocker):
         from cuckoo.cuckoo_result import _get_dns_map
-        assert _get_dns_map(dns_calls, process_map, routing) == expected_return
+        mocker.patch("cuckoo.cuckoo_result.uuid4", return_value="blah")
+        actual_result = _get_dns_map(dns_calls, process_map, routing)
+        assert actual_result == expected_return
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -665,31 +667,32 @@ class TestCuckooResult:
            "")),
          ({},
           {"udp": [{"dst": "blah", "src": "1.1.1.1", "time": "blah", "dport": "blah"}]},
-          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None,
-             'protocol': 'udp', 'src_ip': None, 'src_port': None, 'timestamp': 'blah'}],
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': "{blah}", "pguid": None, 'image': None,
+             'pid': None, 'protocol': 'udp', 'src_ip': None, 'src_port': None, 'timestamp': 'blah'}],
            "")),
          ({},
           {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]},
-          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None,
-             'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': "{blah}", "pguid": None, 'image': None,
+             'pid': None, 'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
            "")),
          ({"blah": {"domain": "blah"}},
           {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]},
-          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': None, 'pid': None,
-             'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': "{blah}", "pguid": None, 'image': None,
+             'pid': None, 'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
            "")),
          ({"blah": {"domain": "blah", "process_name": "blah", "process_id": "blah"}},
           {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]},
-          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': "blah", 'pid': "blah",
-             'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': "{blah}", "pguid": None, 'image': "blah",
+             'pid': "blah", 'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
            "")),
          ({},
           {},
           ([],
            "flag"))])
-    def test_get_low_level_flows(resolved_ips, flows, expected_return):
+    def test_get_low_level_flows(resolved_ips, flows, expected_return, mocker):
         from cuckoo.cuckoo_result import _get_low_level_flows
         from assemblyline_v4_service.common.result import ResultSection
+        mocker.patch("cuckoo.cuckoo_result.uuid4", return_value="blah")
         expected_network_flows_table, expected_netflows_sec_body = expected_return
         correct_netflows_sec = ResultSection(title_text="TCP/UDP Network Traffic")
         if expected_netflows_sec_body == "flag":
@@ -702,9 +705,10 @@ class TestCuckooResult:
             expected_network_flows_table = []
             for i in range(101):
                 flows["udp"].append({"dst": "blah", "src": "1.1.1.1", "dport": f"blah{i}", "time": "blah"})
-                expected_network_flows_table.append({"protocol": "udp", "domain": None, "dest_ip": "blah",
-                                                     "src_ip": None, "src_port": None, "dest_port": f"blah{i}",
-                                                     "timestamp": "blah", "image": None, "pid": None, "guid": None})
+                expected_network_flows_table.append(
+                    {"protocol": "udp", "domain": None, "dest_ip": "blah", "src_ip": None, "src_port": None,
+                     "dest_port": f"blah{i}", "timestamp": "blah", "image": None, "pid": None, 'guid': "{blah}",
+                     "pguid": None, })
             expected_network_flows_table = expected_network_flows_table[:100]
 
         safelist = {"regex": {"network.dynamic.ip": ["(^1\.1\.1\.1$)|(^8\.8\.8\.8$)"]}}
@@ -786,7 +790,7 @@ class TestCuckooResult:
 
         al_result = ResultSection("blah")
         events = [{"timestamp": 1, "image": "blah", 'pid': 1, 'src_port': 1, 'dest_ip': "blah", 'src_ip': "blah",
-                   'dest_port': 1, 'guid': "blah", 'protocol': "blah", 'domain': "blah"},
+                   'dest_port': 1, 'guid': "blah", 'protocol': "blah", 'domain': "blah", "pguid": "blah"},
                   {"pid": 1, "ppid": 1, "guid": "blah", "command_line": "blah", "image": "blah", "timestamp": 2, "pguid": "blah"}]
 
         correct_result_section = ResultSection(title_text="Event Log")
@@ -880,7 +884,7 @@ class TestCuckooResult:
                                [{'pid': 1, 'ppid': 2, 'timestamp': 43932.12, "command_line": "./blah",
                                  "image": "blah.exe", "guid": "blah", "pguid": "blah"}]),
                               ])
-    def test_convert_sysmon_processes(sysmon, correct_processes, dummy_result_class_instance, mocker):
+    def test_convert_sysmon_processes(sysmon, correct_processes):
         from cuckoo.cuckoo_result import convert_sysmon_processes
         actual_events = []
         safelist = {}
@@ -889,119 +893,127 @@ class TestCuckooResult:
 
     @staticmethod
     @pytest.mark.parametrize(
-        "sysmon, actual_network, correct_network",
-        [
-            ([], {}, {}),
-            ([], {}, {}),
-            ([{"System": {"EventID": '1'}}], {}, {}),
-            ([{
-                "System": {"EventID": '3'},
-                "EventData": {"Data":
-                              [
-                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
-                                  {"@Name": "ProcessId", "#text": "123"},
-                                  {"@Name": "Image", "#text": "blah.exe"},
-                                  {"@Name": "SourceIp", "#text": "10.10.10.10"},
-                                  {"@Name": "SourcePort", "#text": "123"},
-                                  {"@Name": "DestinationIp", "#text": "11.11.11.11"},
-                                  {"@Name": "DestinationPort", "#text": "321"},
-                              ]
-                              }}], {"tcp": []}, {'tcp': []}),
-            ([{
-                "System": {"EventID": '3'},
-                "EventData": {"Data":
-                              [
-                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
-                                  {"@Name": "ProcessId", "#text": "123"},
-                                  {"@Name": "Image", "#text": "blah.exe"},
-                                  {"@Name": "Protocol", "#text": "tcp"},
-                                  {"@Name": "SourceIp", "#text": "10.10.10.10"},
-                                  {"@Name": "SourcePort", "#text": "123"},
-                                  {"@Name": "DestinationIp", "#text": "11.11.11.11"},
-                                  {"@Name": "DestinationPort", "#text": "321"},
-                              ]
-                              }}], {"tcp": []}, {'tcp': [{'dport': 321, 'dst': '11.11.11.11', 'guid': '{blah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123, 'src': '10.10.10.10', 'time': 1627054921.001}]}),
-            ([{
-                "System": {"EventID": '3'},
-                "EventData": {"Data":
-                              [
-                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
-                                  {"@Name": "ProcessId", "#text": "123"},
-                                  {"@Name": "Image", "#text": "blah.exe"},
-                                  {"@Name": "Protocol", "#text": "tcp"},
-                                  {"@Name": "SourceIp", "#text": "10.10.10.10"},
-                                  {"@Name": "SourcePort", "#text": "123"},
-                                  {"@Name": "DestinationIp", "#text": "11.11.11.11"},
-                                  {"@Name": "DestinationPort", "#text": "321"},
-                              ]
-                              }}], {"tcp": [{"dst": '11.11.11.11', "dport": 321, "src": '10.10.10.10', "sport": 123}]}, {'tcp': [
-                                  {'dport': 321, 'dst': '11.11.11.11', 'guid': '{blah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123,
-                                   'src': '10.10.10.10', 'time': 1627054921.001}]}),
-            ([{
-                "System": {"EventID": '22'},
-                "EventData": {"Data":
-                              [
-                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
-                                  {"@Name": "ProcessId", "#text": "123"},
-                                  {"@Name": "Image", "#text": "blah.exe"},
-                                  {"@Name": "QueryName", "#text": "blah.com"},
-                                  {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
-                              ]
-                              }}], {"dns": []}, {'dns': [
-                                  {
-                                      'answers': [{'data': '10.10.10.10', 'type': 'A'}],
-                                      'guid': '{blah}',
-                                      'image': 'blah.exe',
-                                      'pid': 123,
-                                      'request': 'blah.com',
-                                      'time': 1627054921.001,
-                                      'type': 'A'
-                                  }]}),
-            ([{
-                "System": {"EventID": '22'},
-                "EventData": {"Data":
-                              [
-                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                                  {"@Name": "ProcessId", "#text": "123"},
-                                  {"@Name": "Image", "#text": "blah.exe"},
-                                  {"@Name": "QueryName", "#text": "blah.com"},
-                                  {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
-                              ]
-                              }}], {"dns": []}, {'dns': []}),
-            ([{
-                "System": {"EventID": '22'},
-                "EventData": {"Data":
-                              [
-                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
-                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
-                                  {"@Name": "ProcessId", "#text": "123"},
-                                  {"@Name": "Image", "#text": "blah.exe"},
-                                  {"@Name": "QueryName", "#text": "blah.com"},
-                                  {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"},
-                              ]
-                              }}], {"dns": [{"request": "blah.com"}]}, {'dns': [
-                                  {
-                                      'answers': [{'data': '10.10.10.10', 'type': 'A'}],
-                                      'guid': '{blah}',
-                                      'image': 'blah.exe',
-                                      'pid': 123,
-                                      'request': 'blah.com',
-                                      'time': 1627054921.001,
-                                      'type': 'A'
-                                  }]}
-             ),
-
-        ]
-    )
-    def test_convert_sysmon_network(sysmon, actual_network, correct_network, dummy_result_class_instance, mocker):
+        "sysmon, actual_network, correct_network, correct_events",
+        [([],
+          {},
+          {},
+          []),
+         ([{"System": {"EventID": '1'}}],
+          {},
+          {},
+          []),
+         ([{"System": {"EventID": '3'},
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+              {"@Name": "ProcessGuid", "#text": "{blah}"},
+              {"@Name": "ProcessId", "#text": "123"},
+              {"@Name": "Image", "#text": "blah.exe"},
+              {"@Name": "SourceIp", "#text": "10.10.10.10"},
+              {"@Name": "SourcePort", "#text": "123"},
+              {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+              {"@Name": "DestinationPort", "#text": "321"}, ]}}],
+          {"tcp": []},
+          {'tcp': []},
+          []),
+         ([{"System": {"EventID": '3'},
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+              {"@Name": "ProcessGuid", "#text": "{blah}"},
+              {"@Name": "ProcessId", "#text": "123"},
+              {"@Name": "Image", "#text": "blah.exe"},
+              {"@Name": "Protocol", "#text": "tcp"},
+              {"@Name": "SourceIp", "#text": "10.10.10.10"},
+              {"@Name": "SourcePort", "#text": "123"},
+              {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+              {"@Name": "DestinationPort", "#text": "321"}, ]}}],
+          {"tcp": []},
+          {
+             'tcp':
+             [{'dport': 321, 'dst': '11.11.11.11', 'guid': '{blahblah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123,
+               'src': '10.10.10.10', 'time': 1627054921.001, 'pguid': '{blah}'}]},
+          [{'dest_ip': '11.11.11.11', 'image': 'blah.exe', 'src_ip': '10.10.10.10', 'src_port': 123, 'guid': '{blahblah}', 'pguid': '{blah}',
+            'domain': None, 'pid': 123, 'timestamp': 1627054921.001, 'dest_port': 321, 'protocol': 'tcp'}]),
+         ([{"System": {"EventID": '3'},
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+              {"@Name": "ProcessGuid", "#text": "{blah}"},
+              {"@Name": "ProcessId", "#text": "123"},
+              {"@Name": "Image", "#text": "blah.exe"},
+              {"@Name": "Protocol", "#text": "tcp"},
+              {"@Name": "SourceIp", "#text": "10.10.10.10"},
+              {"@Name": "SourcePort", "#text": "123"},
+              {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+              {"@Name": "DestinationPort", "#text": "321"}, ]}}],
+          {"tcp": [{"dst": '11.11.11.11', "dport": 321, "src": '10.10.10.10', "sport": 123}]},
+          {
+             'tcp':
+             [{'dport': 321, 'dst': '11.11.11.11', 'guid': '{blahblah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123,
+               'src': '10.10.10.10', 'time': 1627054921.001, 'pguid': '{blah}'}]},
+          [{'dest_ip': '11.11.11.11', 'image': 'blah.exe', 'src_ip': '10.10.10.10', 'src_port': 123, 'guid': '{blahblah}', 'pguid': '{blah}',
+            'domain': None, 'pid': 123, 'timestamp': 1627054921.001, 'dest_port': 321, 'protocol': 'tcp'}]),
+         ([{"System": {"EventID": '22'},
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+              {"@Name": "ProcessGuid", "#text": "{blah}"},
+              {"@Name": "ProcessId", "#text": "123"},
+              {"@Name": "Image", "#text": "blah.exe"},
+              {"@Name": "QueryName", "#text": "blah.com"},
+              {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"}, ]}}],
+          {"dns": []},
+          {
+             'dns':
+             [{'answers': [{'data': '10.10.10.10', 'type': 'A'}],
+               'guid': '{blahblah}', 'image': 'blah.exe', 'pid': 123, 'request': 'blah.com', 'time': 1627054921.001,
+               'type': 'A', 'pguid': '{blah}'}]},
+          [{'dest_ip': '10.10.10.10', 'image': 'blah.exe', 'src_ip': None, 'src_port': None, 'guid': '{blahblah}', 'pguid': '{blah}',
+            'domain': 'blah.com', 'pid': 123, 'timestamp': 1627054921.001, 'dest_port': None, 'protocol': 'dns'}]),
+         ([{"System": {"EventID": '22'},
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+              {"@Name": "ProcessId", "#text": "123"},
+              {"@Name": "Image", "#text": "blah.exe"},
+              {"@Name": "QueryName", "#text": "blah.com"},
+              {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"}, ]}}],
+          {"dns": []},
+          {'dns': []},
+          []),
+         ([{"System": {"EventID": '22'},
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+              {"@Name": "ProcessGuid", "#text": "{blah}"},
+              {"@Name": "ProcessId", "#text": "123"},
+              {"@Name": "Image", "#text": "blah.exe"},
+              {"@Name": "QueryName", "#text": "blah.com"},
+              {"@Name": "QueryResults", "#text": "::ffffff:10.10.10.10;"}, ]}}],
+          {"dns": [{"request": "blah.com"}]},
+          {
+             'dns':
+             [{'answers': [{'data': '10.10.10.10', 'type': 'A'}],
+               'guid': '{blahblah}', 'image': 'blah.exe', 'pid': 123, 'request': 'blah.com', 'time': 1627054921.001,
+               'type': 'A', 'pguid': '{blah}'}]},
+          [{'dest_ip': '10.10.10.10', 'image': 'blah.exe', 'src_ip': None, 'src_port': None, 'guid': '{blahblah}', 'pguid': '{blah}',
+            'domain': 'blah.com', 'pid': 123, 'timestamp': 1627054921.001, 'dest_port': None, 'protocol': 'dns'}]), ])
+    def test_convert_sysmon_network(sysmon, actual_network, correct_network, correct_events,
+                                    mocker):
         from cuckoo.cuckoo_result import convert_sysmon_network
         safelist = {}
-        convert_sysmon_network(sysmon, actual_network, safelist)
+        events = []
+        mocker.patch("cuckoo.cuckoo_result.uuid4", return_value="blahblah")
+        convert_sysmon_network(sysmon, actual_network, events, safelist)
         assert actual_network == correct_network
+        assert events == correct_events
 
     # TODO: method is in the works
     # @staticmethod

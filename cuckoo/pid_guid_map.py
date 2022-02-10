@@ -34,7 +34,7 @@ class Process:
         if not guid:
             self.guid = self.assign_guid()
         else:
-            self.guid: str = str(UUID(guid))
+            self.guid: str = f"{{{str(UUID(guid))}}}"
 
     def __eq__(self, that) -> bool:
         """
@@ -54,7 +54,7 @@ class Process:
         This method assigns the GUID for the process object
         :return: None
         """
-        self.guid: str = str(uuid4())
+        self.guid: str = f"{{{str(uuid4())}}}"
 
 
 class PidGuidMap:
@@ -92,10 +92,10 @@ class PidGuidMap:
                 p.assign_guid()
             elif p.guid in guids and p.pid in pids:
                 # We cannot have two items in the table that share process IDs and GUIDs
-                raise ValueError(f"{process} is a duplicate entry.")
+                continue
             elif p.guid in guids and p.pid not in pids:
                 # We cannot have two items in the table that share GUIDs
-                raise ValueError(f"{process} GUID has already been entered.")
+                continue
             elif p.guid not in guids and p.pid in pids:
                 # We can have two items in the table that share PIDs that don't share GUIDs
                 # Further validation is required
@@ -121,13 +121,13 @@ class PidGuidMap:
         for processes_with_common_pid in processes_with_common_pids:
             if processes_with_common_pid.start_time == process.start_time and processes_with_common_pid.end_time == process.end_time:
                 # We cannot have multiple processes that share IDs that took place at the same time
-                raise ValueError(f"{process} is a duplicate entry.")
+                continue
             elif process.start_time >= processes_with_common_pid.end_time or process.end_time <= processes_with_common_pid.start_time:
                 # We can only have multiple processes that share IDs if they did not take place at the same time
                 valid_entry = True
             else:
                 # We cannot have multiple processes that share IDs that have overlapping time ranges
-                raise ValueError(f"{process} is an invalid entry.")
+                continue
         if valid_entry:
             self.processes.append(process)
 
@@ -138,7 +138,11 @@ class PidGuidMap:
         :return: None
         """
         # Step 1: Validate
-        p = self._validate_processes([process])[0]
+        validated_process = self._validate_processes([process])
+        if validated_process:
+            p = validated_process[0]
+        else:
+            return
         # Step 2: Add to lookup table
         self.guid_pid_map[p.guid] = {"pid": p.pid, "start_time": p.start_time, "end_time": p.end_time}
         # Step 3: Add to processes for tracking times
