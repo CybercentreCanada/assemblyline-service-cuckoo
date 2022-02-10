@@ -2008,8 +2008,8 @@ class TestCuckooMain:
         signature_section = ResultSection("Signatures")
         for sig, result in [("persistence_autorun", True), ("creates_service", True), ("blah", False)]:
             signature_subsection = ResultSection(sig)
-            signature_section.subsections = [signature_subsection]
-            parent_section.subsections = [signature_section]
+            signature_section.add_subsection(signature_subsection)
+            parent_section.add_subsection(signature_section)
             assert cuckoo_class_instance._determine_if_reboot_required(parent_section) is result
 
     @staticmethod
