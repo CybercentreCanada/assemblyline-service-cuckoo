@@ -208,20 +208,7 @@ def check_section_equality(this, that) -> bool:
 
     # Heuristics also need their own equality checks
     if this.heuristic and that.heuristic:
-        heuristic_equality = this.heuristic.definition.attack_id == that.heuristic.definition.attack_id and \
-            this.heuristic.definition.classification == that.heuristic.definition.classification and \
-            this.heuristic.definition.description == that.heuristic.definition.description and \
-            this.heuristic.definition.filetype == that.heuristic.definition.filetype and \
-            this.heuristic.definition.heur_id == that.heuristic.definition.heur_id and \
-            this.heuristic.definition.id == that.heuristic.definition.id and \
-            this.heuristic.definition.max_score == that.heuristic.definition.max_score and \
-            this.heuristic.definition.name == that.heuristic.definition.name and \
-            this.heuristic.definition.score == that.heuristic.definition.score and \
-            this.heuristic.definition.signature_score_map == \
-            that.heuristic.definition.signature_score_map
-
-        result_heuristic_equality = heuristic_equality and \
-            this.heuristic.attack_ids == that.heuristic.attack_ids and \
+        result_heuristic_equality = this.heuristic.attack_ids == that.heuristic.attack_ids and \
             this.heuristic.frequency == that.heuristic.frequency and \
             this.heuristic.heur_id == that.heuristic.heur_id and \
             this.heuristic.score == that.heuristic.score and \
