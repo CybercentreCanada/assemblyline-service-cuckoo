@@ -1602,7 +1602,7 @@ class Cuckoo(ServiceBase):
                                       if all(item in image for item in [platform, arch])]
         return images_to_send_file_to
 
-    def _handle_specific_machine(self, kwargs: Dict[str, Any]) -> (bool, bool):
+    def _handle_specific_machine(self, kwargs: Dict[str, Any]) -> Tuple[bool, bool]:
         """
         This method handles if a specific machine was requested
         :param kwargs: The keyword arguments that will be sent to Cuckoo when submitting the file, detailing specifics
@@ -1642,7 +1642,7 @@ class Cuckoo(ServiceBase):
                 self.file_res.add_section(no_machine_sec)
         return machine_requested, machine_exists
 
-    def _handle_specific_platform(self, kwargs: Dict[str, Any]) -> (bool, Dict[str, List[str]]):
+    def _handle_specific_platform(self, kwargs: Dict[str, Any]) -> Tuple[bool, Dict[str, List[str]]]:
         """
         This method handles if a specific platform was requested
         :param kwargs: The keyword arguments that will be sent to Cuckoo when submitting the file, detailing specifics
@@ -1786,7 +1786,7 @@ class Cuckoo(ServiceBase):
                 if subsection.title_text in section_heur_map:
                     # If more than one subsection exists with the same title text, then there should be no heuristic
                     # associated with the second subsection, as this will artificially inflate the overall score
-                    subsection.heuristic = None
+                    subsection.set_heuristic(None)
                 else:
                     section_heur_map[subsection.title_text] = subsection.heuristic.heur_id
             if subsection.subsections:
