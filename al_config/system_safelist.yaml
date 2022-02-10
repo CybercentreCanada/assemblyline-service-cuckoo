@@ -296,6 +296,7 @@ regex:
   # Ubuntu
   - https?://ca\.archive\.ubuntu\.com(?:$|/.*)
   # Office
+  - https?://config\.edge\.skype\.com(?:$|/.*)
   - https?://schemas\.microsoft\.com(?:$|/.*)
   # Verisign
   - https?://(www|oscp|crl|logo|csc3-2010-(crl|aia))\.verisign\.com(?:$|/.*)
