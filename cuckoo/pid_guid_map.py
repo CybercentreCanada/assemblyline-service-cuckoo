@@ -1,5 +1,11 @@
+from logging import getLogger
 from typing import List, Dict, Any
 from uuid import UUID, uuid4
+
+from assemblyline.common import log as al_log
+
+al_log.init_logging('service.cuckoo.cuckoo_result')
+log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
 
 
 class Process:
@@ -149,7 +155,8 @@ class PidGuidMap:
                             if values["pid"] == pid and timestamp <= values["end_time"] and timestamp >= values["start_time"]]
 
         if not guids:
-            raise ValueError(f"{pid} was not assigned to a process in the table.")
+            log.warning(f"{pid} was not assigned to a process in the table.")
+            return ""
         elif len(guids) > 1:
             raise ValueError("Map is invalid.")
         else:
