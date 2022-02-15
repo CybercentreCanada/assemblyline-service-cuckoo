@@ -1515,7 +1515,7 @@ class Cuckoo(ServiceBase):
                 }
                 self.artifact_list.append(artifact)
                 self.log.debug(f"Adding extracted file for task {task_id}: {file_name}")
-        if len(image_section.body) > 0:
+        if image_section.body:
             parent_section.add_subsection(image_section)
 
     def _extract_hollowshunter(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
