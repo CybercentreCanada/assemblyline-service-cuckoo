@@ -128,8 +128,7 @@ class TestPidGuidMap:
         from cuckoo.pid_guid_map import PidGuidMap
         from uuid import UUID
         pgm = PidGuidMap()
-        with pytest.raises(ValueError):
-            pgm.get_guid_by_pid_and_time("blah", 0.0)
+        assert pgm.get_guid_by_pid_and_time("blah", 0.0) == ""
         pgm.add_process({"pid": 1, "start_time": 0.0, "end_time": 1.0,
                          "guid": "{12345678-1234-5678-1234-567812345678}"})
         assert pgm.get_guid_by_pid_and_time(1, 0.5) == str(UUID("{12345678-1234-5678-1234-567812345678}"))
