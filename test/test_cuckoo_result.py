@@ -230,29 +230,30 @@ class TestCuckooResult:
         "events, is_process_martian, correct_body",
         [([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           False,
-          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "pguid": "blah", "signatures": {}, "ppid": 1, "command_line": "blah", "process_pid": 0, "process_name": "blah", "children": [], "tree_id": "8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52"}]'),
+          [{'process_pid': 0, 'process_name': 'blah', 'command_line': 'blah', 'signatures': {}, 'children': [], 'network_events': []}]),
          ([{"pid": 0, "image": "blah", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           True,
-          '[{"pid": 0, "image": "blah", "timestamp": 1.0, "guid": "blah", "pguid": "blah", "signatures": {}, "ppid": 1, "command_line": "blah", "process_pid": 0, "process_name": "blah", "children": [], "tree_id": "8b7df143d91c716ecfa5fc1730022f6b421b05cedee8fd52b1fc65a96030ad52"}]'),
+          [{'process_pid': 0, 'process_name': 'blah', 'command_line': 'blah', 'signatures': {}, 'children': [], 'network_events': []}]),
          ([],
           False, None),
          ([{"pid": 0, "image": "C:\\Users\\buddy\\AppData\\Local\\Temp\\blah.exe", "command_line": "blah", "ppid": 1, "guid": "blah", "timestamp": 1.0, "pguid": "blah"}],
           False,
-          '[{"pid": 0, "image": "?usrtmp\\\\blah.exe", "timestamp": 1.0, "guid": "blah", "pguid": "blah", "signatures": {}, "ppid": 1, "command_line": "blah", "process_pid": 0, "process_name": "?usrtmp\\\\blah.exe", "children": [], "tree_id": "b39a28232192d3ac06b6195e383853f2ef24fa3b0e857d1a51eb12e4b338110d"}]'),
+          [{'process_pid': 0, 'process_name': '?usrtmp\\blah.exe', 'command_line': 'blah', 'signatures': {}, 'children': [], 'network_events': []}]),
          ]
     )
     def test_build_process_tree(events, is_process_martian, correct_body):
         from cuckoo.cuckoo_result import build_process_tree
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
-        correct_res_sec = ResultSection(title_text="Spawned Event Tree")
+        correct_res_sec = ResultSection(title_text="Spawned Process Tree")
         actual_res_sec = ResultSection("blah")
         if correct_body:
             correct_res_sec.set_body(correct_body, BODY_FORMAT.PROCESS_TREE)
+            build_process_tree(events, actual_res_sec, is_process_martian)
+            assert actual_res_sec.subsections[0].section_body.__dict__["_data"] == correct_body
             if is_process_martian:
                 correct_res_sec.set_heuristic(19)
                 correct_res_sec.heuristic.add_signature_id("process_martian", score=10)
-            build_process_tree(events, actual_res_sec, is_process_martian)
-            assert check_section_equality(actual_res_sec.subsections[0], correct_res_sec)
+                assert actual_res_sec.subsections[0].heuristic.__dict__ == correct_res_sec.heuristic.__dict__
         else:
             build_process_tree(events, actual_res_sec, is_process_martian)
             assert actual_res_sec.subsections == []
