@@ -32,7 +32,7 @@ from cuckoo.cuckoo_result import add_tag, ANALYSIS_ERRORS, generate_al_result, G
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
-HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)*\.(exe|shc|dll)$"
+HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
 ENCRYPTED_BUFFER_REGEX = "^\/tmp\/%s_[0-9]{1,}_encrypted_buffer_[0-9]{1,2}\.txt$"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
