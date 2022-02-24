@@ -32,7 +32,7 @@ from cuckoo.cuckoo_result import add_tag, ANALYSIS_ERRORS, generate_al_result, G
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
-HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*\.*[a-zA-Z0-9]+\.(exe|shc|dll)$"
+HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)*\.(exe|shc|dll)$"
 ENCRYPTED_BUFFER_REGEX = "^\/tmp\/%s_[0-9]{1,}_encrypted_buffer_[0-9]{1,2}\.txt$"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
@@ -83,6 +83,8 @@ ANALYSIS_FAILED = "analysis_failed"
 ANALYSIS_EXCEEDED_TIMEOUT = "analysis_exceeded_timeout"
 
 MACHINE_INFORMATION_SECTION_TITLE = 'Machine Information'
+
+PE_INDICATORS = [b"MZ", b"This program cannot be run in DOS mode"]
 
 
 class CuckooTimeoutException(Exception):
@@ -1541,6 +1543,15 @@ class Cuckoo(ServiceBase):
                 full_path = os.path.join(task_dir, path)
                 file_name = f"{task_id}_{path}"
                 tar_obj.extract(path, path=task_dir)
+                # Confirm that file is indeed a PE
+                if ".dll" in path or ".exe" in path:
+                    if os.path.exists(full_path):
+                        with open(full_path, "rb") as f:
+                            file_contents = f.read(256)
+                        if not any(PE_indicator in file_contents for PE_indicator in PE_INDICATORS):
+                            self.log.debug(f"{path} is not a valid PE. Will not upload.")
+                            os.remove(full_path)
+                            continue
                 artifact = {
                     "name": file_name,
                     "path": full_path,
