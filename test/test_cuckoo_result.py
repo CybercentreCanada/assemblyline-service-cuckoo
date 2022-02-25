@@ -222,7 +222,7 @@ class TestCuckooResult:
 
         convert_cuckoo_processes(actual_events, processes, safelist, pgm)
         for correct_event in correct_events:
-            correct_event["guid"] = str(UUID(correct_event["guid"]))
+            correct_event["guid"] = f"{{{str(UUID(correct_event['guid']))}}}"
         assert actual_events == correct_events
 
     @staticmethod
@@ -1265,4 +1265,9 @@ class TestCuckooResult:
             expected_pgm.add_process(pgm_proc)
         assert len(actual_pgm.processes) == len(expected_pgm.processes)
         for index, proc in enumerate(actual_pgm.processes):
+            if not proc == expected_pgm.processes[index]:
+                print()
+                print(proc.__dict__)
+                print(expected_pgm.processes[index].__dict__)
+                print()
             assert proc == expected_pgm.processes[index]
