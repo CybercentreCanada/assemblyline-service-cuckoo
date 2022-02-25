@@ -1664,8 +1664,8 @@ def add_processes_to_pgm(sysmon: List[Dict[str, Any]], pgm: PidGuidMap):
                 elif name in ["ProcessId", "SourceProcessId"]:
                     process["pid"] = int(text)
 
-        if process["guid"] and str(UUID(process["guid"])) in pgm.guid_pid_map.keys():
-            process_with_guid = next(p for p in pgm.processes if p.guid == str(UUID(process["guid"])))
+        if process["guid"] and f"{{{str(UUID(process['guid']))}}}" in pgm.guid_pid_map.keys():
+            process_with_guid = next(p for p in pgm.processes if p.guid == f"{{{str(UUID(process['guid']))}}}")
             if process_with_guid.start_time == float("-inf") and process["start_time"] != float("-inf"):
                 process_with_guid.start_time = process["start_time"]
             elif process_with_guid.end_time == float("inf") and process["end_time"] != float("inf"):
