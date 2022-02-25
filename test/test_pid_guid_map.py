@@ -10,7 +10,7 @@ class TestProcess:
         assert p.pid == 1
         assert p.start_time == 0.0
         assert p.end_time == 1.0
-        assert p.guid == str(UUID("{12345678-1234-5678-1234-567812345678}"))
+        assert p.guid == "{12345678-1234-5678-1234-567812345678}"
 
         with pytest.raises(ValueError):
             Process("a", 0.0, 1.0, "guid")
@@ -68,14 +68,14 @@ class TestPidGuidMap:
         # elif p.guid in guids and p.pid in pids:
         pgm.add_process({"pid": 2, "start_time": 0.0, "end_time": 1.0,
                         "guid": "{12345678-1234-5678-1234-567812345678}"})
-        with pytest.raises(ValueError):
-            pgm._validate_processes([{"pid": 2, "start_time": 0.0, "end_time": 1.0,
-                                      "guid": "{12345678-1234-5678-1234-567812345678}"}])
+        assert not len(pgm._validate_processes(
+            [{"pid": 2, "start_time": 0.0, "end_time": 1.0,
+              "guid": "{12345678-1234-5678-1234-567812345678}"}]))
 
         # elif p.guid in guids and p.pid not in pids:
-        with pytest.raises(ValueError):
-            pgm._validate_processes([{"pid": 3, "start_time": 0.0, "end_time": 1.0,
-                                      "guid": "{12345678-1234-5678-1234-567812345678}"}])
+        assert not len(
+            pgm._validate_processes(
+                [{"pid": 3, "start_time": 0.0, "end_time": 1.0, "guid": "{12345678-1234-5678-1234-567812345678}"}]))
 
         # elif p.guid not in guids and p.pid in pids:
         assert pgm._validate_processes([{"pid": 3, "start_time": 1.0, "end_time": 2.0,
@@ -96,8 +96,8 @@ class TestPidGuidMap:
         # Test where duplicate entry
         pgm.add_process({"pid": 1, "start_time": 1.0, "end_time": 2.0,
                         "guid": "{87654321-1234-5678-1234-567812345678}"})
-        with pytest.raises(ValueError):
-            pgm._handle_pid_match(p)
+        pgm._handle_pid_match(p)
+        assert len(pgm.processes) == 1
 
         # Test with valid start time
         p = Process(1, 2.0, 3.0, "{87654321-1234-5678-1234-567812345678}")
@@ -111,8 +111,8 @@ class TestPidGuidMap:
 
         # Test invalid entry
         p = Process(1, 0.0, 3.0, "{87654321-1234-5678-1234-567812345678}")
-        with pytest.raises(ValueError):
-            pgm._handle_pid_match(p)
+        pgm._handle_pid_match(p)
+        assert len(pgm.processes) == 3
 
     @staticmethod
     def test_add_process():
@@ -131,4 +131,4 @@ class TestPidGuidMap:
         assert pgm.get_guid_by_pid_and_time("blah", 0.0) == ""
         pgm.add_process({"pid": 1, "start_time": 0.0, "end_time": 1.0,
                          "guid": "{12345678-1234-5678-1234-567812345678}"})
-        assert pgm.get_guid_by_pid_and_time(1, 0.5) == str(UUID("{12345678-1234-5678-1234-567812345678}"))
+        assert pgm.get_guid_by_pid_and_time(1, 0.5) == "{12345678-1234-5678-1234-567812345678}"
