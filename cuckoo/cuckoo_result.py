@@ -159,14 +159,15 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
             process_behaviour(behaviour, events, safelist, pgm)
 
     if events:
-        build_process_tree(events, al_result, is_process_martian, signatures)
+        so = SandboxOntology(events=events, normalize_paths=True)
+        build_process_tree(so, al_result, is_process_martian, signatures)
 
     if network:
         process_network(network, al_result, validated_random_ip_range, routing, process_map, events, info["id"],
                         safelist)
 
-    if len(events) > 0:
-        process_all_events(al_result, file_ext, events)
+    if events:
+        process_all_events(al_result, file_ext, so)
 
     if curtain:
         process_curtain(curtain, al_result, process_map)
@@ -287,32 +288,30 @@ def convert_cuckoo_processes(events: List[Dict],
             events.append(ontology_process)
 
 
-def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
+def build_process_tree(so: SandboxOntology,
                        parent_result_section: Optional[ResultSection] = None, is_process_martian: bool = False,
                        signatures: Optional[List[Dict[str, Any]]] = None) -> None:
     """
     This method builds a process tree ResultSection
-    :param events: A list of events that occurred during the analysis of the task
+    :param so: An instance of the sandbox ontology class
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
     :param is_process_martian: A boolean flag that indicates if the is_process_martian signature was raised
     :param signatures: A list of signatures to be mapped to the processes
     :return: None
     """
-    if events is None:
-        events: List[Dict[str, Any]] = []
     if signatures is None:
         signatures: List[Dict[str, Any]] = []
-    if len(events) > 0:
-        so = SandboxOntology(events=events, normalize_paths=True)
-        process_tree = so.get_process_tree_with_signatures(signatures, SAFE_PROCESS_TREE_LEAF_HASHES.keys())
-        process_tree_section = ResultSection(title_text="Spawned Process Tree")
-        process_tree_section.set_body(json.dumps(process_tree), BODY_FORMAT.PROCESS_TREE)
-        if is_process_martian:
-            sig_name = "process_martian"
-            heur_id = get_category_id(sig_name)
-            process_tree_section.set_heuristic(heur_id)
-            # Let's keep this heuristic as informational
-            process_tree_section.heuristic.add_signature_id(sig_name, score=10)
+    process_tree = so.get_process_tree_with_signatures(signatures, SAFE_PROCESS_TREE_LEAF_HASHES.keys())
+    process_tree_section = ResultSection(title_text="Spawned Process Tree")
+    process_tree_section.set_body(json.dumps(process_tree), BODY_FORMAT.PROCESS_TREE)
+    if is_process_martian:
+        sig_name = "process_martian"
+        heur_id = get_category_id(sig_name)
+        process_tree_section.set_heuristic(heur_id)
+        # Let's keep this heuristic as informational
+        process_tree_section.heuristic.add_signature_id(sig_name, score=10)
+    # TODO: this must change for when events tree gets merged
+    if process_tree_section.body != '[]':
         parent_result_section.add_subsection(process_tree_section)
 
 
@@ -802,26 +801,25 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
 
 
 def process_all_events(
-        parent_result_section: ResultSection, file_ext: str, events: Optional[List[Dict]] = None) -> None:
+        parent_result_section: ResultSection, file_ext: str, so: SandboxOntology) -> None:
     """
     This method converts all events to a table that is sorted by timestamp
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
     :param file_ext: The file extension of the file to be submitted
-    :param events: A list of events that occurred during the analysis of the task
+    :param so: An instance of the sandbox ontology class
     :return: None
     """
-    if events is None:
-        events: List[Dict[str, Any]] = []
     # Each item in the events table will follow the structure below:
     # {
     #   "timestamp": timestamp,
     #   "process_name": process_name,
     #   "details": {}
     # }
-    so = SandboxOntology(events=events)
     events_section = ResultSection(title_text="Event Log")
     event_table: List[Dict[str, Any]] = []
-    for event in so.sorted_events:
+    nonsafelisted_events = so.get_non_safelisted_events(SAFE_PROCESS_TREE_LEAF_HASHES.keys())
+    print(nonsafelisted_events)
+    for event in nonsafelisted_events:
         if isinstance(event, NetworkEvent):
             event_table.append({
                 "timestamp": datetime.datetime.fromtimestamp(event.timestamp).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],

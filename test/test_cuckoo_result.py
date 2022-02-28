@@ -243,7 +243,9 @@ class TestCuckooResult:
     )
     def test_build_process_tree(events, is_process_martian, correct_body):
         from cuckoo.cuckoo_result import build_process_tree
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+        so = SandboxOntology(events, True)
         correct_res_sec = ResultSection(title_text="Spawned Process Tree")
         actual_res_sec = ResultSection("blah")
         if correct_body:
@@ -251,10 +253,10 @@ class TestCuckooResult:
             if is_process_martian:
                 correct_res_sec.set_heuristic(19)
                 correct_res_sec.heuristic.add_signature_id("process_martian", score=10)
-            build_process_tree(events, actual_res_sec, is_process_martian)
+            build_process_tree(so, actual_res_sec, is_process_martian)
             assert check_section_equality(actual_res_sec.subsections[0], correct_res_sec)
         else:
-            build_process_tree(events, actual_res_sec, is_process_martian)
+            build_process_tree(so, actual_res_sec, is_process_martian)
             assert actual_res_sec.subsections == []
 
     @staticmethod
@@ -782,6 +784,7 @@ class TestCuckooResult:
     @staticmethod
     def test_process_all_events():
         from cuckoo.cuckoo_result import process_all_events
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
 
         al_result = ResultSection("blah")
@@ -798,7 +801,11 @@ class TestCuckooResult:
             '[{"timestamp": "1970-01-01 00:00:01.000", "process_name": "blah (1)", "details": {"protocol": "blah", "domain": "blah", "dest_ip": "blah", "dest_port": 1}}, {"timestamp": "1970-01-01 00:00:02.000", "process_name": "blah (1)", "details": {"command_line": "blah"}}]',
             BODY_FORMAT.TABLE)
         file_ext = ".exe"
-        process_all_events(al_result, file_ext, events)
+        so = SandboxOntology(events, True)
+        SandboxOntology._create_tree_ids(so._convert_processes_dict_to_tree(so.event_dicts))
+        process_all_events(al_result, file_ext, so)
+        print(al_result.subsections[0].__dict__)
+        print(correct_result_section.__dict__)
         assert check_section_equality(al_result.subsections[0], correct_result_section)
 
     @staticmethod
@@ -1265,9 +1272,4 @@ class TestCuckooResult:
             expected_pgm.add_process(pgm_proc)
         assert len(actual_pgm.processes) == len(expected_pgm.processes)
         for index, proc in enumerate(actual_pgm.processes):
-            if not proc == expected_pgm.processes[index]:
-                print()
-                print(proc.__dict__)
-                print(expected_pgm.processes[index].__dict__)
-                print()
             assert proc == expected_pgm.processes[index]
