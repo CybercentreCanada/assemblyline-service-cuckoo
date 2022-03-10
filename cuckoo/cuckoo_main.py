@@ -758,12 +758,14 @@ class Cuckoo(ServiceBase):
             except requests.exceptions.Timeout:
                 self.log.error(f"{query_machines_url} timed out after {self.timeout}s while trying to query machines")
                 number_of_unavailable_hosts += 1
+                self.hosts.remove(host)
                 continue
             except requests.ConnectionError:
                 self.log.error(f"Unable to reach the Cuckoo nest ({host['ip']}) while trying to query machines. "
                                f"Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside "
                                f"of Assemblyline first before running the service.")
                 number_of_unavailable_hosts += 1
+                self.hosts.remove(host)
                 continue
             if resp.status_code != 200:
                 self.log.error(f"Failed to query machines for {host['ip']}:{host['port']}. "
