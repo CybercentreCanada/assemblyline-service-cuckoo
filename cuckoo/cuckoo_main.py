@@ -760,9 +760,11 @@ class Cuckoo(ServiceBase):
                 number_of_unavailable_hosts += 1
                 continue
             except requests.ConnectionError:
-                raise Exception(f"Unable to reach the Cuckoo nest ({host['ip']}) while trying to query machines. "
-                                f"Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside "
-                                f"of Assemblyline first before running the service.")
+                self.log.error(f"Unable to reach the Cuckoo nest ({host['ip']}) while trying to query machines. "
+                               f"Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside "
+                               f"of Assemblyline first before running the service.")
+                number_of_unavailable_hosts += 1
+                continue
             if resp.status_code != 200:
                 self.log.error(f"Failed to query machines for {host['ip']}:{host['port']}. "
                                f"Status code: {resp.status_code}")
