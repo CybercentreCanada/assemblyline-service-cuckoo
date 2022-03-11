@@ -19,7 +19,7 @@ from retrying import retry, RetryError
 
 from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
-# from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
+from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
 from assemblyline_v4_service.common.request import ServiceRequest
 from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection, ResultImageSection, ResultTextSection, ResultKeyValueSection
 
@@ -31,7 +31,6 @@ from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
 from cuckoo.cuckoo_result import add_tag, ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, is_safelisted, \
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
-from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
