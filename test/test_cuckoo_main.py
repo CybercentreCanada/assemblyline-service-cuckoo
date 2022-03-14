@@ -1805,7 +1805,7 @@ class TestCuckooMain:
           None),
          ("True", [{"machines": []}],
           (True, False),
-          'The requested machine \'True\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current machine options for this Cuckoo deployment include [].'),
+          'The requested machine \'True\' is currently unavailable.\nGeneral Information:\nAt the moment, the current machine options for this Cuckoo deployment include [].'),
          ("True", [{"machines": [{"name": "True"}]}],
           (True, True),
           None),
@@ -1844,7 +1844,7 @@ class TestCuckooMain:
     @pytest.mark.parametrize(
         "platform_requested, expected_return, expected_result_section",
         [("blah", (True, {"blah": []}),
-          'The requested platform \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current platform options for this Cuckoo deployment include [\'linux\', \'windows\'].'),
+          'The requested platform \'blah\' is currently unavailable.\nGeneral Information:\nAt the moment, the current platform options for this Cuckoo deployment include [\'linux\', \'windows\'].'),
          ("none", (False, {}),
           None),
          ("windows", (True, {'windows': ['blah']}),
@@ -1880,7 +1880,7 @@ class TestCuckooMain:
          ("blah", False, [],
           [],
           (True, {}),
-          'The requested image \'blah\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+          'The requested image \'blah\' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
          ("blah", True, [],
           [],
           (True, {"blah": ["blah"]}),
@@ -1888,11 +1888,11 @@ class TestCuckooMain:
          ("auto", False, [],
           [],
           (True, {}),
-          'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+          'The requested image \'auto\' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
          ("auto", False, ["blah"],
           [],
           (True, {}),
-          'The requested image \'auto\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
+          'The requested image \'auto\' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
          ("auto", True, ["blah"],
           [],
           (True, {"blah": ["blah"]}),
@@ -1904,7 +1904,7 @@ class TestCuckooMain:
          ("all", False, [],
           [],
           (True, {}),
-          'The requested image \'all\' is currently unavailable.\n\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'), ])
+          'The requested image \'all\' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'), ])
     def test_handle_specific_image(
             image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body,
             cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):

@@ -14,7 +14,7 @@ from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
 from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, URI_PATH
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, NetworkEvent, ProcessEvent
-from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection
+from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, ResultKeyValueSection, ResultTextSection, ResultTableSection, TableRow
 
 from cuckoo.pid_guid_map import PidGuidMap
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
@@ -105,8 +105,8 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
             'Routing': routing,
             'Cuckoo Version': info['version']
         }
-        info_res = ResultSection(title_text='Analysis Information')
-        info_res.set_body(json.dumps(body), BODY_FORMAT.KEY_VALUE)
+        info_res = ResultKeyValueSection('Analysis Information')
+        info_res.update_items(body)
         al_result.add_subsection(info_res)
 
     debug: Dict[str, Any] = api_report.get('debug', {})
@@ -150,7 +150,7 @@ def generate_al_result(api_report: Dict[str, Any], al_result: ResultSection, fil
                            len(behaviour.get("processes", [])),
                            len(behaviour.get("summary", []))]
         if not any(item > 0 for item in sample_executed):
-            noexec_res = ResultSection(title_text="Sample Did Not Execute")
+            noexec_res = ResultTextSection("Sample Did Not Execute")
             noexec_res.add_line(f"No program available to execute a file with the following "
                                 f"extension: {safe_str(file_ext)}")
             al_result.add_subsection(noexec_res)
@@ -185,7 +185,7 @@ def process_debug(debug: Dict[str, Any], parent_result_section: ResultSection) -
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
     :return: None
     """
-    error_res = ResultSection(ANALYSIS_ERRORS)
+    error_res = ResultTextSection(ANALYSIS_ERRORS)
     for error in debug['errors']:
         err_str = str(error)
         # TODO: what is the point of lower-casing it?
@@ -305,7 +305,7 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
     if len(events) > 0:
         so = SandboxOntology(events=events, normalize_paths=True)
         process_tree = so.get_process_tree_with_signatures(signatures, SAFE_PROCESS_TREE_LEAF_HASHES.keys())
-        process_tree_section = ResultSection(title_text="Spawned Process Tree")
+        process_tree_section = ResultSection("Spawned Process Tree")
         process_tree_section.set_body(json.dumps(process_tree), BODY_FORMAT.PROCESS_TREE)
         if is_process_martian:
             sig_name = "process_martian"
@@ -449,13 +449,13 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :return: None
     """
-    network_res = ResultSection(title_text="Network Activity")
+    network_res = ResultSection("Network Activity")
 
     # DNS
     dns_servers = network.get("dns_servers", [])
     dns_calls: List[Dict[str, Any]] = network.get("dns", [])
     resolved_ips: Dict[str, Dict[str, Any]] = _get_dns_map(dns_calls, process_map, routing)
-    dns_res_sec: Optional[ResultSection] = _get_dns_sec(resolved_ips)
+    dns_res_sec: Optional[ResultTableSection] = _get_dns_sec(resolved_ips)
 
     low_level_flows = {
         "udp": network.get("udp", []),
@@ -527,9 +527,9 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     req_table = _process_http_calls(http_level_flows, process_map, safelist)
 
     if len(req_table) > 0:
-        http_sec = ResultSection(title_text="Protocol: HTTP/HTTPS")
-        remote_file_access_sec = ResultSection(title_text="Access Remote File")
-        suspicious_user_agent_sec = ResultSection(title_text="Suspicious User Agent(s)")
+        http_sec = ResultTableSection("Protocol: HTTP/HTTPS")
+        remote_file_access_sec = ResultSection("Access Remote File")
+        suspicious_user_agent_sec = ResultTextSection("Suspicious User Agent(s)")
         sus_user_agents_used = []
         http_sec.set_heuristic(1002)
         for http_call in req_table:
@@ -569,11 +569,11 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             del http_call['user-agent']
             del http_call["host"]
             del http_call["method"]
-        http_sec.set_body(json.dumps(req_table), BODY_FORMAT.TABLE)
+        [http_sec.add_row(TableRow(**req)) for req in req_table]
         if remote_file_access_sec.heuristic:
             http_sec.add_subsection(remote_file_access_sec)
         if suspicious_user_agent_sec.heuristic:
-            suspicious_user_agent_sec.set_body(' | '.join(sus_user_agents_used))
+            suspicious_user_agent_sec.add_line(' | '.join(sus_user_agents_used))
             http_sec.add_subsection(suspicious_user_agent_sec)
         network_res.add_subsection(http_sec)
     else:
@@ -585,7 +585,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         parent_result_section.add_subsection(network_res)
 
 
-def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]]) -> ResultSection:
+def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]]) -> ResultTableSection:
     """
     This method creates the result section for DNS traffic
     :param resolved_ips: the mapping of resolved IPs and their corresponding domains
@@ -593,7 +593,7 @@ def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]]) -> ResultSection:
     """
     if len(resolved_ips.keys()) == 0:
         return None
-    dns_res_sec = ResultSection("Protocol: DNS")
+    dns_res_sec = ResultTableSection("Protocol: DNS")
     dns_res_sec.set_heuristic(1000)
     dns_body: List[Dict[str, str]] = []
     add_tag(dns_res_sec, "network.protocol", "dns")
@@ -607,7 +607,7 @@ def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]]) -> ResultSection:
             "ip": answer,
         }
         dns_body.append(dns_request)
-    dns_res_sec.set_body(json.dumps(dns_body), BODY_FORMAT.TABLE)
+    [dns_res_sec.add_row(TableRow(**dns)) for dns in dns_body]
     return dns_res_sec
 
 
@@ -689,7 +689,7 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
     network_flows_table: List[Dict[str, Any]] = []
 
     # This result section will contain all of the "flows" from src ip to dest ip
-    netflows_sec = ResultSection(title_text="TCP/UDP Network Traffic")
+    netflows_sec = ResultSection("TCP/UDP Network Traffic")
 
     for protocol, network_calls in flows.items():
         if len(network_calls) <= 0:
@@ -700,8 +700,8 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
             for network_call in network_calls:
                 if len(network_calls_made_to_unique_ips) >= UNIQUE_IP_LIMIT:
                     # BAIL! Too many to put in a table
-                    too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
-                    too_many_unique_ips_sec.set_body(f"The number of TCP calls displayed has been capped "
+                    too_many_unique_ips_sec = ResultTextSection("Too Many Unique IPs")
+                    too_many_unique_ips_sec.add_line(f"The number of TCP calls displayed has been capped "
                                                      f"at {UNIQUE_IP_LIMIT}. The full results can be found "
                                                      f"in the supplementary PCAP file included with the analysis.")
                     netflows_sec.add_subsection(too_many_unique_ips_sec)
@@ -819,7 +819,7 @@ def process_all_events(
     #   "details": {}
     # }
     so = SandboxOntology(events=events)
-    events_section = ResultSection(title_text="Event Log")
+    events_section = ResultTableSection("Event Log")
     event_table: List[Dict[str, Any]] = []
     for event in so.sorted_events:
         if isinstance(event, NetworkEvent):
@@ -846,7 +846,7 @@ def process_all_events(
             })
         else:
             raise ValueError(f"{event.convert_event_to_dict()} is not of type NetworkEvent or ProcessEvent.")
-    events_section.set_body(json.dumps(event_table), BODY_FORMAT.TABLE)
+    [events_section.add_row(TableRow(**event)) for event in event_table]
     parent_result_section.add_subsection(events_section)
 
 
@@ -862,7 +862,7 @@ def process_curtain(
     :return: None
     """
     curtain_body: List[Dict[str, Any]] = []
-    curtain_res = ResultSection(title_text="PowerShell Activity")
+    curtain_res = ResultTableSection("PowerShell Activity")
     for pid in curtain.keys():
         process_name = process_map[int(pid)]["name"] if process_map.get(int(pid)) else "powershell.exe"
         for event in curtain[pid]["events"]:
@@ -878,7 +878,7 @@ def process_curtain(
                 curtain_body.append(curtain_item)
         add_tag(curtain_res, "file.powershell.cmdlet", [behaviour for behaviour in curtain[pid]["behaviors"]])
     if len(curtain_body) > 0:
-        curtain_res.set_body(json.dumps(curtain_body), BODY_FORMAT.TABLE)
+        [curtain_res.add_row(TableRow(**cur)) for cur in curtain_body]
         parent_result_section.add_subsection(curtain_res)
 
 
@@ -1054,9 +1054,9 @@ def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: 
     """
     # TODO: obviously a huge work in progress
     hollowshunter_body: List[Any] = []
-    hollowshunter_res = ResultSection(title_text="HollowsHunter Analysis")
+    hollowshunter_res = ResultTableSection("HollowsHunter Analysis")
     if len(hollowshunter_body) > 0:
-        hollowshunter_res.set_body(json.dumps(hollowshunter_body), BODY_FORMAT.TABLE)
+        [hollowshunter_res.add_row(TableRow(**hh)) for hh in hollowshunter_body]
         parent_result_section.add_subsection(hollowshunter_res)
 
 
@@ -1069,7 +1069,7 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
     :param file_ext: The file extension of the file to be submitted
     :return:
     """
-    buffer_res = ResultSection(title_text="Decrypted Buffers")
+    buffer_res = ResultTableSection("Decrypted Buffers")
     buffer_body = []
 
     for process in process_map:
@@ -1088,7 +1088,7 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
             if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
                 buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
     if len(buffer_body) > 0:
-        buffer_res.set_body(json.dumps(buffer_body), BODY_FORMAT.TABLE)
+        [buffer_res.add_row(TableRow(**buffer)) for buffer in buffer_body]
         parent_result_section.add_subsection(buffer_res)
 
 
@@ -1256,17 +1256,16 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
     return signature_is_a_false_positive
 
 
-def _create_signature_result_section(name: str, signature: Dict[str, Any], translated_score: int) -> ResultSection:
+def _create_signature_result_section(name: str, signature: Dict[str, Any], translated_score: int) -> ResultTextSection:
     """
-    This method creates a ResultSection for the given signature
+    This method creates a ResultTextSection for the given signature
     :param name: The name of the signature
     :param signature: The details of the signature
     :param translated_score: The Assemblyline-adapted score of the signature
-    :return: A ResultSection containing details about the signature
+    :return: A ResultTextSection containing details about the signature
     """
-    title = f"Signature: {name}"
-    description = signature.get('description', 'No description for signature.')
-    sig_res = ResultSection(title_text=title, body=description)
+    sig_res = ResultTextSection(f"Signature: {name}")
+    sig_res.add_line(signature.get('description', 'No description for signature.'))
 
     # Setting up the heuristic for each signature
     sig_id = get_category_id(name)
@@ -1322,7 +1321,7 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
     """
     buffer_count = 0
     buffers = set()
-    encrypted_buffer_result_section = ResultSection("Placeholder")
+    encrypted_buffer_result_section = ResultTextSection("Placeholder")
     for pid, process_details in process_map.items():
         for network_call in process_details["network_calls"]:
             for api_call in BUFFER_API_CALLS:
@@ -1347,12 +1346,12 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
 
 def _tag_and_describe_generic_signature(
         signature_name: str, mark: Dict[str, Any],
-        sig_res: ResultSection, inetsim_network: IPv4Network, safelist: Dict[str, Dict[str, List[str]]]) -> None:
+        sig_res: ResultTextSection, inetsim_network: IPv4Network, safelist: Dict[str, Dict[str, List[str]]]) -> None:
     """
     This method adds the appropriate tags and descriptions for "generic" signatures
     :param signature_name: The name of the signature
     :param mark: The indicator that Cuckoo has returned for why the signature has been raised
-    :param sig_res: A ResultSection containing details about the signature
+    :param sig_res: A ResultTextSection containing details about the signature
     :param inetsim_network: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :return: None
@@ -1385,14 +1384,14 @@ def _tag_and_describe_generic_signature(
                         sig_res.add_line(f'\tIOC: {safe_str(mark[item])}')
 
 
-def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultSection,
+def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultTextSection,
                                     inetsim_network: IPv4Network, process_map: Dict[int, Dict[str, Any]],
                                     file_ext: str, safelist: Dict[str, Dict[str, List[str]]]) -> None:
     """
     This method adds the appropriate tags and descriptions for "ioc" signatures
     :param signature_name: The name of the signature
     :param mark: The indicator that Cuckoo has returned for why the signature has been raised
-    :param sig_res: A ResultSection containing details about the signature
+    :param sig_res: A ResultTextSection containing details about the signature
     :param inetsim_network: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param file_ext: The file extension of the file to be submitted
@@ -1433,13 +1432,13 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
         _extract_iocs_from_text_blob(ioc, sig_res, file_ext)
 
 
-def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultSection,
+def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultTextSection,
                                      process_map: Dict[int, Dict[str, Any]]) -> None:
     """
     This method adds the appropriate tags and descriptions for "call" signatures
     :param signature_name: The name of the signature
     :param mark: The indicator that Cuckoo has returned for why the signature has been raised
-    :param sig_res: A ResultSection containing details about the signature
+    :param sig_res: A ResultTextSection containing details about the signature
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :return: None
     """
@@ -1473,7 +1472,7 @@ def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netfl
     :param unique_netflows: Network flows observed during Cuckoo analysis
     :return: None
     """
-    non_http_traffic_result_section = ResultSection("Non-HTTP Traffic Over HTTP Ports")
+    non_http_traffic_result_section = ResultTableSection("Non-HTTP Traffic Over HTTP Ports")
     non_http_list: List[Dict[str, Any]] = []
     # If there was no HTTP/HTTPS calls made, then confirm that there was no suspicious
     for netflow in unique_netflows:
@@ -1484,7 +1483,7 @@ def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netfl
             add_tag(non_http_traffic_result_section, "network.port", netflow["dest_port"])
     if len(non_http_list) > 0:
         non_http_traffic_result_section.set_heuristic(1005)
-        non_http_traffic_result_section.set_body(json.dumps(non_http_list), BODY_FORMAT.TABLE)
+        [non_http_traffic_result_section.add_row(TableRow(**non_http)) for non_http in non_http_list]
         network_res.add_subsection(non_http_traffic_result_section)
 
 
