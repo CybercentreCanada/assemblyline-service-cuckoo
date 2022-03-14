@@ -21,7 +21,7 @@ from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
 from assemblyline_v4_service.common.request import ServiceRequest
-from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection, ResultImageSection
+from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection, ResultImageSection, ResultTextSection, ResultKeyValueSection
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
@@ -460,11 +460,11 @@ class Cuckoo(ServiceBase):
 
         if status == ANALYSIS_EXCEEDED_TIMEOUT:
             # Add a subsection detailing what's happening and then moving on
-            task_timeout_sec = ResultSection("Assemblyline Task Timeout Exceeded.",
-                                             body=f"The Cuckoo task {cuckoo_task.id} took longer than the "
-                                                  f"Assemblyline's task timeout would allow.\nThis is usually due to "
-                                                  f"an issue on Cuckoo's machinery end. Contact the Cuckoo "
-                                                  f"administrator for details.")
+            task_timeout_sec = ResultTextSection("Assemblyline Task Timeout Exceeded.")
+            task_timeout_sec.add_line(
+                f"The Cuckoo task {cuckoo_task.id} took longer than the Assemblyline's task timeout would allow.")
+            task_timeout_sec.add_line(
+                "This is usually due to an issue on Cuckoo's machinery end. Contact the Cuckoo administrator for details.")
             parent_section.add_subsection(task_timeout_sec)
             cuckoo_task.id = None
             raise AnalysisTimeoutExceeded()
@@ -475,9 +475,9 @@ class Cuckoo(ServiceBase):
             raise RecoverableError(err_msg)
         elif status == ANALYSIS_FAILED:
             # Add a subsection detailing what's happening and then moving on
-            analysis_failed_sec = ResultSection("Cuckoo Analysis Failed.",
-                                                body=f"The analysis of Cuckoo task {cuckoo_task.id} has failed. "
-                                                     f"Contact the Cuckoo administrator for details.")
+            analysis_failed_sec = ResultTextSection("Cuckoo Analysis Failed.")
+            analysis_failed_sec.add_line(
+                f"The analysis of Cuckoo task {cuckoo_task.id} has failed. Contact the Cuckoo administrator for details.")
             parent_section.add_subsection(analysis_failed_sec)
             raise AnalysisFailed()
 
@@ -547,7 +547,7 @@ class Cuckoo(ServiceBase):
         status = task_info["status"]
         if "fail" in status:
             self.log.error(f"Analysis has failed for task {cuckoo_task.id} due to {task_info['errors']}.")
-            analysis_errors_sec = ResultSection(ANALYSIS_ERRORS)
+            analysis_errors_sec = ResultTextSection(ANALYSIS_ERRORS)
             analysis_errors_sec.add_lines(task_info["errors"])
             parent_section.add_subsection(analysis_errors_sec)
             return ANALYSIS_FAILED
@@ -927,19 +927,19 @@ class Cuckoo(ServiceBase):
         for tag in machine.get('tags', []):
             body['Tags'].append(safe_str(tag).replace('_', ' '))
 
-        machine_section = ResultSection(title_text=MACHINE_INFORMATION_SECTION_TITLE)
-        machine_section.set_body(json.dumps(body), BODY_FORMAT.KEY_VALUE)
+        machine_section = ResultKeyValueSection(MACHINE_INFORMATION_SECTION_TITLE)
+        machine_section.update_items(body)
 
         self._add_operating_system_tags(machine_name, platform, machine_section)
         parent_section.add_subsection(machine_section)
 
     @staticmethod
-    def _add_operating_system_tags(machine_name: str, platform: str, machine_section: ResultSection) -> None:
+    def _add_operating_system_tags(machine_name: str, platform: str, machine_section: ResultKeyValueSection) -> None:
         """
-        This method adds tags to the ResultSection related to the operating system of the machine that a task was ran on
+        This method adds tags to the ResultKeyValueSection related to the operating system of the machine that a task was ran on
         :param machine_name: The name of the machine that the task was ran on
         :param platform: The platform of the machine that the task was ran on
-        :param machine_section: The ResultSection containing details about the machine
+        :param machine_section: The ResultKeyValueSection containing details about the machine
         :return: None
         """
         if platform:
@@ -1224,11 +1224,9 @@ class Cuckoo(ServiceBase):
             f"Trying to run DLL with following function(s): {'|'.join(exports_available[:max_dll_exports])}")
 
         if len(exports_available) > 0:
-            dll_multi_section = ResultSection(
-                title_text="Executed Multiple DLL Exports",
-                body=f"The following exports were executed: "
-                     f"{', '.join(exports_available[:max_dll_exports])}"
-            )
+            dll_multi_section = ResultTextSection("Executed Multiple DLL Exports")
+            dll_multi_section.add_line(
+                f"The following exports were executed: {', '.join(exports_available[:max_dll_exports])}")
             remaining_exports = len(exports_available) - max_dll_exports
             if remaining_exports > 0:
                 available_exports_str = ",".join(exports_available[max_dll_exports:])
@@ -1295,8 +1293,9 @@ class Cuckoo(ServiceBase):
             report_json_path = self._add_json_as_supplementary_file(tar_obj, cuckoo_task)
         except MissingCuckooReportException:
             report_json_path = None
-            parent_section.add_subsection(ResultSection("The Cuckoo JSON Report Is Missing!",
-                                                        body="Please alert your Cuckoo administrators."))
+            no_json_res_sec = ResultTextSection("The Cuckoo JSON Report Is Missing!")
+            no_json_res_sec.add_line("Please alert your Cuckoo administrators.")
+            parent_section.add_subsection(no_json_res_sec)
         if report_json_path:
             self._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
 
@@ -1650,10 +1649,11 @@ class Cuckoo(ServiceBase):
                 machine_exists = True
                 kwargs["machine"] = specific_machine
             else:
-                no_machine_sec = ResultSection(title_text='Requested Machine Does Not Exist')
-                no_machine_sec.set_body(f"The requested machine '{specific_machine}' is currently unavailable.\n\n"
-                                        f"General Information:\nAt the moment, the current machine options for this "
-                                        f"Cuckoo deployment include {machine_names}.")
+                no_machine_sec = ResultTextSection('Requested Machine Does Not Exist')
+                no_machine_sec.add_line(f"The requested machine '{specific_machine}' is currently unavailable.")
+                no_machine_sec.add_line("General Information:")
+                no_machine_sec.add_line(
+                    f"At the moment, the current machine options for this Cuckoo deployment include {machine_names}.")
                 self.file_res.add_section(no_machine_sec)
         return machine_requested, machine_exists
 
@@ -1685,9 +1685,10 @@ class Cuckoo(ServiceBase):
 
         if platform_requested and not hosts_with_platform[specific_platform]:
             no_platform_sec = ResultSection(title_text='Requested Platform Does Not Exist')
-            no_platform_sec.set_body(f"The requested platform '{specific_platform}' is currently unavailable.\n\n"
-                                     f"General Information:\nAt the moment, the current platform options for this "
-                                     f"Cuckoo deployment include {sorted(machine_platform_set)}.")
+            no_platform_sec.add_line(f"The requested platform '{specific_platform}' is currently unavailable.")
+            no_platform_sec.add_line("General Information:")
+            no_platform_sec.add_line(
+                f"At the moment, the current platform options for this Cuckoo deployment include {sorted(machine_platform_set)}.")
             self.file_res.add_section(no_platform_sec)
         else:
             kwargs["platform"] = specific_platform
@@ -1721,10 +1722,11 @@ class Cuckoo(ServiceBase):
             if not relevant_images:
                 all_machines = [machine for host in self.hosts for machine in host["machines"]]
                 available_images = self._get_available_images(all_machines, self.allowed_images)
-                no_image_sec = ResultSection(title_text='Requested Image Does Not Exist')
-                no_image_sec.set_body(f"The requested image '{specific_image}' is currently unavailable.\n\n"
-                                      f"General Information:\nAt the moment, the current image options for this "
-                                      f"Cuckoo deployment include {available_images}.")
+                no_image_sec = ResultSection('Requested Image Does Not Exist')
+                no_image_sec.add_line(f"The requested image '{specific_image}' is currently unavailable.")
+                no_image_sec.add_line("General Information:")
+                no_image_sec.add_line(
+                    f"At the moment, the current image options for this Cuckoo deployment include {available_images}.")
                 self.file_res.add_section(no_image_sec)
         return image_requested, relevant_images
 
@@ -1780,11 +1782,11 @@ class Cuckoo(ServiceBase):
             requested_timeout *= 2
         service_timeout = int(self.service_attributes["timeout"])
         if requested_timeout > service_timeout:
-            invalid_timeout_res_sec = ResultSection("Invalid Analysis Timeout Requested",
-                                                    body=f"The analysis timeout requested was {requested_timeout}, "
-                                                         f"which exceeds the time that Assemblyline will run the "
-                                                         f"service ({service_timeout}). Choose an analysis timeout "
-                                                         f"value < {service_timeout} and submit the file again.")
+            invalid_timeout_res_sec = ResultTextSection("Invalid Analysis Timeout Requested")
+            invalid_timeout_res_sec.add_line(
+                f"The analysis timeout requested was {requested_timeout}, which exceeds the time that Assemblyline "
+                f"will run the service ({service_timeout}). Choose an analysis timeout value < {service_timeout} and "
+                "submit the file again.")
             parent_section.add_subsection(invalid_timeout_res_sec)
             return True
         return False
