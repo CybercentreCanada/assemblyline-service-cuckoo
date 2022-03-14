@@ -1076,7 +1076,6 @@ class TestCuckooResult:
              'UserAgent': 'Microsoft-CryptoAPI/10.0', 'Host': 'blah.blah.com'})])
     def test_handle_http_headers(header_string, expected_header_dict):
         from cuckoo.cuckoo_result import _handle_http_headers
-        print(_handle_http_headers(header_string))
         assert _handle_http_headers(header_string) == expected_header_dict
 
     @staticmethod
