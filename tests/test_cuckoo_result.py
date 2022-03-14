@@ -219,7 +219,8 @@ class TestCuckooResult:
                                {"pid": 0, "start_time": 1.0, "end_time": float("inf"),
                                 "guid": "{12345678-1234-5678-1234-567812345678}", "ppid": 1, "image": "blah",
                                 "command_line": "blah", "pguid": None, "pimage": None, "pcommand_line": None,
-                                "tree_id": None, "tag": None}),
+                                "tree_id": None, "tag": None, "ptag": None, "rich_id": None, "integrity_level": None,
+                                "image_hash": None, "original_file_name": None}),
                               ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1,
                                  "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
                                {}),
@@ -895,50 +896,50 @@ class TestCuckooResult:
             ([], {}, "", {}),
             ([{"answers": []}], {}, "", {}),
             ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "", {
-             'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+             'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None, "type": "dns_type"}}),
             ([{"answers": [{"data": "answer"}], "request": "request", "type": "dns_type"}], {}, "INetSim", {
-             'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+             'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None, "type": "dns_type"}}),
             ([{"answers": [{"data": "answer"}], "request": "request", "type": "PTR"}], {}, "INetSim", {}),
             ([{"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa", "type": "PTR"}],
              {}, "Internet", {'10.10.10.10': {'domain': 'answer'}}),
             ([{"answers": [{"data": "10.10.10.10"}], "request": "answer", "type": "A"}, {"answers": [{"data": "answer"}], "request": "10.10.10.10.in-addr.arpa",
-             "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+             "type": "PTR"}], {}, "Internet", {'10.10.10.10': {'domain': 'answer', "guid": None, "process_id": None, "process_name": None, "time": None, "type": "A"}}),
             ([{"answers": [{"data": "answer"}], "request": "ya:ba:da:ba:do:oo.ip6.arpa", "type": "PTR"}], {}, "Internet", {}),
             ([{"answers": [{"data": "answer"}],
                "request": "request", "type": "dns_type"}],
              {1: {"network_calls": [{"blah": {"hostname": "blah"}}]}},
              "",
-             {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+             {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None, "type": "dns_type"}}),
             ([{"answers": [{"data": "answer"}],
                "request": "request", "type": "dns_type"}],
              {1: {"name": "blah", "network_calls": [{"blah": {"hostname": "request"}}]}},
              "",
-             {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None}}),
+             {'answer': {'domain': 'request', "guid": None, "process_id": None, "process_name": None, "time": None, "type": "dns_type"}}),
             ([{"answers": [{"data": "answer"}],
                "request": "request", "type": "dns_type"}],
              {1: {"name": "blah", "network_calls": [{"getaddrinfo": {"hostname": "request"}}]}},
              "",
-             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, "type": "dns_type"}}),
             ([{"answers": [{"data": "answer"}],
                "request": "request", "type": "dns_type"}],
              {1: {"name": "blah", "network_calls": [{"InternetConnectW": {"hostname": "request"}}]}},
              "",
-             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, "type": "dns_type"}}),
             ([{"answers": [{"data": "answer"}],
                "request": "request", "type": "dns_type"}],
              {1: {"name": "blah", "network_calls": [{"InternetConnectA": {"hostname": "request"}}]}},
              "",
-             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, "type": "dns_type"}}),
             ([{"answers": [{"data": "answer"}],
                "request": "request", "type": "dns_type"}],
              {1: {"name": "blah", "network_calls": [{"GetAddrInfoW": {"hostname": "request"}}]}},
              "",
-             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, "type": "dns_type"}}),
             ([{"answers": [{"data": "answer"}],
                "request": "request", "type": "dns_type"}],
              {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}},
              "",
-             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None}}),
+             {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, "type": "dns_type"}}),
             ([{"answers": []}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {}),
         ]
     )
@@ -1013,15 +1014,15 @@ class TestCuckooResult:
             ({}, {}, []),
             ({}, {"http": [], "https": [], "http_ex": [], "https_ex": []}, []),
             ({}, {"http": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [
-             {'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'http', 'request': 'blah', 'uri': 'blah', 'user-agent': None}]),
+             {'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'http', 'request_headers': 'blah', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
             ({}, {"http": [], "https": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "http_ex": [], "https_ex": []}, [
-             {'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'https', 'request': 'blah', 'uri': 'blah', 'user-agent': None}]),
+             {'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'https', 'request_headers': 'blah', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
             ({}, {"http": [], "https": [], "http_ex": [{"host": "blah", "request": "blah", "dport": "blah", "uri": "blah", "protocol": "http", "method": "blah"}], "https_ex": []}, [
-             {'host': 'blah', 'method': 'blah', 'path': '', 'port': 'blah', 'process_name': None, 'protocol': 'http', 'request': 'blah', 'uri': 'http://blah', 'user-agent': None}]),
+             {'host': 'blah', 'method': 'blah', 'path': '', 'port': 'blah', 'process_name': None, 'protocol': 'http', 'request_headers': 'blah', 'uri': 'http://blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
             ({}, {"http": [], "https": [], "http_ex": [{"host": "nope", "request": "blah", "dport": "blah", "uri": "blah", "protocol": "http", "method": "blah"}], "https_ex": []}, [
-             {'host': 'nope', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'http', 'request': 'blah', 'uri': 'http://nopeblah', 'user-agent': None}]),
+             {'host': 'nope', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'http', 'request_headers': 'blah', 'uri': 'http://nopeblah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
             ({}, {"http": [], "https": [], "http_ex": [], "https_ex": [{"host": "nope", "request": "blah", "dport": "blah", "uri": "blah", "protocol": "https", "method": "blah"}]}, [
-             {'host': 'nope', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'https', 'request': 'blah', 'uri': 'https://nopeblah', 'user-agent': None}]),
+             {'host': 'nope', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'https', 'request_headers': 'blah', 'uri': 'https://nopeblah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
             ({}, {"http": [{"host": "192.168.0.1", "path": "blah", "data": "blah", "port": "blah",
              "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, []),
             ({}, {"http": [{"host": "something.adobe.com", "path": "blah", "data": "blah", "port": "blah",
@@ -1038,15 +1039,18 @@ class TestCuckooResult:
                     "http_ex": [],
                     "https_ex": []},
                 [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None,
-                  'protocol': 'http', 'request': 'blah', 'uri': 'blah', 'user-agent': None}]),
+                  'protocol': 'http', 'request_headers': 'blah', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
             ({1: {"network_calls": [{"send": {"service": 3}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [
-            ], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'blah', 'uri': 'blah', 'user-agent': None}]),
+            ], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request_headers': 'blah', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
             ({1: {"network_calls": [{"InternetConnectW": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [
-            ], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'check me', 'uri': 'blah', 'user-agent': None}]),
+            ], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request_headers': 'check me', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
             ({1: {"network_calls": [{"InternetConnectA": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [
-            ], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'check me', 'uri': 'blah', 'user-agent': None}]),
+            ], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request_headers': 'check me', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
             ({1: {"network_calls": [{"URLDownloadToFileW": {"url": "bad.evil"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "bad.evil", "method": "blah"}], "https": [
-            ], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request': 'check me', 'uri': 'bad.evil', 'user-agent': None}]),
+            ], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request_headers': 'check me', 'uri': 'bad.evil', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+            ({}, {"http": [], "https": [], "http_ex": [], "https_ex": [{"host": "nope", "req": {"path": "blahblah/network/blahblah"}, "resp": {"path": "blahblah/network/blahblah"}, "dport": "blah", "uri": "blah", "protocol": "https", "method": "blah", "sport": 123, "dst": "blah", "src": "blah", "response": "blah"}]}, [
+             {'host': 'nope', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'https', 'request_headers': 'blah', 'uri': 'https://nopeblah', 'user-agent': None, "sport": 123, "dst": "blah", "src": "blah", "response_headers": "blah", "request_body_path": "network/blahblah", "response_body_path": "network/blahblah"}]),
+
         ]
     )
     def test_process_http_calls(process_map, http_level_flows, expected_req_table):
@@ -1057,6 +1061,23 @@ class TestCuckooResult:
              "network.dynamic.domain": [".*\.adobe\.com$"],
              "network.dynamic.uri": ["(?:ftp|http)s?://localhost(?:$|/.*)"]}}
         assert _process_http_calls(http_level_flows, process_map, safelist) == expected_req_table
+
+    @staticmethod
+    @pytest.mark.parametrize(
+        "header_string, expected_header_dict",
+        [("", {}),
+         (None, {}),
+         ("GET /blah/blah/blah.doc HTTP/1.1", {}),
+         ("GET /blah/blah/blah.doc HTTP/1.1\r\n", {}),
+         ("GET /blah/blah/blah.doc HTTP/1.1\r\nblah", {}),
+         (
+            "GET /blah/blah/blah.doc HTTP/1.1\r\nConnection: Keep-Alive\r\nAccept: */*\r\nIf-Modified-Since: Sat, 01 Jul 2022 00:00:00 GMT\r\nUser-Agent: Microsoft-CryptoAPI/10.0\r\nHost: blah.blah.com",
+            {'Connection': 'Keep-Alive', 'Accept': '*/*', 'IfModifiedSince': 'Sat, 01 Jul 2022 00:00:00 GMT',
+             'UserAgent': 'Microsoft-CryptoAPI/10.0', 'Host': 'blah.blah.com'})])
+    def test_handle_http_headers(header_string, expected_header_dict):
+        from cuckoo.cuckoo_result import _handle_http_headers
+        print(_handle_http_headers(header_string))
+        assert _handle_http_headers(header_string) == expected_header_dict
 
     @staticmethod
     def test_write_encrypted_buffers_to_file():
