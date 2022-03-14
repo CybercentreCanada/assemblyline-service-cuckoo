@@ -515,7 +515,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             del network_flow["timestamp"]
 
     for answer, request in resolved_ips.items():
-        nd = so.create_network_dns(domain=request["domain"], resolved_ips=[answer])
+        nd = so.create_network_dns(domain=request["domain"], resolved_ips=[answer], lookup_type=request["type"])
         nd.update_connection_details(
             destination_ip=dns_servers[0],
             destination_port=53, transport_layer_protocol="udp", direction="outbound")
@@ -563,7 +563,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             if path not in SKIPPED_PATHS:
                 _ = add_tag(http_sec, "network.dynamic.domain", host)
                 _ = add_tag(http_sec, "network.dynamic.uri", http_call["uri"])
-                nh.update(uri=http_call["uri"])
+                nh.update(request_uri=http_call["uri"])
                 _ = add_tag(http_sec, "network.dynamic.uri_path", path)
                 # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
                 if http_call["method"] == "GET":
@@ -571,43 +571,48 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                     if len(split_path) > 1 and re.search(r'[^\\]*\.(\w+)$', split_path[-1]):
                         if add_tag(remote_file_access_sec, "network.dynamic.uri", http_call["uri"]):
                             remote_file_access_sec.add_line(f"\t{http_call['uri']}")
-                            nh.update(uri=http_call["uri"])
+                            nh.update(request_uri=http_call["uri"])
                         if not remote_file_access_sec.heuristic:
                             remote_file_access_sec.set_heuristic(1003)
             if any((http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
-                   or sus_user_agent in http_call["request"]
+                   or sus_user_agent in http_call["request_headers"]
                    for sus_user_agent in SUSPICIOUS_USER_AGENTS):
                 if suspicious_user_agent_sec.heuristic is None:
                     suspicious_user_agent_sec.set_heuristic(1007)
                 sus_user_agent_used = next((sus_user_agent for sus_user_agent in SUSPICIOUS_USER_AGENTS
                                             if (http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
-                                            or sus_user_agent in http_call["request"]), None)
+                                            or sus_user_agent in http_call["request_headers"]), None)
                 if sus_user_agent_used not in sus_user_agents_used:
                     _ = add_tag(suspicious_user_agent_sec, "network.user_agent", sus_user_agent_used)
                     suspicious_user_agent_sec.add_line(f"\t{sus_user_agent_used}")
                     sus_user_agents_used.append(sus_user_agent_used)
-            nh.update(request_method=http_call["method"])
-            headers = http_call["request"].split("\r\n")[1:]
-            request_headers = {}
-            for header_pair in headers:
-                if not header_pair:
-                    continue
-                values = header_pair.split(": ")
-                if len(values) == 2:
-                    header, value = values
-                    request_headers[header.replace("-", "")] = value
-            nh.update(request_headers=request_headers)
+            request_headers = _handle_http_headers(http_call["request_headers"])
+            response_headers = _handle_http_headers(http_call["response_headers"])
+            nh.update(
+                request_method=http_call["method"],
+                request_headers=request_headers, response_headers=response_headers,
+                request_body_path=http_call["request_body_path"],
+                response_body_path=http_call["response_body_path"])
             nh.update_connection_details(
+                source_ip=http_call["src"],
+                source_port=http_call["sport"],
+                destination_ip=http_call["dst"],
                 destination_port=http_call["port"],
                 direction="outbound", transport_layer_protocol="tcp")
             so.add_network_http(nh)
-            # now remove path, uri, port, user-agent from the final output
+            # now remove keys from the final output
             del http_call['path']
             del http_call['uri']
             del http_call['port']
             del http_call['user-agent']
             del http_call["host"]
             del http_call["method"]
+            del http_call["sport"]
+            del http_call["src"]
+            del http_call["dst"]
+            del http_call["response_headers"]
+            del http_call["request_body_path"]
+            del http_call["response_body_path"]
         [http_sec.add_row(TableRow(**req)) for req in req_table]
         if remote_file_access_sec.heuristic:
             http_sec.add_subsection(remote_file_access_sec)
@@ -697,6 +702,7 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
                     "process_name": dns_call.get("image"),
                     "time": dns_call.get("time"),
                     "guid": dns_call.get("guid"),
+                    "type": dns_type,
                 }
     # now map process_name to the dns_call
     for process, process_details in process_map.items():
@@ -817,27 +823,62 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                     uri, ["network.dynamic.uri"],
                     safelist):
                 continue
+
+            request_body_path = http_call.get("req", {}).get("path")
+            response_body_path = http_call.get("resp", {}).get("path")
+
+            if request_body_path:
+                request_body_path = request_body_path[request_body_path.index("network/"):]
+            if response_body_path:
+                response_body_path = response_body_path[response_body_path.index("network/"):]
+
             req = {
                 "protocol": proto,
                 "host": host,  # Note: will be removed, we just need it for tagging
                 "port": port,  # Note: will be removed, we just need it for tagging
                 "path": path,  # Note: will be removed, we just need it for tagging
                 "user-agent": http_call.get("user-agent"),  # Note: will be removed, we just need it for tagging
-                "request": request,
+                "request_headers": request,
                 "process_name": None,
                 "uri": uri,  # Note: will be removed, we just need it for tagging
-                "method": http_call["method"]  # Note: will be removed, need it to check if a remote file was accessed
+                "method": http_call["method"],  # Note: will be removed, need it to check if a remote file was accessed
+                "sport": http_call.get("sport"),  # Note: will be removed
+                "dst": http_call.get("dst"),  # Note: will be removed
+                "src": http_call.get("src"),  # Note: will be removed
+                "response_headers": http_call.get("response"),  # Note: will be removed
+                "request_body_path": request_body_path,  # Note: will be removed
+                "response_body_path": response_body_path,  # Note: will be removed
             }
             for process, process_details in process_map.items():
                 for network_call in process_details["network_calls"]:
                     send = next((network_call[api_call] for api_call in HTTP_API_CALLS if api_call in network_call), {})
                     if send != {} and (
-                            send.get("service", 0) == 3 or send.get("buffer", "") == req["request"]) or send.get(
+                            send.get("service", 0) == 3 or send.get("buffer", "") == req["request_headers"]) or send.get(
                             "url", "") == req["uri"]:
                         req["process_name"] = f"{process_details['name']} ({str(process)})"
             if req not in req_table:
                 req_table.append(req)
     return req_table
+
+
+def _handle_http_headers(header_string: str) -> Dict[str, str]:
+    """
+    This method parses an HTTP header string and returns the parsed string in a nice dictionary
+    :param header_string: The HTTP header string to be parsed
+    :return: The parsed string as a nice dictionary
+    """
+    request_headers = {}
+    if not header_string or "\r\n" not in header_string:
+        return request_headers
+    headers = header_string.split("\r\n")[1:]
+    for header_pair in headers:
+        if not header_pair:
+            continue
+        values = header_pair.split(": ")
+        if len(values) == 2:
+            header, value = values
+            request_headers[header.replace("-", "")] = value
+    return request_headers
 
 
 def process_all_events(
@@ -942,9 +983,12 @@ def convert_sysmon_processes(sysmon: List[Dict[str, Any]],
             "ppid": None,
             "image": None,
             "command_line": None,
-            "timestamp": None,
+            "start_time": None,
             "guid": None,
-            "pguid": None
+            "pguid": None,
+            "integrity_level": None,
+            "image_hash": None,
+            "original_file_name": None,
         }
         event_data = event["EventData"]
         for data in event_data["Data"]:
@@ -962,25 +1006,26 @@ def convert_sysmon_processes(sysmon: List[Dict[str, Any]],
                 if not is_safelisted(text, ["dynamic.process.command_line"], safelist):
                     ontology_process["command_line"] = text
             elif name == "UtcTime":
-                ontology_process["timestamp"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                ontology_process["start_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
             elif name == "ProcessGuid":
                 ontology_process["guid"] = text
             elif name == "SourceProcessGuid" or name == "ParentProcessGuid":
                 ontology_process["pguid"] = text
+            elif name == "OriginalFileName":
+                ontology_process["original_file_name"] = text
+            elif name == "IntegrityLevel":
+                ontology_process["integrity_level"] = text
+            elif name == "Hashes":
+                split_hash = text.split("=")
+                if len(split_hash) == 2:
+                    _, hash_value = split_hash
+                    ontology_process["image_hash"] = hash_value
 
         # It is okay if the Parent GUID is None
-        if any(ontology_process[key] is None for key in ["pid", "ppid", "image", "command_line", "timestamp", "guid"]):
+        if any(ontology_process[key] is None for key in ["pid", "ppid", "image", "command_line", "start_time", "guid"]):
             continue
         else:
-            so.update_process(
-                guid=ontology_process["guid"],
-                pguid=ontology_process["pguid"],
-                image=ontology_process["image"],
-                command_line=ontology_process["command_line"],
-                pid=ontology_process["pid"],
-                ppid=ontology_process["ppid"],
-                start_time=ontology_process["timestamp"]
-            )
+            so.update_process(**ontology_process)
 
 
 def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any],
