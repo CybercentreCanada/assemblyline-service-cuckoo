@@ -1334,7 +1334,7 @@ class Cuckoo(ServiceBase):
         # special 'supplementary' directory
         try:
             self._extract_hollowshunter(tar_obj, cuckoo_task.id)
-            self._extract_artifacts(tar_obj, cuckoo_task.id, parent_section)
+            self._extract_artifacts(tar_obj, cuckoo_task.id, parent_section, so)
 
         except Exception as e:
             self.log.exception(f"Unable to add extra file(s) for "
@@ -1499,12 +1499,14 @@ class Cuckoo(ServiceBase):
             self.artifact_list.append(artifact)
             self.log.debug(f"Adding extracted file for task {task_id}: {encrypted_buffer_file}")
 
-    def _extract_artifacts(self, tar_obj: tarfile.TarFile, task_id: int, parent_section: ResultSection) -> None:
+    def _extract_artifacts(self, tar_obj: tarfile.TarFile, task_id: int, parent_section: ResultSection,
+                           so: SandboxOntology) -> None:
         """
         This method extracts certain artifacts from that tarball
         :param tar_obj: The tarball object, containing the analysis artifacts for the task
         :param task_id: An integer representing the Cuckoo Task ID
         :param parent_section: The overarching result section detailing what image this task is being sent to
+        :param so: The sandbox ontology class object
         :return: None
         """
         image_section = ResultImageSection(self.request, f'Screenshots taken during Task {task_id}')
@@ -1518,7 +1520,8 @@ class Cuckoo(ServiceBase):
             # "polarproxy": "HTTPS .pcap from PolarProxy capture",
             "sum": "All traffic from TCPDUMP and PolarProxy",
             "sysmon/sysmon.evtx": "Sysmon Logging Captured",
-            "supplementary": "Supplementary File"
+            "supplementary": "Supplementary File",
+            "network": None,  # These are only used for updating the sandbox ontology
         }
 
         # Get the max size for extract files, used a few times after this
@@ -1529,6 +1532,25 @@ class Cuckoo(ServiceBase):
         for key, value in tarball_file_map.items():
             key_hits = [x for x in tar_obj_members if x.startswith(key)]
             key_hits.sort()
+
+            # We are going to get a snippet of the first 256 bytes of these files and
+            # update the HTTP call details with them
+            if key == "network":
+                for f in key_hits:
+                    nh = so.get_network_http_by_path(f)
+                    if not nh:
+                        continue
+                    destination_file_path = os.path.join(task_dir, f)
+                    tar_obj.extract(f, path=task_dir)
+                    contents = str(open(destination_file_path, "rb").read(256))
+                    if contents == "b''":
+                        continue
+                    if nh.request_body_path == f:
+                        nh.update(request_body=contents)
+                    elif nh.response_body_path == f:
+                        nh.update(response_body=contents)
+                continue
+
             for f in key_hits:
                 destination_file_path = os.path.join(task_dir, f)
                 tar_obj.extract(f, path=task_dir)

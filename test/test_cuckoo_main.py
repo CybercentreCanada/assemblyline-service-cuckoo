@@ -133,6 +133,7 @@ def dummy_tar_class():
                 "shots/0001.jpg",
                 "buffer/blahblah",
                 "supplementary/blahblah",
+                "network/blahblah",
             ]
 
         def extract(self, output, path=None):
@@ -1689,7 +1690,9 @@ class TestCuckooMain:
 
     @staticmethod
     def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultSection, ResultImageSection
+        default_so = SandboxOntology()
         tarball_file_map = {
             "buffer": "Extracted buffer",
             "extracted": "Cuckoo extracted file",
@@ -1728,7 +1731,7 @@ class TestCuckooMain:
                                              "description": val, "to_be_extracted": True})
 
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_class_instance._extract_artifacts(tar_obj, task_id, parent_section)
+        cuckoo_class_instance._extract_artifacts(tar_obj, task_id, parent_section, default_so)
 
         all_extracted = True
         for extracted in cuckoo_class_instance.artifact_list:
