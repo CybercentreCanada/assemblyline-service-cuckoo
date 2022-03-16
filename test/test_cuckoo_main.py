@@ -133,6 +133,7 @@ def dummy_tar_class():
                 "shots/0001.jpg",
                 "buffer/blahblah",
                 "supplementary/blahblah",
+                "network/blahblah",
             ]
 
         def extract(self, output, path=None):
@@ -403,6 +404,7 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(False, {}))
         mocker.patch.object(Cuckoo, "_handle_specific_platform", return_value=(False, {}))
         mocker.patch.object(Cuckoo, "_general_flow")
+        mocker.patch.object(Cuckoo, "attach_ontological_result")
 
         service_task = ServiceTask(sample)
         task = Task(service_task)
@@ -479,7 +481,9 @@ class TestCuckooMain:
         from assemblyline_v4_service.common.result import ResultSection
         from assemblyline.common.exceptions import RecoverableError
         from cuckoo.cuckoo_main import Cuckoo, AnalysisTimeoutExceeded
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
 
+        so = SandboxOntology()
         hosts = []
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         mocker.patch.object(Cuckoo, "submit")
@@ -493,32 +497,33 @@ class TestCuckooMain:
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance.request.file_contents = "blah"
         cuckoo_class_instance.file_res = dummy_result_class_instance
+        cuckoo_class_instance.sandbox_ontologies = []
 
         kwargs = dict()
         file_ext = "blah"
         parent_section = ResultSection("blah")
         # Purely for code coverage
         with pytest.raises(Exception):
-            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
+            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts, so)
 
         # Reboot coverage
         cuckoo_class_instance.config["reboot_supported"] = True
         cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, [
-                                            {"auth_header": "blah", "ip": "blah", "port": "blah"}], True, 1)
+                                            {"auth_header": "blah", "ip": "blah", "port": "blah"}], True, 1, so)
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=Exception("blah")):
             with pytest.raises(Exception):
-                cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
+                cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts, so)
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=AnalysisTimeoutExceeded("blah")):
-            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
+            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts, so)
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=RecoverableError("blah")):
             with pytest.raises(RecoverableError):
-                cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
+                cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts, so)
 
         with mocker.patch.object(Cuckoo, "_is_invalid_analysis_timeout", return_value=True):
-            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts)
+            cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, hosts, so)
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1111,8 +1116,12 @@ class TestCuckooMain:
     )
     def test_report_machine_info(machines, cuckoo_class_instance, mocker):
         from cuckoo.cuckoo_main import CuckooTask
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
         from assemblyline.common.str_utils import safe_str
+
+        so = SandboxOntology()
+        default_mm = so.analysis_metadata.machine_metadata.as_primitives()
         machine_name = "blah"
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah", "machines": machines}
         cuckoo_class_instance.hosts = [host_to_use]
@@ -1140,38 +1149,56 @@ class TestCuckooMain:
                 body['Tags'].append(safe_str(tag).replace('_', ' '))
             correct_result_section.set_body(json.dumps(body), BODY_FORMAT.KEY_VALUE)
             correct_result_section.add_tag('dynamic.operating_system.platform', 'Blah')
-            cuckoo_class_instance.report_machine_info(machine_name, cuckoo_task, parent_section)
+            cuckoo_class_instance.report_machine_info(machine_name, cuckoo_task, parent_section, so)
             assert check_section_equality(correct_result_section, parent_section.subsections[0])
+            default_mm["ip"] = str(machine['ip'])
+            default_mm["hypervisor"] = cuckoo_task.report["info"]["machine"]["manager"]
+            default_mm["hostname"] = str(machine['name'])
+            default_mm["platform"] = "Blah"
+            assert so.analysis_metadata.machine_metadata.as_primitives() == default_mm
         else:
-            cuckoo_class_instance.report_machine_info(machine_name, cuckoo_task, parent_section)
+            cuckoo_class_instance.report_machine_info(machine_name, cuckoo_task, parent_section, so)
             assert parent_section.subsections == []
+            assert so.analysis_metadata.machine_metadata.as_primitives() == default_mm
 
     @staticmethod
-    @pytest.mark.parametrize("machine_name, platform, expected_tags",
-                             [("", "", []),
-                              ("blah", "blah", [("dynamic.operating_system.platform", "Blah")]),
+    @pytest.mark.parametrize("machine_name, platform, expected_tags, expected_machine_metadata",
+                             [("", "", [],
+                               {}),
+                              ("blah", "blah", [("dynamic.operating_system.platform", "Blah")],
+                               {"platform": "Blah"}),
                               ("vmss-udev-win10x64", "windows",
                                [("dynamic.operating_system.platform", "Windows"),
                                 ("dynamic.operating_system.processor", "x64"),
-                                ("dynamic.operating_system.version", "10")]),
+                                ("dynamic.operating_system.version", "10")],
+                               {"platform": "Windows", "architecture": "x64", "version": "10"}),
                               ("vmss-udev-win7x86", "windows",
                                [("dynamic.operating_system.platform", "Windows"),
                                 ("dynamic.operating_system.processor", "x86"),
-                                ("dynamic.operating_system.version", "7")]),
+                                ("dynamic.operating_system.version", "7")],
+                               {"platform": "Windows", "architecture": "x86", "version": "7"}),
                               ("vmss-udev-ub1804x64", "linux",
                                [("dynamic.operating_system.platform", "Linux"),
                                 ("dynamic.operating_system.processor", "x64"),
-                                ("dynamic.operating_system.version", "1804")]), ])
-    def test_add_operating_system_tags(machine_name, platform, expected_tags, cuckoo_class_instance):
+                                ("dynamic.operating_system.version", "1804")],
+                               {"platform": "Linux", "architecture": "x64", "version": "1804"}), ])
+    def test_add_operating_system_tags(
+            machine_name, platform, expected_tags, expected_machine_metadata, cuckoo_class_instance):
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultSection
 
+        so = SandboxOntology()
+        default_mm = so.analysis_metadata.machine_metadata.as_primitives()
+        for key, value in expected_machine_metadata.items():
+            default_mm[key] = value
         expected_section = ResultSection("blah")
         for tag_name, tag_value in expected_tags:
             expected_section.add_tag(tag_name, tag_value)
 
         machine_section = ResultSection("blah")
-        cuckoo_class_instance._add_operating_system_tags(machine_name, platform, machine_section)
+        cuckoo_class_instance._add_operating_system_tags(machine_name, platform, machine_section, so)
         assert check_section_equality(expected_section, machine_section)
+        assert so.analysis_metadata.machine_metadata.as_primitives() == default_mm
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1465,6 +1492,7 @@ class TestCuckooMain:
     @pytest.mark.parametrize("tar_report", [None, "blah"])
     def test_generate_report(tar_report, cuckoo_class_instance, mocker):
         from cuckoo.cuckoo_main import Cuckoo, CuckooTask
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, 'query_report', return_value=tar_report)
         mocker.patch.object(Cuckoo, '_extract_console_output', return_value=None)
@@ -1473,20 +1501,23 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, 'check_powershell', return_value=None)
         mocker.patch.object(Cuckoo, '_unpack_tar', return_value=None)
 
+        so = SandboxOntology()
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
         file_ext = "blah"
         parent_section = ResultSection("blah")
 
-        cuckoo_class_instance._generate_report(file_ext, cuckoo_task, parent_section)
+        cuckoo_class_instance._generate_report(file_ext, cuckoo_task, parent_section, so)
         # Get that coverage!
         assert True
 
     @staticmethod
     def test_unpack_tar(cuckoo_class_instance, dummy_tar_class, mocker):
         from cuckoo.cuckoo_main import Cuckoo, CuckooTask, MissingCuckooReportException
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultSection
 
+        so = SandboxOntology()
         tar_report = b"blah"
         file_ext = "blah"
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
@@ -1500,17 +1531,17 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, "_extract_artifacts")
         mocker.patch("cuckoo.cuckoo_main.tarfile.open", return_value=dummy_tar_class())
 
-        cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
+        cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section, so)
         assert True
 
         with mocker.patch.object(Cuckoo, "_add_json_as_supplementary_file", side_effect=MissingCuckooReportException):
-            cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
+            cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section, so)
             assert True
 
         # Exception test for _extract_console_output or _extract_hollowshunter or _extract_artifacts
         with mocker.patch.object(Cuckoo, "_extract_console_output", side_effect=Exception):
             mocker.patch.object(Cuckoo, "_add_json_as_supplementary_file", return_value=True)
-            cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section)
+            cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section, so)
             assert True
 
     @staticmethod
@@ -1581,11 +1612,13 @@ class TestCuckooMain:
     )
     def test_build_report(report_info, cuckoo_class_instance, dummy_json_doc_class_instance, mocker):
         from cuckoo.cuckoo_main import Cuckoo, CuckooProcessingException, CuckooTask
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from sys import getrecursionlimit
         from json import JSONDecodeError
         from assemblyline.common.exceptions import RecoverableError
         from assemblyline_v4_service.common.result import ResultSection
 
+        so = SandboxOntology()
         report_json_path = "blah"
         file_ext = "blah"
         report_json = report_info
@@ -1603,7 +1636,7 @@ class TestCuckooMain:
         cuckoo_class_instance.query_report_url = "%s"
 
         parent_section = ResultSection("blah")
-        cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
+        cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section, so)
 
         assert getrecursionlimit() == int(cuckoo_class_instance.config["recursion_limit"])
         assert cuckoo_task.report == report_info
@@ -1611,24 +1644,24 @@ class TestCuckooMain:
         # Exception tests for generate_al_result
         mocker.patch("cuckoo.cuckoo_main.generate_al_result", side_effect=RecoverableError("blah"))
         with pytest.raises(RecoverableError):
-            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
+            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section, so)
 
         mocker.patch("cuckoo.cuckoo_main.generate_al_result", side_effect=CuckooProcessingException("blah"))
         with pytest.raises(CuckooProcessingException):
-            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
+            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section, so)
 
         mocker.patch("cuckoo.cuckoo_main.generate_al_result", side_effect=Exception("blah"))
         with pytest.raises(Exception):
-            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
+            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section, so)
 
         # Exception tests for json.loads
         mocker.patch("json.loads", side_effect=JSONDecodeError("blah", dummy_json_doc_class_instance, 1))
         with pytest.raises(JSONDecodeError):
-            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
+            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section, so)
 
         mocker.patch("json.loads", side_effect=Exception("blah"))
         with pytest.raises(Exception):
-            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section)
+            cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section, so)
 
     @staticmethod
     def test_extract_console_output(cuckoo_class_instance, dummy_request_class, mocker):
@@ -1657,7 +1690,9 @@ class TestCuckooMain:
 
     @staticmethod
     def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultSection, ResultImageSection
+        default_so = SandboxOntology()
         tarball_file_map = {
             "buffer": "Extracted buffer",
             "extracted": "Cuckoo extracted file",
@@ -1696,7 +1731,7 @@ class TestCuckooMain:
                                              "description": val, "to_be_extracted": True})
 
         cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_class_instance._extract_artifacts(tar_obj, task_id, parent_section)
+        cuckoo_class_instance._extract_artifacts(tar_obj, task_id, parent_section, default_so)
 
         all_extracted = True
         for extracted in cuckoo_class_instance.artifact_list:
