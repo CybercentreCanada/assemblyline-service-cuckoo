@@ -279,7 +279,7 @@ class Cuckoo(ServiceBase):
             for relevant_image, host_list in relevant_images.items():
                 hosts = [host for host in self.hosts if host["ip"] in host_list]
                 submission_specific_kwargs = kwargs.copy()
-                parent_section = ResultSection(f"Analysis Environment Target: {relevant_image}", auto_collapse=True)
+                parent_section = ResultSection(f"Analysis Environment Target: {relevant_image}")
                 self.file_res.add_section(parent_section)
                 submission_specific_kwargs["tags"] = relevant_image
                 thr = SubmissionThread(
@@ -293,14 +293,14 @@ class Cuckoo(ServiceBase):
                 thread.join()
         elif image_requested and len(relevant_images_keys) == 1:
             parent_section = ResultSection(
-                f"Analysis Environment Target: {relevant_images_keys[0]}", auto_collapse=True)
+                f"Analysis Environment Target: {relevant_images_keys[0]}")
             self.file_res.add_section(parent_section)
             kwargs["tags"] = relevant_images_keys[0]
             hosts = [host for host in self.hosts if host["ip"] in relevant_images[relevant_images_keys[0]]]
             self._general_flow(kwargs, file_ext, parent_section, hosts)
         elif platform_requested and len(hosts_with_platform[next(iter(hosts_with_platform))]) > 0:
             parent_section = ResultSection(
-                f"Analysis Environment Target: {next(iter(hosts_with_platform))}", auto_collapse=True)
+                f"Analysis Environment Target: {next(iter(hosts_with_platform))}")
             self.file_res.add_section(parent_section)
             hosts = [host for host in self.hosts if host["ip"] in hosts_with_platform[next(iter(hosts_with_platform))]]
             self._general_flow(kwargs, file_ext, parent_section, hosts)
@@ -312,10 +312,10 @@ class Cuckoo(ServiceBase):
                     hosts = [host for host in self.hosts if host["ip"] == host_ip]
                 else:
                     hosts = self.hosts
-                parent_section = ResultSection(f"Analysis Environment Target: {kwargs['machine']}", auto_collapse=True)
+                parent_section = ResultSection(f"Analysis Environment Target: {kwargs['machine']}")
             else:
                 parent_section = ResultSection(
-                    "Analysis Environment Target: First Machine Available", auto_collapse=True)
+                    "Analysis Environment Target: First Machine Available")
                 hosts = self.hosts
             self.file_res.add_section(parent_section)
             self._general_flow(kwargs, file_ext, parent_section, hosts)
@@ -356,7 +356,7 @@ class Cuckoo(ServiceBase):
 
         if reboot:
             host_to_use = hosts[0]
-            parent_section = ResultSection(f"Reboot Analysis -> {parent_section.title_text}", auto_collapse=True)
+            parent_section = ResultSection(f"Reboot Analysis -> {parent_section.title_text}")
             self.file_res.add_section(parent_section)
         else:
             self._set_task_parameters(kwargs, file_ext, parent_section)
@@ -403,7 +403,7 @@ class Cuckoo(ServiceBase):
             if subsection.title_text == ANALYSIS_ERRORS and GUEST_CANNOT_REACH_HOST in subsection.body:
                 self.log.debug("The first submission was sent to a machine that had difficulty communicating with "
                                "the nest. Will try to resubmit again.")
-                parent_section = ResultSection(f"Resubmit -> {parent_section.title_text}", auto_collapse=True)
+                parent_section = ResultSection(f"Resubmit -> {parent_section.title_text}")
                 self.file_res.add_section(parent_section)
                 host_to_use = self._determine_host_to_use(hosts)
                 self._general_flow(kwargs, file_ext, parent_section, [host_to_use], resubmit=True)
