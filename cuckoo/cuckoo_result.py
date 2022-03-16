@@ -1365,7 +1365,8 @@ def _create_signature_result_section(
     :return: A ResultTextSection containing details about the signature
     """
     sig_res = ResultTextSection(f"Signature: {name}")
-    sig_res.add_line(signature.get('description', 'No description for signature.'))
+    description = signature.get('description', 'No description for signature.')
+    sig_res.add_line(description)
 
     # Setting up the heuristic for each signature
     sig_id = get_category_id(name)
