@@ -26,7 +26,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-utils libfuzzy-dev libfuzzy2
           sudo rm -rf /var/lib/apt/lists/*
-          sudo env "PATH=$PATH" python -m pip install -U --no-cache-dir assemblyline assemblyline_v4_service retrying pefile tld
+          sudo env "PATH=$PATH" python -m pip install -U --no-cache-dir retrying pefile tld
+          if [["$BUILD_SOURCEBRANCHNAME" == *dev*]];
+          then sudo env "PATH=$PATH" python -m pip install -U --no-cache-dir --pre assemblyline assemblyline_v4_service;
+          else sudo env "PATH=$PATH" python -m pip install -U --no-cache-dir assemblyline assemblyline_v4_service;
+          fi
           sudo env "PATH=$PATH" python -m pip install -U --no-cache-dir -r `pwd`/test/requirements.txt
           sudo rm -rf /tmp/* /var/lib/apt/lists/* ~/.cache/pip
         displayName: Setup environment
