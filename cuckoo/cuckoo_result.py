@@ -528,8 +528,10 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
 
     if len(req_table) > 0:
         http_sec = ResultTableSection("Protocol: HTTP/HTTPS")
-        remote_file_access_sec = ResultSection("Access Remote File")
+        remote_file_access_sec = ResultTextSection("Access Remote File")
+        remote_file_access_sec.add_line("The sample attempted to download the following files:")
         suspicious_user_agent_sec = ResultTextSection("Suspicious User Agent(s)")
+        suspicious_user_agent_sec.add_line("The sample made HTTP calls via the following user agents:")
         sus_user_agents_used = []
         http_sec.set_heuristic(1002)
         for http_call in req_table:
@@ -549,6 +551,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                     split_path = path.rsplit("/", 1)
                     if len(split_path) > 1 and re.search(r'[^\\]*\.(\w+)$', split_path[-1]):
                         add_tag(remote_file_access_sec, "network.dynamic.uri", http_call["uri"])
+                        remote_file_access_sec.add_line(f"\t{http_call['uri']}")
                         if not remote_file_access_sec.heuristic:
                             remote_file_access_sec.set_heuristic(1003)
             if any((http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
@@ -561,6 +564,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                                             or sus_user_agent in http_call["request"]), None)
                 if sus_user_agent_used not in sus_user_agents_used:
                     add_tag(suspicious_user_agent_sec, "network.user_agent", sus_user_agent_used)
+                    suspicious_user_agent_sec.add_line(f"\t{sus_user_agent_used}")
                     sus_user_agents_used.append(sus_user_agent_used)
             # now remove path, uri, port, user-agent from the final output
             del http_call['path']
@@ -821,6 +825,7 @@ def process_all_events(
     so = SandboxOntology(events=events)
     events_section = ResultTableSection("Event Log")
     event_table: List[Dict[str, Any]] = []
+    event_ioc_table = ResultTableSection("Event Log IOCs")
     for event in so.sorted_events:
         if isinstance(event, NetworkEvent):
             event_table.append({
@@ -835,7 +840,7 @@ def process_all_events(
             })
         elif isinstance(event, ProcessEvent):
             add_tag(events_section, "dynamic.process.command_line", event.command_line)
-            _extract_iocs_from_text_blob(event.command_line, events_section, file_ext)
+            _extract_iocs_from_text_blob(event.command_line, event_ioc_table, file_ext)
             add_tag(events_section, "dynamic.process.file_name", event.image)
             event_table.append({
                 "timestamp": datetime.datetime.fromtimestamp(event.timestamp).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
@@ -847,6 +852,8 @@ def process_all_events(
         else:
             raise ValueError(f"{event.convert_event_to_dict()} is not of type NetworkEvent or ProcessEvent.")
     [events_section.add_row(TableRow(**event)) for event in event_table]
+    if event_ioc_table.body:
+        events_section.add_subsection(event_ioc_table)
     parent_result_section.add_subsection(events_section)
 
 
@@ -1070,6 +1077,7 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
     :return:
     """
     buffer_res = ResultTableSection("Decrypted Buffers")
+    buffer_ioc_table = ResultTableSection("Decrypted Buffer IOCs")
     buffer_body = []
 
     for process in process_map:
@@ -1084,11 +1092,13 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
                 buffer = call["OutputDebugStringA"]["string"]
             if not buffer:
                 continue
-            _extract_iocs_from_text_blob(buffer, buffer_res, file_ext)
+            _extract_iocs_from_text_blob(buffer, buffer_ioc_table, file_ext)
             if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
                 buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
     if len(buffer_body) > 0:
         [buffer_res.add_row(TableRow(**buffer)) for buffer in buffer_body]
+        if buffer_ioc_table.body:
+            buffer_res.add_subsection(buffer_ioc_table)
         parent_result_section.add_subsection(buffer_res)
 
 
@@ -1322,12 +1332,14 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
     buffer_count = 0
     buffers = set()
     encrypted_buffer_result_section = ResultTextSection("Placeholder")
+    encrypted_buffer_ioc_table = ResultTableSection(
+        "IOCs found in encrypted buffers")
     for pid, process_details in process_map.items():
         for network_call in process_details["network_calls"]:
             for api_call in BUFFER_API_CALLS:
                 if api_call in network_call:
                     buffer = network_call[api_call]["buffer"]
-                    _extract_iocs_from_text_blob(buffer, encrypted_buffer_result_section)
+                    _extract_iocs_from_text_blob(buffer, encrypted_buffer_ioc_table)
                     encrypted_buffer_file_path = os.path.join(
                         "/tmp", f"{task_id}_{pid}_encrypted_buffer_{buffer_count}.txt")
                     buffers.add(encrypted_buffer_file_path)
@@ -1336,6 +1348,8 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
                     f.close()
                     buffer_count += 1
     if buffer_count > 0:
+        if encrypted_buffer_ioc_table.body:
+            encrypted_buffer_result_section.add_subsection(encrypted_buffer_ioc_table)
         encrypted_buffer_result_section.title_text = f"{buffer_count} Encrypted Buffer(s) Found"
         encrypted_buffer_result_section.set_heuristic(1006)
         encrypted_buffer_result_section.add_line("The following buffers were found in network calls and "
@@ -1364,6 +1378,7 @@ def _tag_and_describe_generic_signature(
             add_tag(sig_res, "network.dynamic.uri", http_string[1])
     elif signature_name == "nolookup_communication":
         add_tag(sig_res, "network.dynamic.ip", mark["host"], inetsim_network)
+        sig_res.add_line(f"\tIOC: {mark['host']}")
     elif signature_name == "suspicious_powershell":
         if mark.get("options"):
             sig_res.add_line(f'\tIOC: {safe_str(mark["value"])} via {safe_str(mark["option"])}')
@@ -1429,7 +1444,10 @@ def _tag_and_describe_ioc_signature(signature_name: str, mark: Dict[str, Any], s
         add_tag(sig_res, "dynamic.process.file_name", ioc)
     elif mark["category"] == "cmdline":
         add_tag(sig_res, "dynamic.process.command_line", ioc)
-        _extract_iocs_from_text_blob(ioc, sig_res, file_ext)
+        sig_ioc_table = ResultTableSection("Command line IOCs")
+        _extract_iocs_from_text_blob(ioc, sig_ioc_table, file_ext)
+        if sig_ioc_table.body:
+            sig_res.add_subsection(sig_ioc_table)
 
 
 def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultTextSection,
@@ -1443,7 +1461,10 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
     :return: None
     """
     if signature_name == "creates_hidden_file":
-        add_tag(sig_res, "dynamic.process.file_name", mark["call"].get("arguments", {}).get("filepath"))
+        file_path = mark["call"].get("arguments", {}).get("filepath")
+        add_tag(sig_res, "dynamic.process.file_name", file_path)
+        if file_path:
+            sig_res.add_line(f"IOC: {file_path}")
     elif signature_name == "moves_self":
         oldfilepath = mark["call"].get("arguments", {}).get("oldfilepath")
         newfilepath = mark["call"].get("arguments", {}).get("newfilepath")
@@ -1501,7 +1522,7 @@ def _remove_network_http_noise(sigs: List[Dict[str, Any]]) -> List[Dict[str, Any
         return sigs
 
 
-def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_ext: str = "") -> None:
+def _extract_iocs_from_text_blob(blob: str, result_section: ResultTableSection, file_ext: str = "") -> None:
     """
     This method searches for domains, IPs and URIs used in blobs of text and tags them
     :param blob: The blob of text that we will be searching through
@@ -1517,6 +1538,7 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_
     uris = set(re.findall(URL_REGEX, blob)) - domains - ips
 
     add_tag(result_section, "network.dynamic.ip", [ip for ip in ips])
+    [result_section.add_row(TableRow(ioc_type="ip", ioc=ip)) for ip in ips]
     for domain in domains:
         # File names match the domain and URI regexes, so we need to avoid tagging them
         # Note that get_tld only takes URLs so we will prepend http:// to the domain to work around this
@@ -1524,6 +1546,7 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_
         if tld is None or f".{tld}" == file_ext:
             continue
         add_tag(result_section, "network.dynamic.domain", domain)
+        result_section.add_row(TableRow(ioc_type="domain", ioc=domain))
     for uri in uris:
         if not any(protocol in uri for protocol in ["http", "ftp", "icmp", "ssh"]):
             tld = get_tld(f"http://{uri}", fail_silently=True)
@@ -1532,9 +1555,11 @@ def _extract_iocs_from_text_blob(blob: str, result_section: ResultSection, file_
         if tld is None or f".{tld}" == file_ext:
             continue
         add_tag(result_section, "network.dynamic.uri", uri)
+        result_section.add_row(TableRow(ioc_type="uri", ioc=uri))
         if "//" in uri:
             uri = uri.split("//")[1]
         add_tag(result_section, "network.dynamic.uri_path", [uri_path for uri_path in re.findall(URI_PATH, uri)])
+        [result_section.add_row(TableRow(ioc_type="uri_path", ioc=uri_path)) for uri_path in re.findall(URI_PATH, uri)]
 
 
 def is_safelisted(
