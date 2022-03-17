@@ -21,7 +21,7 @@ from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
 from assemblyline_v4_service.common.request import ServiceRequest
-from assemblyline_v4_service.common.result import BODY_FORMAT, Result, ResultSection, ResultImageSection, ResultTextSection, ResultKeyValueSection
+from assemblyline_v4_service.common.result import Result, ResultSection, ResultImageSection, ResultTextSection, ResultKeyValueSection
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
