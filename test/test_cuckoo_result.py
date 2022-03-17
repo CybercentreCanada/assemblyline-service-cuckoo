@@ -384,9 +384,9 @@ class TestCuckooResult:
           [{"name": "nolookup_communication", "severity": 1, "markcount": 1,
             "marks": [{"pid": 1, "type": "generic", "host": "11.11.11.11"}]}],
           "192.0.2.0/24", "", {},
-          'No description for signature.', False,
-          {"name": "nolookup_communication", "description": "No description for signature.", "process.pid": 1,
-           "iocs": [{"ip": "11.11.11.11"}]}),
+          'No description for signature.\n\tIOC: 11.11.11.11', False,
+          {"name": "nolookup_communication", "description": "No description for signature.",
+           "process.pid": 1, "iocs": [{"ip": "11.11.11.11"}]}),
          ("nolookup_communication",
           [{"name": "nolookup_communication", "severity": 1, "markcount": 1,
             "marks": [{"pid": 1, "type": "generic", "host": "127.0.0.1"}]}],
@@ -659,7 +659,7 @@ class TestCuckooResult:
                                None, {}),
                               ("nolookup_communication", {"host": "193.0.2.123"},
                                {'network.dynamic.ip': ['193.0.2.123']},
-                               None, {"ip": '193.0.2.123'}),
+                               "\tIOC: 193.0.2.123", {"ip": "193.0.2.123"}),
                               ("nolookup_communication", {"host": "192.0.2.123"},
                                {},
                                None, {}),
@@ -794,7 +794,7 @@ class TestCuckooResult:
                                None, {}),
                               ("creates_hidden_file", {"call": {"arguments": {"filepath": "blah"}}},
                                {"dynamic.process.file_name": ["blah"]},
-                               None, {}),
+                               "IOC: blah", {}),
                               ("moves_self", {"call": {"arguments": {}}},
                                {},
                                None, {}),
@@ -1119,11 +1119,12 @@ class TestCuckooResult:
     def test_process_all_events():
         from cuckoo.cuckoo_result import process_all_events
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
-        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT, ResultTableSection, TableRow
         default_so = SandboxOntology()
         al_result = ResultSection("blah")
-        p = default_so.create_process(pid=1, ppid=1, guid="{12345678-1234-5678-1234-567812345679}", command_line="blah",
-                                      image="blah", start_time=2, pguid="{12345678-1234-5678-1234-567812345679}")
+        p = default_so.create_process(
+            pid=1, ppid=1, guid="{12345678-1234-5678-1234-567812345679}", command_line="blah blah.com", image="blah",
+            start_time=2, pguid="{12345678-1234-5678-1234-567812345679}")
         default_so.add_process(p)
         nc = default_so.create_network_connection(
             timestamp=1, source_port=1, destination_ip="1.1.1.1", source_ip="2.2.2.2", destination_port=1,
@@ -1133,14 +1134,27 @@ class TestCuckooResult:
         dns = default_so.create_network_dns(domain="blah", resolved_ips=["1.1.1.1"])
         default_so.add_network_dns(dns)
 
-        correct_result_section = ResultSection(title_text="Event Log")
+        correct_result_section = ResultTableSection(title_text="Event Log")
 
-        correct_result_section.add_tag("dynamic.process.command_line", "blah")
+        correct_result_section.add_tag("dynamic.process.command_line", "blah blah.com")
         correct_result_section.add_tag("dynamic.process.file_name", "blah")
 
-        correct_result_section.set_body(
-            '[{"timestamp": "1970-01-01 00:00:01.000", "process_name": "blah (1)", "details": {"protocol": "blah", "domain": "blah", "dest_ip": "1.1.1.1", "dest_port": 1}}, {"timestamp": "1970-01-01 00:00:02.000", "process_name": "blah (1)", "details": {"command_line": "blah"}}]',
-            BODY_FORMAT.TABLE)
+        correct_result_section.add_row(
+            TableRow(
+                timestamp="1970-01-01 00:00:01.000", process_name="blah (1)",
+                details={"protocol": "blah", "domain": "blah", "dest_ip": "1.1.1.1", "dest_port": 1}))
+        correct_result_section.add_row(
+            TableRow(
+                timestamp="1970-01-01 00:00:02.000", process_name="blah (1)",
+                details={"command_line": "blah blah.com"}))
+
+        correct_ioc_table = ResultTableSection("Event Log IOCs")
+        correct_ioc_table.add_tag("network.dynamic.domain", "blah.com")
+        table_data = [{"ioc_type": "domain", "ioc": "blah.com"}]
+        for item in table_data:
+            correct_ioc_table.add_row(TableRow(**item))
+        if correct_ioc_table.body:
+            correct_result_section.add_subsection(correct_ioc_table)
         file_ext = ".exe"
         process_all_events(al_result, file_ext, default_so)
         assert check_section_equality(al_result.subsections[0], correct_result_section)
@@ -1375,24 +1389,31 @@ class TestCuckooResult:
     #     assert check_section_equality(al_result.sections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("process_map, correct_buffer_body, correct_tags",
+    @pytest.mark.parametrize("process_map, correct_buffer_body, correct_tags, correct_body",
                              [({0: {"decrypted_buffers": []}},
-                               None, {}),
+                               None, {},
+                               []),
                               ({0: {"decrypted_buffers": [{"blah": "blah"}]}},
-                               None, {}),
+                               None, {},
+                               []),
                               ({0: {"decrypted_buffers": [{"CryptDecrypt": {"buffer": "blah"}}]}},
-                               '[{"Decrypted Buffer": "blah"}]', {}),
+                               '[{"Decrypted Buffer": "blah"}]', {},
+                               []),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah"}}]}},
-                               '[{"Decrypted Buffer": "blah"}]', {}),
+                               '[{"Decrypted Buffer": "blah"}]', {},
+                               []),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1"}}]}},
-                               '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.dynamic.ip': ['127.0.0.1']}),
+                               '[{"Decrypted Buffer": "127.0.0.1"}]', {'network.dynamic.ip': ['127.0.0.1']},
+                               [{"ioc_type": "ip", "ioc": "127.0.0.1"}]),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "blah.ca"}}]}},
-                               '[{"Decrypted Buffer": "blah.ca"}]', {'network.dynamic.domain': ['blah.ca']}),
+                               '[{"Decrypted Buffer": "blah.ca"}]', {'network.dynamic.domain': ['blah.ca']},
+                               [{"ioc_type": "domain", "ioc": "blah.ca"}]),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}},
-                               '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.dynamic.ip': ['127.0.0.1']}), ])
-    def test_process_decrypted_buffers(process_map, correct_buffer_body, correct_tags):
+                               '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.dynamic.ip': ['127.0.0.1']},
+                               [{"ioc_type": "ip", "ioc": "127.0.0.1"}]), ])
+    def test_process_decrypted_buffers(process_map, correct_buffer_body, correct_tags, correct_body):
         from cuckoo.cuckoo_result import process_decrypted_buffers
-        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT, ResultTableSection, TableRow
 
         parent_section = ResultSection("blah")
         file_ext = ".exe"
@@ -1403,9 +1424,14 @@ class TestCuckooResult:
         else:
             correct_result_section = ResultSection(title_text="Decrypted Buffers")
             correct_result_section.set_body(correct_buffer_body, BODY_FORMAT.TABLE)
+            buffer_ioc_table = ResultTableSection("Decrypted Buffer IOCs")
+            for item in correct_body:
+                buffer_ioc_table.add_row(TableRow(**item))
+            if correct_body:
+                correct_result_section.add_subsection(buffer_ioc_table)
             for tag, values in correct_tags.items():
                 for value in values:
-                    correct_result_section.add_tag(tag, value)
+                    buffer_ioc_table.add_tag(tag, value)
             assert check_section_equality(parent_section.subsections[0], correct_result_section)
 
     @staticmethod
@@ -1473,39 +1499,48 @@ class TestCuckooResult:
 
     @staticmethod
     @pytest.mark.parametrize(
-        "blob, file_ext, correct_tags, expected_iocs",
-        [("", "", {}, [{}]),
-         ("192.168.100.1", "", {'network.dynamic.ip': ['192.168.100.1']}, [{"ip": "192.168.100.1"}]),
-         ("blah.ca", ".exe", {'network.dynamic.domain': ['blah.ca']}, [{"domain": "blah.ca"}]),
+        "blob, file_ext, correct_tags, correct_body, expected_iocs",
+        [("", "", {}, [], [{}]),
+         ("192.168.100.1", "", {'network.dynamic.ip': ['192.168.100.1']}, [{"ioc_type": "ip", "ioc": "192.168.100.1"}], [{"ip": "192.168.100.1"}]),
+         ("blah.ca", ".exe", {'network.dynamic.domain': ['blah.ca']}, [{"ioc_type": "domain", "ioc": "blah.ca"}], [{"domain": "blah.ca"}]),
          ("https://blah.ca", ".exe",
           {'network.dynamic.domain': ['blah.ca'],
-           'network.dynamic.uri': ['https://blah.ca']}, [{"domain": "blah.ca"}, {"uri": "https://blah.ca"}]),
+           'network.dynamic.uri': ['https://blah.ca']}, [{"ioc_type": "domain", "ioc": "blah.ca"},
+                                                         {"ioc_type": "uri", "ioc": "https://blah.ca"}], [{"domain": "blah.ca"}, {"uri": "https://blah.ca"}]),
          ("https://blah.ca/blah", ".exe",
           {'network.dynamic.domain': ['blah.ca'],
            'network.dynamic.uri': ['https://blah.ca/blah'],
-           "network.dynamic.uri_path": ["/blah"]}, [{"domain": "blah.ca"}, {"uri": "https://blah.ca/blah"}, {"uri_path": "/blah"}]),
-         ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", ".exe", {}, [{}]),
+           "network.dynamic.uri_path": ["/blah"]}, [{"ioc_type": "domain", "ioc": "blah.ca"},
+                                                    {"ioc_type": "uri", "ioc": "https://blah.ca/blah"},
+                                                    {"ioc_type": "uri_path", "ioc": "/blah"}], [{"domain": "blah.ca"}, {"uri": "https://blah.ca/blah"}, {"uri_path": "/blah"}]),
+         ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", ".exe", {}, [], [{}]),
          (
             "DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC",
-            ".exe", {}, [{}]),
+            ".exe", {}, [], [{}]),
          ("DRIVE:\\\\PATH TO\\\\PYTHON27.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.py",
-          ".py", {}, [{}]),
+          ".py", {}, [], [{}]),
          (
             "POST /some/thing/bad.exe HTTP/1.0\nUser-Agent: Mozilla\nHost: evil.ca\nAccept: */*\nContent-Type: application/octet-stream\nContent-Encoding: binary\n\nConnection: close",
-            "", {"network.dynamic.domain": ["evil.ca"]}, [{"domain": "evil.ca"}]),
+            "", {"network.dynamic.domain": ["evil.ca"]}, [{"ioc_type": "domain", "ioc": "evil.ca"}], [{"domain": "evil.ca"}]),
          ("evil.ca/some/thing/bad.exe", "",
           {"network.dynamic.domain": ["evil.ca"],
            "network.dynamic.uri": ["evil.ca/some/thing/bad.exe"],
-           "network.dynamic.uri_path": ["/some/thing/bad.exe"]}, [{"domain": "evil.ca"}, {"uri": "evil.ca/some/thing/bad.exe"}, {"uri_path": "/some/thing/bad.exe"}]), ])
-    def test_extract_iocs_from_text_blob(blob, file_ext, correct_tags, expected_iocs):
+           "network.dynamic.uri_path": ["/some/thing/bad.exe"]}, [{"ioc_type": "domain", "ioc": "evil.ca"},
+                                                                  {"ioc_type": "uri", "ioc": "evil.ca/some/thing/bad.exe"},
+                                                                  {"ioc_type": "uri_path", "ioc": "/some/thing/bad.exe"}], [{"domain": "evil.ca"}, {"uri": "evil.ca/some/thing/bad.exe"}, {"uri_path": "/some/thing/bad.exe"}]), ])
+    def test_extract_iocs_from_text_blob(blob, file_ext, correct_tags, correct_body, expected_iocs):
         from cuckoo.cuckoo_result import _extract_iocs_from_text_blob
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
-        from assemblyline_v4_service.common.result import ResultSection
-        test_result_section = ResultSection("blah")
+        from assemblyline_v4_service.common.result import ResultTableSection, TableRow
+        test_result_section = ResultTableSection("blah")
         so_sig = SandboxOntology.Signature()
         default_iocs = []
+        correct_result_section = ResultTableSection("blah")
+        correct_result_section.set_tags(correct_tags)
+        for item in correct_body:
+            correct_result_section.add_row(TableRow(**item))
         _extract_iocs_from_text_blob(blob, test_result_section, so_sig=so_sig, file_ext=file_ext)
-        assert test_result_section.tags == correct_tags
+        assert check_section_equality(test_result_section, correct_result_section)
         if correct_tags:
             for expected_ioc in expected_iocs:
                 default_ioc = SandboxOntology.Signature.IOC().as_primitives()

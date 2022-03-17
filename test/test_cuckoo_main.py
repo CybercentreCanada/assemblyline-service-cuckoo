@@ -233,6 +233,20 @@ def check_section_equality(this, that) -> bool:
         this.auto_collapse == that.auto_collapse
 
     if not current_section_equality:
+        print(this.body == that.body)
+        if not this.body == that.body:
+            print(this.body)
+            print(that.body)
+        print(this.body_format == that.body_format)
+        print(this.classification == that.classification)
+        print(this.depth == that.depth)
+        if len(this.subsections) != len(that.subsections):
+            print(this.subsections)
+            print(that.subsections)
+        print(len(this.subsections) == len(that.subsections))
+        print(this.title_text == that.title_text)
+        print(this.tags == that.tags)
+        print(this.auto_collapse == that.auto_collapse)
         return False
 
     for index, subsection in enumerate(this.subsections):
