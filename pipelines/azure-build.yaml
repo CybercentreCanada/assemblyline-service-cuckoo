@@ -28,6 +28,8 @@ stages:
               docker build --build-arg version=$TAG --build-arg branch=$BUILD_TYPE -t cccs/assemblyline-service-cuckoo:$TAG -t cccs/assemblyline-service-cuckoo:$BUILD_TYPE .
             displayName: Build containers
           - script: |
+              set -xv  # Echo commands before they are run
+              export TAG=${BUILD_SOURCEBRANCH#"refs/tags/v"}
               if [[ "$TAG" == *stable* ]]; then export BUILD_TYPE=stable; else export BUILD_TYPE=latest; fi
               docker run -v `pwd`/test/:/opt/al_service/test/ cccs/assemblyline-service-cuckoo:$BUILD_TYPE bash -c 'pip install -U -r test/requirements.txt; pytest'
             displayName: Test containers
