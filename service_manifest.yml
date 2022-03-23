@@ -40,6 +40,7 @@ config:
   default_analysis_timeout_in_seconds: 150
   machinery_supports_memory_dumps: false
   rest_timeout_in_seconds: 120
+  nest_attempts: 3
   reboot_supported: false
   sig_highlight_min_score: 0
   # This is used if the "auto" specific image will select multiple images and you want to override it with less images
