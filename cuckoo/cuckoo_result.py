@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional, Union, Tuple
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
-from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, URI_PATH
+from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, URI_PATH, DOMAIN_ONLY_REGEX
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, NetworkEvent, ProcessEvent
 from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, ResultKeyValueSection, ResultTextSection, ResultTableSection, TableRow
 
@@ -1632,7 +1632,7 @@ def _validate_tag(result_section: ResultSection, tag: str, value: Any, inetsim_n
     """
     reg_to_match: Optional[str] = None
     if "domain" in tag:
-        reg_to_match = DOMAIN_REGEX
+        reg_to_match = DOMAIN_ONLY_REGEX
     elif "uri_path" in tag:
         reg_to_match = URI_PATH
     elif "uri" in tag:
