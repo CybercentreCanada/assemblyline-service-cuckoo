@@ -393,8 +393,8 @@ def process_signatures(
                     if injected_process_name and injected_process_name not in injected_processes:
                         injected_processes.append(injected_process_name)
                         sig_res.add_line(f'\tInjected Process: {safe_str(injected_process_name)}')
-                        so_sig.add_process_ioc(pid=injected_process, image=injected_process_name,
-                                               start_time=mark["call"].get("time"))
+                        so_sig.add_process_subject(pid=injected_process, image=injected_process_name,
+                                                   start_time=mark["call"].get("time"))
 
         if not (process_names != [] and injected_processes != [] and process_names == injected_processes):
             sigs_res.add_subsection(sig_res)
@@ -904,10 +904,10 @@ def process_all_events(
     event_ioc_table = ResultTableSection("Event Log IOCs")
     for event in so.get_events():
         if isinstance(event, NetworkConnection):
-            if event.timestamp in [float("-inf"), float("inf")]:
+            if event.objectid.time_observed in [float("-inf"), float("inf")]:
                 continue
             event_table.append({
-                "timestamp": datetime.datetime.fromtimestamp(event.timestamp).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                "time_observed": datetime.datetime.fromtimestamp(event.objectid.time_observed).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
                 "process_name": f"{getattr(event.process, 'image', None)} ({getattr(event.process, 'pid', None)})",
                 "details": {
                     "protocol": event.transport_layer_protocol,
@@ -922,13 +922,10 @@ def process_all_events(
             _ = add_tag(events_section, "dynamic.process.command_line", event.command_line)
             _extract_iocs_from_text_blob(event.command_line, event_ioc_table, file_ext=file_ext)
             _ = add_tag(events_section, "dynamic.process.file_name", event.image)
-            event_table.append({
-                "timestamp": datetime.datetime.fromtimestamp(event.start_time).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+            event_table.append({"time_observed": datetime.datetime.fromtimestamp(event.start_time).strftime(
+                '%Y-%m-%d %H:%M:%S.%f')[: -3],
                 "process_name": f"{event.image} ({event.pid})",
-                "details": {
-                    "command_line": event.command_line,
-                }
-            })
+                                "details": {"command_line": event.command_line, }})
         else:
             raise ValueError(f"{event.as_primitives()} is not of type NetworkConnection or Process.")
     [events_section.add_row(TableRow(**event)) for event in event_table]
@@ -1472,11 +1469,11 @@ def _tag_and_describe_generic_signature(
             sig_res.add_line(
                 f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
             if add_tag(sig_res, "network.dynamic.uri", http_string[1]):
-                so_sig.add_ioc(uri=http_string[1])
+                so_sig.add_subject(uri=http_string[1])
     elif signature_name == "nolookup_communication":
         if add_tag(sig_res, "network.dynamic.ip", mark["host"], inetsim_network):
             sig_res.add_line(f"\tIOC: {mark['host']}")
-            so_sig.add_ioc(ip=mark["host"])
+            so_sig.add_subject(ip=mark["host"])
     elif signature_name == "suspicious_powershell":
         if mark.get("options"):
             sig_res.add_line(f'\tIOC: {safe_str(mark["value"])} via {safe_str(mark["option"])}')
@@ -1523,7 +1520,7 @@ def _tag_and_describe_ioc_signature(
         if url_pieces.path not in SKIPPED_PATHS and re.match(FULL_URI, http_string[1]):
             sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
             if add_tag(sig_res, "network.dynamic.uri", http_string[1]):
-                so_sig.add_ioc(uri=http_string[1])
+                so_sig.add_subject(uri=http_string[1])
     elif signature_name == "persistence_autorun":
         _ = add_tag(sig_res, "dynamic.autorun_location", ioc)
     elif signature_name == "process_interest":
@@ -1534,7 +1531,7 @@ def _tag_and_describe_ioc_signature(
     elif not is_ip(ioc) or (is_ip(ioc) and ip_address(ioc) not in inetsim_network):
         if signature_name == "p2p_cnc":
             if add_tag(sig_res, "network.dynamic.ip", ioc, inetsim_network):
-                so_sig.add_ioc(ip=ioc)
+                so_sig.add_subject(ip=ioc)
         else:
             # If process ID in ioc, replace with process name
             for key in process_map:
@@ -1589,7 +1586,7 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
     elif signature_name == "terminates_remote_process":
         terminated_pid = mark["call"].get("arguments", {}).get("process_identifier")
         terminated_process_name = process_map.get(terminated_pid, {}).get("name")
-        so_sig.add_process_ioc(pid=terminated_pid, image=terminated_process_name)
+        so_sig.add_process_subject(pid=terminated_pid, image=terminated_process_name)
         if terminated_process_name:
             sig_res.add_line(f'\tTerminated Remote Process: {terminated_process_name}')
     elif signature_name == "network_document_file":
@@ -1599,7 +1596,7 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
             _ = add_tag(sig_res, "dynamic.process.file_name", download_path)
         if url:
             _ = add_tag(sig_res, "network.dynamic.uri", url)
-            so_sig.add_ioc(uri=url)
+            so_sig.add_subject(uri=url)
         if download_path and url:
             sig_res.add_line(f'\tThe file at {safe_str(url)} was attempted to be downloaded to {download_path}')
 
@@ -1663,7 +1660,7 @@ def _extract_iocs_from_text_blob(
         if add_tag(result_section, "network.dynamic.ip", ip):
             result_section.add_row(TableRow(ioc_type="ip", ioc=ip))
             if so_sig:
-                so_sig.add_ioc(ip=ip)
+                so_sig.add_subject(ip=ip)
     for domain in domains:
         # File names match the domain and URI regexes, so we need to avoid tagging them
         # Note that get_tld only takes URLs so we will prepend http:// to the domain to work around this
@@ -1673,7 +1670,7 @@ def _extract_iocs_from_text_blob(
         if add_tag(result_section, "network.dynamic.domain", domain):
             result_section.add_row(TableRow(ioc_type="domain", ioc=domain))
             if so_sig:
-                so_sig.add_ioc(domain=domain)
+                so_sig.add_subject(domain=domain)
 
     for uri in uris:
         if not any(protocol in uri for protocol in ["http", "ftp", "icmp", "ssh"]):
@@ -1685,14 +1682,14 @@ def _extract_iocs_from_text_blob(
         if add_tag(result_section, "network.dynamic.uri", uri):
             result_section.add_row(TableRow(ioc_type="uri", ioc=uri))
             if so_sig:
-                so_sig.add_ioc(uri=uri)
+                so_sig.add_subject(uri=uri)
         if "//" in uri:
             uri = uri.split("//")[1]
         for uri_path in re.findall(URI_PATH, uri):
             if add_tag(result_section, "network.dynamic.uri_path", uri_path):
                 result_section.add_row(TableRow(ioc_type="uri_path", ioc=uri_path))
                 if so_sig:
-                    so_sig.add_ioc(uri_path=uri_path)
+                    so_sig.add_subject(uri_path=uri_path)
 
 
 def is_safelisted(

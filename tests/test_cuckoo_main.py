@@ -219,6 +219,15 @@ def check_section_equality(this, that) -> bool:
     elif not this.heuristic and not that.heuristic:
         result_heuristic_equality = True
     else:
+        print("The heuristics are not equal:")
+        if this.heuristic:
+            print(f"{this.heuristic.__dict__}")
+        else:
+            print("this.heuristic is None")
+        if that.heuristic:
+            print(f"{that.heuristic.__dict__}")
+        else:
+            print("that.heuristic is None")
         result_heuristic_equality = False
 
     # Assuming we are given the "root section" at all times, it is safe to say that we don't need to confirm parent
@@ -233,6 +242,39 @@ def check_section_equality(this, that) -> bool:
         this.auto_collapse == that.auto_collapse
 
     if not current_section_equality:
+        print("The current sections are not equal:")
+        if this.body != that.body:
+            print("The bodies are different:")
+            print(f"{this.body}")
+            print(f"{that.body}")
+        if this.body_format != that.body_format:
+            print("The body formats are different:")
+            print(f"{this.body_format}")
+            print(f"{that.body_format}")
+        if this.classification != that.classification:
+            print("The classifications are different:")
+            print(f"{this.classifications}")
+            print(f"{that.classifications}")
+        if this.depth != that.depth:
+            print("The depths are different:")
+            print(f"{this.depths}")
+            print(f"{that.depths}")
+        if len(this.subsections) != len(that.subsections):
+            print("The number of subsections are different:")
+            print(f"{len(this.subsections)}")
+            print(f"{len(that.subsections)}")
+        if this.title_text != that.title_text:
+            print("The title texts are different:")
+            print(f"{this.title_text}")
+            print(f"{that.title_text}")
+        if this.tags != that.tags:
+            print("The tags are different:")
+            print(f"{this.tags}")
+            print(f"{that.tags}")
+        if this.auto_collapse != that.auto_collapse:
+            print("The auto_collapse settings are different:")
+            print(f"{this.auto_collapse}")
+            print(f"{that.auto_collapse}")
         return False
 
     for index, subsection in enumerate(this.subsections):
