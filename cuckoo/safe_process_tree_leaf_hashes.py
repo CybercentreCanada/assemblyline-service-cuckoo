@@ -70,11 +70,12 @@ SAFE_PROCESS_TREE_LEAF_HASHES = {
         "command_line": "C:\\Windows\\system32\\wbem\\wmiprvse.exe -secured -Embedding",
         "children": []
     },
-    "3e3793b897525f211e7425c45df068b2594bb4ad8dcf731f5771fd30233d721b": {
-        "image": "?sys32\\rundll32.exe",
-        "command_line": "C:\\WINDOWS\\system32\\rundll32.exe C:\\WINDOWS\\system32\\PcaSvc.dll,PcaPatchSdbTask",
-        "children": []
-    },
+    # FP since we only look at the image here
+    # "3e3793b897525f211e7425c45df068b2594bb4ad8dcf731f5771fd30233d721b": {
+    #     "image": "?sys32\\rundll32.exe",
+    #     "command_line": "C:\\WINDOWS\\system32\\rundll32.exe C:\\WINDOWS\\system32\\PcaSvc.dll,PcaPatchSdbTask",
+    #     "children": []
+    # },
     "ab2bf0e9666652ed8254b079209e27568e0e55a4418cfe94a48181f34625ff15": {
         "image": "?sys32\\sc.exe",
         "command_line": "C:\\WINDOWS\\system32\\sc.exe start wuauserv",

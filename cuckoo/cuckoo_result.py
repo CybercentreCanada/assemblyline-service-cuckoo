@@ -313,7 +313,8 @@ def build_process_tree(events: Optional[List[Dict[str, Any]]] = None,
             process_tree_section.set_heuristic(heur_id)
             # Let's keep this heuristic as informational
             process_tree_section.heuristic.add_signature_id(sig_name, score=10)
-        parent_result_section.add_subsection(process_tree_section)
+        if process_tree_section.body:
+            parent_result_section.add_subsection(process_tree_section)
 
 
 def process_signatures(sigs: List[Dict[str, Any]], parent_result_section: ResultSection, inetsim_network: IPv4Network,
