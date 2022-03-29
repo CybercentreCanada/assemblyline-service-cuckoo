@@ -213,19 +213,22 @@ class TestCuckooResult:
         assert get_process_api_sums(apistats) == correct_api_sums
 
     @staticmethod
-    @pytest.mark.parametrize("processes, correct_event",
-                             [([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1,
-                                 "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
-                               {"pid": 0, "start_time": 1.0, "end_time": float("inf"),
-                                "guid": "{12345678-1234-5678-1234-567812345678}", "ppid": 1, "image": "blah",
-                                "command_line": "blah", "pguid": None, "pimage": None, "pcommand_line": None,
-                                "tree_id": None, "tag": None, "ptag": None, "rich_id": None, "integrity_level": None,
-                                "image_hash": None, "original_file_name": None}),
-                              ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1,
-                                 "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
-                               {}),
-                              ([],
-                               {})])
+    @pytest.mark.parametrize(
+        "processes, correct_event",
+        [([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1,
+            "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
+          {'start_time': 1.0, 'end_time': float("inf"),
+           'objectid':
+           {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'time_observed': 1.0,
+            'richid': None},
+           'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'richid': None},
+           'pimage': None, 'pcommand_line': None, 'ppid': 1, 'pid': 0, 'image': 'blah', 'command_line': 'blah',
+           'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
+         ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1,
+            "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
+          {}),
+         ([],
+          {})])
     def test_convert_cuckoo_processes(processes, correct_event):
         from cuckoo.cuckoo_result import convert_cuckoo_processes
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
@@ -255,13 +258,14 @@ class TestCuckooResult:
                                  "command_line": "blah", "ppid": 1, "guid": "{12345678-1234-5678-1234-567812345678}",
                                  "start_time": 1.0, "pguid": "{12345678-1234-5678-1234-567812345678}"}],
                                False,
-                               {"pid": 0, "name": "?usrtmp\\blah.exe", "cmd": "blah", "signatures": {},
+                               {"pid": 0, "name": "C:\\Users\\buddy\\AppData\\Local\\Temp\\blah.exe", "cmd": "blah",
+                                "signatures": {},
                                 "children": [], }), ])
     def test_build_process_tree(events, is_process_martian, correct_body):
         from cuckoo.cuckoo_result import build_process_tree
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultProcessTreeSection, ResultSection, ProcessItem
-        default_so = SandboxOntology(normalize_paths=True)
+        default_so = SandboxOntology()
         for event in events:
             p = default_so.create_process(**event)
             default_so.add_process(p)
@@ -384,7 +388,7 @@ class TestCuckooResult:
           [{"name": "nolookup_communication", "severity": 1, "markcount": 1,
             "marks": [{"pid": 1, "type": "generic", "host": "11.11.11.11"}]}],
           "192.0.2.0/24", "", {},
-          'No description for signature.', False,
+          'No description for signature.\n\tIOC: 11.11.11.11', False,
           {"name": "nolookup_communication", "description": "No description for signature.", "process.pid": 1,
            "iocs": [{"ip": "11.11.11.11"}]}),
          ("nolookup_communication",
@@ -448,20 +452,24 @@ class TestCuckooResult:
         for key, value in expected_sig.items():
             if key == "iocs":
                 for ioc in value:
-                    so_sig_ioc = SandboxOntology.Signature.IOC().as_primitives()
+                    so_sig_ioc = SandboxOntology.Signature.Subject().as_primitives()
                     if any("process" in key for key in expected_sig["iocs"][0].keys()):
                         so_sig_ioc["process"] = Process().as_primitives()
                     for k, v in ioc.items():
                         if "." in k:
                             k1, k2 = k.split(".")
                             so_sig_ioc[k1][k2] = v
+                            if k2 == "image":
+                                so_sig_ioc[k1]["objectid"]["tag"] = v
                         else:
                             so_sig_ioc[k] = v
-                    so_sig["iocs"].append(so_sig_ioc)
+                    so_sig["subjects"].append(so_sig_ioc)
                 continue
             elif "." in key:
                 key1, key2 = key.split(".")
                 so_sig[key1][key2] = value
+                if key2 == "image":
+                    so_sig[key1]["objectid"]["tag"] = value
             else:
                 so_sig[key] = value
         if so.signatures:
@@ -659,7 +667,7 @@ class TestCuckooResult:
                                None, {}),
                               ("nolookup_communication", {"host": "193.0.2.123"},
                                {'network.dynamic.ip': ['193.0.2.123']},
-                               None, {"ip": '193.0.2.123'}),
+                               "\tIOC: 193.0.2.123", {"ip": '193.0.2.123'}),
                               ("nolookup_communication", {"host": "192.0.2.123"},
                                {},
                                None, {}),
@@ -716,10 +724,10 @@ class TestCuckooResult:
         _tag_and_describe_generic_signature(signature_name, mark, actual_result, inetsim_network, safelist, so_sig)
         assert check_section_equality(actual_result, expected_result)
         if expected_tags:
-            ioc = SandboxOntology.Signature.IOC().as_primitives()
+            ioc = SandboxOntology.Signature.Subject().as_primitives()
             for key, value in expected_ioc.items():
                 ioc[key] = value
-            default_sig["iocs"].append(ioc)
+            default_sig["subjects"].append(ioc)
             assert so_sig.as_primitives() == default_sig
 
     @staticmethod
@@ -768,7 +776,7 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _tag_and_describe_ioc_signature
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         so_sig = SandboxOntology.Signature()
-        so_sig_ioc = SandboxOntology.Signature.IOC().as_primitives()
+        so_sig_ioc = SandboxOntology.Signature.Subject().as_primitives()
         default_sig = so_sig.as_primitives()
         inetsim_network = ip_network("192.0.2.0/24")
         expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
@@ -781,7 +789,7 @@ class TestCuckooResult:
         for key, value in expected_ioc.items():
             so_sig_ioc[key] = value
         if expected_ioc:
-            default_sig["iocs"].append(so_sig_ioc)
+            default_sig["subjects"].append(so_sig_ioc)
         assert so_sig.as_primitives() == default_sig
 
     @staticmethod
@@ -794,7 +802,7 @@ class TestCuckooResult:
                                None, {}),
                               ("creates_hidden_file", {"call": {"arguments": {"filepath": "blah"}}},
                                {"dynamic.process.file_name": ["blah"]},
-                               None, {}),
+                               "IOC: blah", {}),
                               ("moves_self", {"call": {"arguments": {}}},
                                {},
                                None, {}),
@@ -827,7 +835,7 @@ class TestCuckooResult:
         actual_result = ResultSection("blah")
         process_map = {1: {"name": "blah"}}
         so_sig = SandboxOntology.Signature()
-        so_sig_ioc = SandboxOntology.Signature.IOC().as_primitives()
+        so_sig_ioc = SandboxOntology.Signature.Subject().as_primitives()
         default_sig = so_sig.as_primitives()
         _tag_and_describe_call_signature(signature_name, mark, actual_result, process_map, so_sig)
         assert check_section_equality(actual_result, expected_result)
@@ -837,10 +845,12 @@ class TestCuckooResult:
             if "." in key:
                 key1, key2 = key.split(".")
                 so_sig_ioc[key1][key2] = value
+                if key2 == "image":
+                    so_sig_ioc[key1]["objectid"]["tag"] = value
             else:
                 so_sig_ioc[key] = value
         if expected_ioc:
-            default_sig["iocs"].append(so_sig_ioc)
+            default_sig["subjects"].append(so_sig_ioc)
         if mark.get("call", {}).get("time"):
             default_sig["process"] = Process().as_primitives()
             default_sig["process"]["start_time"] = mark["call"]["time"]
@@ -1119,18 +1129,19 @@ class TestCuckooResult:
     def test_process_all_events():
         from cuckoo.cuckoo_result import process_all_events
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
-        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+        from assemblyline_v4_service.common.result import ResultSection, ResultTableSection, TableRow
         default_so = SandboxOntology()
         al_result = ResultSection("blah")
-        p = default_so.create_process(pid=1, ppid=1, guid="{12345678-1234-5678-1234-567812345679}", command_line="blah",
-                                      image="blah", start_time=2, pguid="{12345678-1234-5678-1234-567812345679}")
+        p = default_so.create_process(
+            pid=1, ppid=1, guid="{12345678-1234-5678-1234-567812345679}", command_line="blah blah.com", image="blah",
+            start_time=2, pguid="{12345678-1234-5678-1234-567812345679}")
         default_so.add_process(p)
         nc = default_so.create_network_connection(
-            timestamp=1, source_port=1, destination_ip="1.1.1.1", source_ip="2.2.2.2", destination_port=1,
-            transport_layer_protocol="blah")
-        nc.update_process(image="blah", pid=1, guid="{12345678-1234-5678-1234-567812345679}")
+            time_observed=1, source_port=1, destination_ip="1.1.1.1", source_ip="2.2.2.2", destination_port=1,
+            transport_layer_protocol="blah", process=p)
+
         default_so.add_network_connection(nc)
-        dns = default_so.create_network_dns(domain="blah", resolved_ips=["1.1.1.1"])
+        dns = default_so.create_network_dns(domain="blah", resolved_ips=["1.1.1.1"], connection_details=nc)
         default_so.add_network_dns(dns)
 
         correct_result_section = ResultTableSection(title_text="Event Log")
@@ -1138,9 +1149,24 @@ class TestCuckooResult:
         correct_result_section.add_tag("dynamic.process.command_line", "blah blah.com")
         correct_result_section.add_tag("dynamic.process.file_name", "blah")
 
-        correct_result_section.set_body(
-            '[{"timestamp": "1970-01-01 00:00:01.000", "process_name": "blah (1)", "details": {"protocol": "blah", "domain": "blah", "dest_ip": "1.1.1.1", "dest_port": 1}}, {"timestamp": "1970-01-01 00:00:02.000", "process_name": "blah (1)", "details": {"command_line": "blah"}}]',
-            BODY_FORMAT.TABLE)
+        correct_result_section.add_row(
+            TableRow(
+                **
+                {"time_observed": "1970-01-01 00:00:01.000", "process_name": "blah (1)",
+                 "details": {"protocol": "blah", "domain": "blah", "dest_ip": "1.1.1.1", "dest_port": 1}}))
+        correct_result_section.add_row(
+            TableRow(
+                **
+                {"time_observed": "1970-01-01 00:00:02.000", "process_name": "blah (1)",
+                 "details": {"command_line": "blah blah.com"}}))
+
+        correct_ioc_table = ResultTableSection("Event Log IOCs")
+        correct_ioc_table.add_tag("network.dynamic.domain", "blah.com")
+        table_data = [{"ioc_type": "domain", "ioc": "blah.com"}]
+        for item in table_data:
+            correct_ioc_table.add_row(TableRow(**item))
+        correct_result_section.add_subsection(correct_ioc_table)
+
         file_ext = ".exe"
         process_all_events(al_result, file_ext, default_so)
         assert check_section_equality(al_result.subsections[0], correct_result_section)
@@ -1189,46 +1215,57 @@ class TestCuckooResult:
             assert al_result.subsections == []
 
     @staticmethod
-    @pytest.mark.parametrize("sysmon, expected_process",
-                             [([],
-                               {}),
-                              ([{
-                                  "EventData":
-                                  {
-                                      "Data":
-                                      [{"@Name": "ParentProcessId", "#text": "2"},
-                                       {"@Name": "Image", "#text": "blah.exe"},
-                                          {"@Name": "CommandLine", "#text": "./blah"},
-                                          {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
-                                          {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
-                               {}),
-                              ([{
-                                  "EventData":
-                                  {
-                                      "Data":
-                                      [{"@Name": "ProcessId", "#text": "1"},
-                                       {"@Name": "ParentProcessId", "#text": "2"},
-                                          {"@Name": "Image", "#text": "blah.exe"},
-                                          {"@Name": "CommandLine", "#text": "./blah"},
-                                          {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
-                                          {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
-                               {"start_time": 43932.12, "pid": 1, "guid": "{12345678-1234-5678-1234-567812345679}",
-                                "ppid": 2, "command_line": "./blah", "image": "blah.exe"}),
-                              ([{
-                                  "EventData":
-                                  {
-                                      "Data":
-                                      [{"@Name": "ProcessId", "#text": "1"},
-                                       {"@Name": "ParentProcessId", "#text": "2"},
-                                          {"@Name": "Image", "#text": "blah.exe"},
-                                          {"@Name": "CommandLine", "#text": "./blah"},
-                                          {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
-                                          {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"},
-                                          {"@Name": "SourceProcessGuid",
-                                           "#text": "{12345678-1234-5678-1234-567812345678}"}]}}],
-                               {"start_time": 43932.12, "pid": 1, "pguid": "{12345678-1234-5678-1234-567812345678}",
-                                "guid": "{12345678-1234-5678-1234-567812345679}", "ppid": 2, "command_line": "./blah",
-                                "image": "blah.exe"}), ])
+    @pytest.mark.parametrize(
+        "sysmon, expected_process",
+        [([],
+          {}),
+         ([{
+             "EventData":
+             {
+                 "Data":
+                 [{"@Name": "ParentProcessId", "#text": "2"},
+                  {"@Name": "Image", "#text": "blah.exe"},
+                     {"@Name": "CommandLine", "#text": "./blah"},
+                     {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
+                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
+          {}),
+         ([{
+             "EventData":
+             {
+                 "Data":
+                 [{"@Name": "ProcessId", "#text": "1"},
+                  {"@Name": "ParentProcessId", "#text": "2"},
+                     {"@Name": "Image", "#text": "blah.exe"},
+                     {"@Name": "CommandLine", "#text": "./blah"},
+                     {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
+                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
+          {'start_time': 43932.12, 'end_time': float("inf"),
+           'objectid':
+           {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None, 'time_observed': 43932.12,
+            'richid': None},
+           'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'richid': None},
+           'pimage': None, 'pcommand_line': None, 'ppid': 2, 'pid': 1, 'image': 'blah.exe', 'command_line': './blah',
+           'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
+         ([{
+             "EventData":
+             {
+                 "Data":
+                 [{"@Name": "ProcessId", "#text": "1"},
+                  {"@Name": "ParentProcessId", "#text": "2"},
+                     {"@Name": "Image", "#text": "blah.exe"},
+                     {"@Name": "CommandLine", "#text": "./blah"},
+                     {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
+                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"},
+                     {"@Name": "SourceProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"}]}}],
+          {'start_time': 43932.12, 'end_time': float("inf"),
+           'objectid':
+           {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None, 'time_observed': 43932.12,
+            'richid': None},
+           'pobjectid':
+           {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': None, 'treeid': None, 'time_observed': None,
+            'richid': None},
+           'pimage': None, 'pcommand_line': None, 'ppid': 2, 'pid': 1, 'image': 'blah.exe', 'command_line': './blah',
+           'integrity_level': None, 'image_hash': None, 'original_file_name': None}), ])
     def test_convert_sysmon_processes(sysmon, expected_process):
         from cuckoo.cuckoo_result import convert_sysmon_processes
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
@@ -1513,19 +1550,19 @@ class TestCuckooResult:
     def test_extract_iocs_from_text_blob(blob, file_ext, correct_tags, expected_iocs):
         from cuckoo.cuckoo_result import _extract_iocs_from_text_blob
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
-        from assemblyline_v4_service.common.result import ResultSection
-        test_result_section = ResultSection("blah")
+        from assemblyline_v4_service.common.result import ResultTableSection
+        test_result_section = ResultTableSection("blah")
         so_sig = SandboxOntology.Signature()
         default_iocs = []
         _extract_iocs_from_text_blob(blob, test_result_section, so_sig=so_sig, file_ext=file_ext)
         assert test_result_section.tags == correct_tags
         if correct_tags:
             for expected_ioc in expected_iocs:
-                default_ioc = SandboxOntology.Signature.IOC().as_primitives()
+                default_ioc = SandboxOntology.Signature.Subject().as_primitives()
                 for key, value in expected_ioc.items():
                     default_ioc[key] = value
                 default_iocs.append(default_ioc)
-            assert so_sig.as_primitives()["iocs"] == default_iocs
+            assert so_sig.as_primitives()["subjects"] == default_iocs
 
     @ staticmethod
     @ pytest.mark.parametrize(
