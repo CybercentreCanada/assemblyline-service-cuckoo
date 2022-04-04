@@ -14,82 +14,38 @@ class TestCuckooResult:
         remove_tmp_manifest()
 
     @staticmethod
-    def test_constants():
-        from re import compile
-        from assemblyline.odm.base import DOMAIN_REGEX as base_domain_regex, IP_REGEX as base_ip_regex
-        from cuckoo.cuckoo_result import DOMAIN_REGEX, IP_REGEX, URL_REGEX, UNIQUE_IP_LIMIT, \
-            SCORE_TRANSLATION, SKIPPED_MARK_ITEMS, SKIPPED_CATEGORY_IOCS, SKIPPED_FAMILIES, SKIPPED_PATHS, SILENT_IOCS, \
-            INETSIM, DNS_API_CALLS, HTTP_API_CALLS, BUFFER_API_CALLS, SUSPICIOUS_USER_AGENTS, SUPPORTED_EXTENSIONS, \
-            ANALYSIS_ERRORS, GUEST_LOSING_CONNNECTIVITY, GUEST_CANNOT_REACH_HOST, GUEST_LOST_CONNECTIVITY
-        assert DOMAIN_REGEX == base_domain_regex
-        assert IP_REGEX == base_ip_regex
-        assert URL_REGEX == compile(
-            "(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#][^\s,\\\\]*)?")
-        assert UNIQUE_IP_LIMIT == 100
-        assert SCORE_TRANSLATION == {1: 10, 2: 100, 3: 250, 4: 500, 5: 750, 6: 1000, 7: 1000, 8: 1000}
-        assert SKIPPED_MARK_ITEMS == ["type", "suspicious_features", "entropy", "process", "useragent"]
-        assert SKIPPED_CATEGORY_IOCS == ["section"]
-        assert SKIPPED_FAMILIES == ["generic"]
-        assert SKIPPED_PATHS == ["/"]
-        assert SILENT_IOCS == ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_process",
-                               "uses_windows_utilities", "creates_exe", "deletes_executed_files"]
-        assert INETSIM == "INetSim"
-        assert DNS_API_CALLS == ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
-        assert HTTP_API_CALLS == ["send", "InternetConnectW", "InternetConnectA", "URLDownloadToFileW"]
-        assert BUFFER_API_CALLS == ["send", "WSASend"]
-        assert SUSPICIOUS_USER_AGENTS == [
-            "Microsoft BITS", "Excel Service",
-        ]
-        assert SUPPORTED_EXTENSIONS == [
-            'bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe', 'hta', 'htm', 'html',
-            'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt',
-            'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
-        ]
-        assert ANALYSIS_ERRORS == 'Analysis Errors'
-        assert GUEST_LOSING_CONNNECTIVITY == 'Virtual Machine /status failed. This can indicate the guest losing network connectivity'
-        assert GUEST_CANNOT_REACH_HOST == "it appears that this Virtual Machine hasn't been configured properly as the Cuckoo Host wasn't able to connect to the Guest."
-        assert GUEST_LOST_CONNECTIVITY == 5
-
-    @staticmethod
     @pytest.mark.parametrize(
-        "api_report, correct_body",
-        [({},
-          None),
+        "api_report",
+        [({}),
          ({"info": {"id": "blah"},
            "debug": "blah", "signatures": [{"name": "blah"}],
            "network": "blah", "behavior": {"blah": "blah"},
            "curtain": "blah", "sysmon": {},
-           "hollowshunter": "blah"},
-          None),
+           "hollowshunter": "blah"}),
          ({"info": {"id": "blah"},
            "debug": "blah", "signatures": [{"name": "ransomware"}],
            "network": "blah", "behavior": {"blah": "blah"},
            "curtain": "blah", "sysmon": {},
-           "hollowshunter": "blah"},
-          None),
+           "hollowshunter": "blah"}),
          ({"signatures": [{"name": "blah"}],
            "info": {"id": "blah"},
-           "behavior": {"summary": "blah"}},
-          None),
+           "behavior": {"summary": "blah"}}),
          ({"signatures": [{"name": "blah"}],
            "info": {"id": "blah"},
-           "behavior": {"processtree": "blah"}},
-          None),
+           "behavior": {"processtree": "blah"}}),
          ({"signatures": [{"name": "blah"}],
-           "info": {"id": "blah"}, "behavior": {"processes": "blah"}},
-          None), ])
-    def test_generate_al_result(api_report, correct_body, mocker):
+           "info": {"id": "blah"}, "behavior": {"processes": "blah"}}), ])
+    def test_generate_al_result(api_report, mocker):
         from cuckoo.cuckoo_result import generate_al_result
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from ipaddress import ip_network
-        from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
+        from assemblyline_v4_service.common.result import ResultSection
 
         correct_process_map = {"blah": "blah"}
         mocker.patch("cuckoo.cuckoo_result.process_info")
         mocker.patch("cuckoo.cuckoo_result.process_debug")
         mocker.patch("cuckoo.cuckoo_result.get_process_map", return_value=correct_process_map)
         mocker.patch("cuckoo.cuckoo_result.process_signatures", return_value=False)
-        mocker.patch("cuckoo.cuckoo_result.add_processes_to_gpm", return_value=None)
         mocker.patch("cuckoo.cuckoo_result.convert_sysmon_processes", return_value=None)
         mocker.patch("cuckoo.cuckoo_result.convert_sysmon_network", return_value=None)
         mocker.patch("cuckoo.cuckoo_result.process_behaviour", return_value=["blah"])
@@ -216,13 +172,13 @@ class TestCuckooResult:
     @pytest.mark.parametrize(
         "processes, correct_event",
         [([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1,
-            "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
+            "guid": "{12345678-1234-5678-1234-567812345678}", "pguid": "{12345678-1234-5678-1234-567812345679}", "first_seen": 1.0}],
           {'start_time': 1.0, 'end_time': float("inf"),
            'objectid':
            {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'time_observed': 1.0,
             'richid': None},
            'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'richid': None},
-           'pimage': None, 'pcommand_line': None, 'ppid': 1, 'pid': 0, 'image': 'blah', 'command_line': 'blah',
+           'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 0, 'image': 'blah', 'command_line': 'blah',
            'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
          ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1,
             "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
@@ -232,11 +188,16 @@ class TestCuckooResult:
     def test_convert_cuckoo_processes(processes, correct_event):
         from cuckoo.cuckoo_result import convert_cuckoo_processes
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
+        from uuid import UUID
         safelist = {}
         so = SandboxOntology()
         convert_cuckoo_processes(processes, safelist, so)
         if correct_event:
-            assert so.get_processes()[0].as_primitives() == correct_event
+            proc_as_prims = so.get_processes()[0].as_primitives()
+            if proc_as_prims["pobjectid"]["guid"]:
+                assert str(UUID(proc_as_prims["pobjectid"].pop("guid")))
+                proc_as_prims["pobjectid"]["guid"] = None
+            assert proc_as_prims == correct_event
         else:
             assert so.get_processes() == []
 
@@ -348,7 +309,9 @@ class TestCuckooResult:
                        "type": "blah"}]}],
           "192.0.2.0/24", "", {},
           'No description for signature.', False,
-          {"name": "console_output", "description": "No description for signature."}),
+          {"name": "console_output", "description": "No description for signature.", "attack": [{'attack_id': 'T1003', 'categories': ['credential-access'],
+             'pattern': 'OS Credential Dumping'}, {'attack_id': 'T1005', 'categories': ['collection'],
+             'pattern': 'Data from Local System'}]}),
          ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic"}]}],
           "192.0.2.0/24", "", {},
           'No description for signature.\n\tIOC: 1', False,
@@ -383,14 +346,16 @@ class TestCuckooResult:
           "192.0.2.0/24", "", {},
           'No description for signature.\n\t"blah 11.11.11.11" is suspicious because "blah"', False,
           {"name": "network_cnc_http", "description": "No description for signature.", "process.pid": 1,
-           "iocs": [{"uri": "11.11.11.11"}]}),
+           "iocs": [{"uri": "11.11.11.11"}], "attack": [{'attack_id': 'T1071', 'categories': ['command-and-control'],
+             'pattern': 'Application Layer Protocol'}]}),
          ("nolookup_communication",
           [{"name": "nolookup_communication", "severity": 1, "markcount": 1,
             "marks": [{"pid": 1, "type": "generic", "host": "11.11.11.11"}]}],
           "192.0.2.0/24", "", {},
           'No description for signature.\n\tIOC: 11.11.11.11', False,
           {"name": "nolookup_communication", "description": "No description for signature.", "process.pid": 1,
-           "iocs": [{"ip": "11.11.11.11"}]}),
+           "iocs": [{"ip": "11.11.11.11"}], "attack": [{'attack_id': 'T1071', 'categories': ['command-and-control'],
+             'pattern': 'Application Layer Protocol'}]}),
          ("nolookup_communication",
           [{"name": "nolookup_communication", "severity": 1, "markcount": 1,
             "marks": [{"pid": 1, "type": "generic", "host": "127.0.0.1"}]}],
@@ -413,7 +378,8 @@ class TestCuckooResult:
                                1: {"name": "blah2"}},
           'No description for signature.\n\tProcess Name: blah1\n\tInjected Process: blah2', False,
           {"name": "injection_explorer", "description": "No description for signature.", "process.pid": 2,
-           "process.image": "blah1", "iocs": [{"process.pid": 1, "process.image": "blah2"}]}),
+           "process.image": "blah1", "iocs": [{"process.pid": 1, "process.image": "blah2"}], "attack": [{'attack_id': 'T1055', 'categories': ['defense-evasion', 'privilege-escalation'],
+             'pattern': 'Process Injection'}]}),
          ("process_interest",
           [{"name": "process_interest", "markcount": 1, "severity": 1,
             "marks": [{"type": "call", "pid": 2, "call": {"arguments": {"process_identifier": 1}}}]}],
@@ -760,9 +726,9 @@ class TestCuckooResult:
             ("blah", {"ioc": "1", "category": "blah"}, {}, {}, '\tIOC: 1', {}),
             ("blah", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: blah', {}),
             ("blah", {"ioc": "blah", "category": "file"}, {}, {
-             "dynamic.process.file_name": ["blah"]}, '\tIOC: blah', {}),
+             "dynamic.process.file_name": ["blah"]}, '\tIOC: blah', {"file": "blah"}),
             ("blah", {"ioc": "blah", "category": "dll"}, {}, {
-             "dynamic.process.file_name": ["blah"]}, '\tIOC: blah', {}),
+             "dynamic.process.file_name": ["blah"]}, '\tIOC: blah', {"file": "blah"}),
             ("blah", {"ioc": "blah", "category": "cmdline"}, {}, {
              "dynamic.process.command_line": ["blah"]}, '\tIOC: blah', {}),
             ("process_interest", {"ioc": "blah", "category": "process: super bad file"},
@@ -775,6 +741,7 @@ class TestCuckooResult:
         from assemblyline_v4_service.common.result import ResultSection
         from cuckoo.cuckoo_result import _tag_and_describe_ioc_signature
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
+        so = SandboxOntology()
         so_sig = SandboxOntology.Signature()
         so_sig_ioc = SandboxOntology.Signature.Subject().as_primitives()
         default_sig = so_sig.as_primitives()
@@ -784,7 +751,7 @@ class TestCuckooResult:
         file_ext = ".exe"
         safelist = {"regex": {"network.dynamic.domain": ["(www\.)?w3\.org$"]}}
         _tag_and_describe_ioc_signature(signature_name, mark, actual_result,
-                                        inetsim_network, process_map, file_ext, safelist, so_sig)
+                                        inetsim_network, process_map, file_ext, safelist, so, so_sig)
         assert check_section_equality(actual_result, expected_result)
         for key, value in expected_ioc.items():
             so_sig_ioc[key] = value
@@ -793,41 +760,41 @@ class TestCuckooResult:
         assert so_sig.as_primitives() == default_sig
 
     @staticmethod
-    @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body, expected_ioc",
+    @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body, expected_iocs",
                              [("blah", {"blah": "blah"},
                                {},
-                               None, {}),
+                               None, []),
                               ("creates_hidden_file", {"call": {"arguments": {}}},
                                {},
-                               None, {}),
+                               None, []),
                               ("creates_hidden_file", {"call": {"arguments": {"filepath": "blah"}}},
                                {"dynamic.process.file_name": ["blah"]},
-                               "IOC: blah", {}),
+                               "IOC: blah", [{"file": "blah"}]),
                               ("moves_self", {"call": {"arguments": {}}},
                                {},
-                               None, {}),
+                               None, []),
                               ("moves_self",
                                {"call": {"arguments": {"oldfilepath": "blah1", "newfilepath": "blah2"}}},
                                {"dynamic.process.file_name": ["blah1", "blah2"]},
-                               '\tOld file path: blah1\n\tNew file path: blah2', {}),
+                               '\tOld file path: blah1\n\tNew file path: blah2', [{"file": "blah1"}, {"file": "blah2"}]),
                               ("moves_self", {"call": {"arguments": {"oldfilepath": "blah", "newfilepath": ""}}},
                                {"dynamic.process.file_name": ["blah"]},
-                               '\tOld file path: blah\n\tNew file path: File deleted itself', {}),
+                               '\tOld file path: blah\n\tNew file path: File deleted itself', [{"file": "blah"}]),
                               ("creates_service", {"call": {"arguments": {}}},
                                {},
-                               None, {}),
+                               None, []),
                               ("creates_service", {"call": {"arguments": {"service_name": "blah"}}},
                                {},
-                               '\tNew service name: blah', {}),
+                               '\tNew service name: blah', []),
                               ("terminates_remote_process", {"call": {"arguments": {"process_identifier": 1}}},
                                {},
-                               '\tTerminated Remote Process: blah', {"process.image": "blah", "process.pid": 1}),
+                               '\tTerminated Remote Process: blah', [{"process.image": "blah", "process.pid": 1}]),
                               ("network_document_file",
                                {"call": {"time": 1, "arguments": {"filepath": "C:\\bad.exe", "url": "http://bad.com"}}},
                                {"dynamic.process.file_name": ["C:\\bad.exe"], "network.dynamic.uri": ["http://bad.com"]},
                                '\tThe file at http://bad.com was attempted to be downloaded to C:\\bad.exe',
-                               {"uri": "http://bad.com"}), ])
-    def test_tag_and_describe_call_signature(signature_name, mark, expected_tags, expected_body, expected_ioc):
+                               [{"file": "C:\\bad.exe"}, {"uri": "http://bad.com"}]), ])
+    def test_tag_and_describe_call_signature(signature_name, mark, expected_tags, expected_body, expected_iocs):
         from assemblyline_v4_service.common.result import ResultSection
         from cuckoo.cuckoo_result import _tag_and_describe_call_signature
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, Process
@@ -835,21 +802,21 @@ class TestCuckooResult:
         actual_result = ResultSection("blah")
         process_map = {1: {"name": "blah"}}
         so_sig = SandboxOntology.Signature()
-        so_sig_ioc = SandboxOntology.Signature.Subject().as_primitives()
         default_sig = so_sig.as_primitives()
         _tag_and_describe_call_signature(signature_name, mark, actual_result, process_map, so_sig)
         assert check_section_equality(actual_result, expected_result)
-        if any("process" in key for key in expected_ioc.keys()):
-            so_sig_ioc["process"] = Process().as_primitives()
-        for key, value in expected_ioc.items():
-            if "." in key:
-                key1, key2 = key.split(".")
-                so_sig_ioc[key1][key2] = value
-                if key2 == "image":
-                    so_sig_ioc[key1]["objectid"]["tag"] = value
-            else:
-                so_sig_ioc[key] = value
-        if expected_ioc:
+        for expected_ioc in expected_iocs:
+            so_sig_ioc = SandboxOntology.Signature.Subject().as_primitives()
+            if any("process" in key for key in expected_ioc.keys()):
+                so_sig_ioc["process"] = Process().as_primitives()
+            for key, value in expected_ioc.items():
+                if "." in key:
+                    key1, key2 = key.split(".")
+                    so_sig_ioc[key1][key2] = value
+                    if key2 == "image":
+                        so_sig_ioc[key1]["objectid"]["tag"] = value
+                else:
+                    so_sig_ioc[key] = value
             default_sig["subjects"].append(so_sig_ioc)
         if mark.get("call", {}).get("time"):
             default_sig["process"] = Process().as_primitives()
@@ -994,9 +961,9 @@ class TestCuckooResult:
            "flag"))])
     def test_get_low_level_flows(resolved_ips, flows, expected_return):
         from cuckoo.cuckoo_result import _get_low_level_flows
-        from assemblyline_v4_service.common.result import ResultSection
+        from assemblyline_v4_service.common.result import ResultSection, ResultTableSection
         expected_network_flows_table, expected_netflows_sec_body = expected_return
-        correct_netflows_sec = ResultSection(title_text="TCP/UDP Network Traffic")
+        correct_netflows_sec = ResultTableSection(title_text="TCP/UDP Network Traffic")
         if expected_netflows_sec_body == "flag":
             too_many_unique_ips_sec = ResultSection(title_text="Too Many Unique IPs")
             too_many_unique_ips_sec.set_body(f"The number of TCP calls displayed has been capped "
@@ -1024,15 +991,15 @@ class TestCuckooResult:
             ({}, {}, []),
             ({}, {"http": [], "https": [], "http_ex": [], "https_ex": []}, []),
             ({}, {"http": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [
-             {'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'http', 'request_headers': 'blah', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "http_ex": [], "https_ex": []}, [
-             {'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'https', 'request_headers': 'blah', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [], "http_ex": [{"host": "blah", "request": "blah", "dport": "blah", "uri": "blah", "protocol": "http", "method": "blah"}], "https_ex": []}, [
-             {'host': 'blah', 'method': 'blah', 'path': '', 'port': 'blah', 'process_name': None, 'protocol': 'http', 'request_headers': 'blah', 'uri': 'http://blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'http://blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [], "http_ex": [{"host": "nope", "request": "blah", "dport": "blah", "uri": "blah", "protocol": "http", "method": "blah"}], "https_ex": []}, [
-             {'host': 'nope', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'http', 'request_headers': 'blah', 'uri': 'http://nopeblah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'http://nopeblah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [], "http_ex": [], "https_ex": [{"host": "nope", "request": "blah", "dport": "blah", "uri": "blah", "protocol": "https", "method": "blah"}]}, [
-             {'host': 'nope', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'https', 'request_headers': 'blah', 'uri': 'https://nopeblah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'https://nopeblah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [{"host": "192.168.0.1", "path": "blah", "data": "blah", "port": "blah",
              "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, []),
             ({}, {"http": [{"host": "something.adobe.com", "path": "blah", "data": "blah", "port": "blah",
@@ -1048,29 +1015,39 @@ class TestCuckooResult:
                     "https": [],
                     "http_ex": [],
                     "https_ex": []},
-                [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None,
-                  'protocol': 'http', 'request_headers': 'blah', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+                [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({1: {"network_calls": [{"send": {"service": 3}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [
-            ], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request_headers': 'blah', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+            ], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({1: {"network_calls": [{"InternetConnectW": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [
-            ], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request_headers': 'check me', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+            ], "http_ex": [], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({1: {"network_calls": [{"InternetConnectA": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [
-            ], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request_headers': 'check me', 'uri': 'blah', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+            ], "http_ex": [], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({1: {"network_calls": [{"URLDownloadToFileW": {"url": "bad.evil"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "bad.evil", "method": "blah"}], "https": [
-            ], "http_ex": [], "https_ex": []}, [{'host': 'blah', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': "blah (1)", 'protocol': 'http', 'request_headers': 'check me', 'uri': 'bad.evil', 'user-agent': None, "sport": None, "dst": None, "src": None, "response_headers": None, "request_body_path": None, "response_body_path": None}]),
+            ], "http_ex": [], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'bad.evil', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [], "http_ex": [], "https_ex": [{"host": "nope", "req": {"path": "blahblah/network/blahblah"}, "resp": {"path": "blahblah/network/blahblah"}, "dport": "blah", "uri": "blah", "protocol": "https", "method": "blah", "sport": 123, "dst": "blah", "src": "blah", "response": "blah", "request": "blah"}]}, [
-             {'host': 'nope', 'method': 'blah', 'path': 'blah', 'port': 'blah', 'process_name': None, 'protocol': 'https', 'request_headers': 'blah', 'uri': 'https://nopeblah', 'user-agent': None, "sport": 123, "dst": "blah", "src": "blah", "response_headers": "blah", "request_body_path": "network/blahblah", "response_body_path": "network/blahblah"}]),
+             {'connection_details': {'objectid': {'tag': 'blah:blah', 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': 'blah', 'source_port': 123, 'destination_ip': 'blah', 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'https://nopeblah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': 'network/blahblah', 'response_body_path': 'network/blahblah'}]),
 
         ]
     )
     def test_process_http_calls(process_map, http_level_flows, expected_req_table):
         from cuckoo.cuckoo_result import _process_http_calls
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
+        default_so = SandboxOntology()
         safelist = {
             "regex":
             {"network.dynamic.ip": ["(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*"],
              "network.dynamic.domain": [".*\.adobe\.com$"],
              "network.dynamic.uri": ["(?:ftp|http)s?://localhost(?:$|/.*)"]}}
-        assert _process_http_calls(http_level_flows, process_map, safelist) == expected_req_table
+        _process_http_calls(http_level_flows, process_map, safelist, default_so)
+        actual_req_table = []
+        for nh in default_so.get_network_http():
+            nh_as_prim = nh.__dict__
+            nh_as_prim["connection_details"] = nh_as_prim["connection_details"].__dict__
+            nh_as_prim["connection_details"]["objectid"] = nh_as_prim["connection_details"]["objectid"].__dict__
+            nh_as_prim["connection_details"]["objectid"].pop("guid")
+            print(nh_as_prim)
+            actual_req_table.append(nh_as_prim)
+        assert expected_req_table == actual_req_table
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1138,7 +1115,7 @@ class TestCuckooResult:
         default_so.add_process(p)
         nc = default_so.create_network_connection(
             time_observed=1, source_port=1, destination_ip="1.1.1.1", source_ip="2.2.2.2", destination_port=1,
-            transport_layer_protocol="blah", process=p)
+            transport_layer_protocol="blah", direction="outbound", process=p)
 
         default_so.add_network_connection(nc)
         dns = default_so.create_network_dns(domain="blah", resolved_ips=["1.1.1.1"], connection_details=nc)
@@ -1219,17 +1196,16 @@ class TestCuckooResult:
         "sysmon, expected_process",
         [([],
           {}),
-         ([{
+         ([{"System": {"EventID": 2},
              "EventData":
              {
                  "Data":
                  [{"@Name": "ParentProcessId", "#text": "2"},
                   {"@Name": "Image", "#text": "blah.exe"},
                      {"@Name": "CommandLine", "#text": "./blah"},
-                     {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
                      {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
           {}),
-         ([{
+         ([{"System": {"EventID": 2},
              "EventData":
              {
                  "Data":
@@ -1237,16 +1213,15 @@ class TestCuckooResult:
                   {"@Name": "ParentProcessId", "#text": "2"},
                      {"@Name": "Image", "#text": "blah.exe"},
                      {"@Name": "CommandLine", "#text": "./blah"},
-                     {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
                      {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
-          {'start_time': 43932.12, 'end_time': float("inf"),
+          {'start_time': float("-inf"), 'end_time': float("inf"),
            'objectid':
-           {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None, 'time_observed': 43932.12,
+           {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None, 'time_observed': float("-inf"),
             'richid': None},
            'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'richid': None},
            'pimage': None, 'pcommand_line': None, 'ppid': 2, 'pid': 1, 'image': 'blah.exe', 'command_line': './blah',
            'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
-         ([{
+         ([{"System": {"EventID": 2},
              "EventData":
              {
                  "Data":
@@ -1254,29 +1229,56 @@ class TestCuckooResult:
                   {"@Name": "ParentProcessId", "#text": "2"},
                      {"@Name": "Image", "#text": "blah.exe"},
                      {"@Name": "CommandLine", "#text": "./blah"},
-                     {"@Name": "UtcTime", "#text": "1970-01-01 12:12:12.120"},
                      {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"},
                      {"@Name": "SourceProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"}]}}],
-          {'start_time': 43932.12, 'end_time': float("inf"),
-           'objectid':
-           {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None, 'time_observed': 43932.12,
-            'richid': None},
-           'pobjectid':
-           {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': None, 'treeid': None, 'time_observed': None,
-            'richid': None},
-           'pimage': None, 'pcommand_line': None, 'ppid': 2, 'pid': 1, 'image': 'blah.exe', 'command_line': './blah',
-           'integrity_level': None, 'image_hash': None, 'original_file_name': None}), ])
+                {'start_time': float("-inf"), 'end_time': float("inf"),
+                'objectid':
+                {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None, 'time_observed': float("-inf"),
+                    'richid': None},
+                'pobjectid':
+                {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': None, 'treeid': None, 'time_observed': None,
+                    'richid': None},
+                'pimage': None, 'pcommand_line': None, 'ppid': 2, 'pid': 1, 'image': 'blah.exe', 'command_line': './blah',
+                'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
+           ([{"System": {"EventID": 1},
+                "EventData":
+                {
+                "Data":
+                [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
+                {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
+                {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}}],
+            {'start_time': 45630.123, 'end_time': float("inf"), 'objectid': {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'richid': None, 'time_observed': 45630.123}, 'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 123, 'image': 'blah', 'command_line': None, 'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
+            ([{"System": {"EventID": 1},
+                "EventData":
+                {
+                "Data":
+                [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
+                {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
+                {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}},
+            {"System": {"EventID": 5},
+                "EventData":
+                {
+                "Data":
+                [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:31.123"},
+                    {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
+                    {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}}],
+            {'start_time': 45630.123, 'end_time': 45631.123, 'objectid': {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'richid': None, 'time_observed': 45630.123}, 'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 123, 'image': 'blah', 'command_line': None, 'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
+            ])
     def test_convert_sysmon_processes(sysmon, expected_process):
         from cuckoo.cuckoo_result import convert_sysmon_processes
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
+        from uuid import UUID
         so = SandboxOntology()
-        default_process = so.create_process().as_primitives()
         safelist = {}
         convert_sysmon_processes(sysmon, safelist, so)
         if expected_process:
-            for key, value in expected_process.items():
-                default_process[key] = value
-            assert so.processes[0].as_primitives() == default_process
+            proc_as_prims = so.processes[0].as_primitives()
+            if expected_process["pobjectid"]["guid"]:
+                assert proc_as_prims == expected_process
+            else:
+                assert str(UUID(proc_as_prims["pobjectid"].pop("guid")))
+                proc_as_prims["pobjectid"]["guid"] = None
+                assert proc_as_prims == expected_process
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1533,7 +1535,7 @@ class TestCuckooResult:
          ("https://blah.ca/blah", ".exe",
           {'network.dynamic.domain': ['blah.ca'],
            'network.dynamic.uri': ['https://blah.ca/blah'],
-           "network.dynamic.uri_path": ["/blah"]}, [{"domain": "blah.ca"}, {"uri": "https://blah.ca/blah"}, {"uri_path": "/blah"}]),
+           "network.dynamic.uri_path": ["/blah"]}, [{"domain": "blah.ca"}, {"uri": "https://blah.ca/blah"}]),
          ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", ".exe", {}, [{}]),
          (
             "DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC",
@@ -1546,7 +1548,7 @@ class TestCuckooResult:
          ("evil.ca/some/thing/bad.exe", "",
           {"network.dynamic.domain": ["evil.ca"],
            "network.dynamic.uri": ["evil.ca/some/thing/bad.exe"],
-           "network.dynamic.uri_path": ["/some/thing/bad.exe"]}, [{"domain": "evil.ca"}, {"uri": "evil.ca/some/thing/bad.exe"}, {"uri_path": "/some/thing/bad.exe"}]), ])
+           "network.dynamic.uri_path": ["/some/thing/bad.exe"]}, [{"domain": "evil.ca"}, {"uri": "evil.ca/some/thing/bad.exe"}]), ])
     def test_extract_iocs_from_text_blob(blob, file_ext, correct_tags, expected_iocs):
         from cuckoo.cuckoo_result import _extract_iocs_from_text_blob
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
@@ -1564,8 +1566,8 @@ class TestCuckooResult:
                 default_iocs.append(default_ioc)
             assert so_sig.as_primitives()["subjects"] == default_iocs
 
-    @ staticmethod
-    @ pytest.mark.parametrize(
+    @staticmethod
+    @pytest.mark.parametrize(
         "value, tags, safelist, substring, expected_output",
         [
             ("", [], {}, False, False),
@@ -1587,8 +1589,8 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import is_safelisted
         assert is_safelisted(value, tags, safelist, substring) == expected_output
 
-    @ staticmethod
-    @ pytest.mark.parametrize(
+    @staticmethod
+    @pytest.mark.parametrize(
         "value, expected_tags, tags_were_added",
         [
             ("", {}, False),
@@ -1606,8 +1608,8 @@ class TestCuckooResult:
         assert add_tag(res_sec, tag, value) == tags_were_added
         assert res_sec.tags == expected_tags
 
-    @ staticmethod
-    @ pytest.mark.parametrize(
+    @staticmethod
+    @pytest.mark.parametrize(
         "tag, value, inetsim_network, expected_tags, added_tag",
         [
             ("", "", None, {}, False),
@@ -1629,69 +1631,3 @@ class TestCuckooResult:
         res_sec = ResultSection("blah")
         assert add_tag(res_sec, tag, value, ip_network(inetsim_network) if inetsim_network else None) == added_tag
         assert res_sec.tags == expected_tags
-
-    @ staticmethod
-    @ pytest.mark.parametrize("sysmon, expected_gpm_procs",
-                              [([],
-                               []),
-                               ([{"System": {"EventID": 0}, "EventData": {"Data": [{"@Name": "blah"}]}}],
-                               []),
-                               ([{"System": {"EventID": 1},
-                                 "EventData": {"Data": [{"@Name": "blah"}]}}],
-                               []),
-                               ([{"System": {"EventID": 1},
-                                 "EventData":
-                                  {
-                                  "Data":
-                                  [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
-                                   {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
-                                   {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}}],
-                               [{"pid": 123, "guid": "{12345678-1234-5678-1234-567812345678}", "start_time": 45630.123,
-                                 "end_time": float("inf"), "image": "blah"}]),
-                               ([{"System": {"EventID": 1},
-                                 "EventData":
-                                  {
-                                  "Data":
-                                  [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
-                                   {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
-                                   {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}},
-                                {"System": {"EventID": 5},
-                                 "EventData":
-                                 {
-                                    "Data":
-                                    [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:31.123"},
-                                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
-                                        {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}}],
-                               [{"pid": 123, "guid": "{12345678-1234-5678-1234-567812345678}", "start_time": 45630.123,
-                                 "end_time": 45631.123, "image": "blah"}]),
-                               ([{"System": {"EventID": 5},
-                                 "EventData":
-                                  {
-                                  "Data":
-                                  [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
-                                   {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
-                                   {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}},
-                                {"System": {"EventID": 1},
-                                 "EventData":
-                                 {
-                                    "Data":
-                                    [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:31.123"},
-                                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"},
-                                        {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}}],
-                               [{"pid": 123, "guid": "{12345678-1234-5678-1234-567812345678}",
-                                 "start_time": float("-inf"),
-                                 "end_time": 45630.123, "image": "blah"},
-                                {"pid": 123, "guid": "{12345678-1234-5678-1234-567812345679}", "start_time": 45631.123,
-                                 "end_time": float("inf"), "image": "blah"}]), ])
-    def test_add_processes_to_gpm(sysmon, expected_gpm_procs):
-        from cuckoo.cuckoo_result import add_processes_to_gpm
-        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
-        actual_so = SandboxOntology()
-        add_processes_to_gpm(sysmon, actual_so)
-        expected_so = SandboxOntology()
-        for gpm_proc in expected_gpm_procs:
-            validated_proc = expected_so.create_process(**gpm_proc)
-            expected_so.add_process(validated_proc)
-        assert len(actual_so.processes) == len(expected_so.processes)
-        for index, proc in enumerate(actual_so.processes):
-            assert proc.as_primitives() == expected_so.processes[index].as_primitives()
