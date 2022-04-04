@@ -31,6 +31,7 @@ from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
 from cuckoo.cuckoo_result import add_tag, ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, is_safelisted, \
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
+from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
@@ -348,7 +349,7 @@ class Cuckoo(ServiceBase):
 
         for so in self.sandbox_ontologies:
             self.log.debug("Preprocessing the ontology")
-            so.preprocess_ontology()
+            so.preprocess_ontology(safelist=SAFE_PROCESS_TREE_LEAF_HASHES.keys())
             self.log.debug("Attaching the ontological result")
             self.attach_ontological_result(Sandbox, so.as_primitives())
 

@@ -200,5 +200,30 @@ SAFE_PROCESS_TREE_LEAF_HASHES = {
                 ]
             }
         ]
-    }
+    },
+    "bbc5e661e106c6dcd8dc6dd186454c2fcba3c710fb4d8e71a60c93eaf077f073": {
+        "image": "system",
+        "command_line": None,
+        "children": []
+    },
+    "acbf70b95a96ba178eb89269e7f1db5f622fa4b6b009cd29284d7be14024625b": {
+        "image": "?sys32\\searchindexer.exe",
+        "command_line": None,
+        "children": []
+    },
+    "49a2ab6c73a10ee6bd97a0ba200c6f6dc0dc2977059b8029579e780748f19c72": {
+        "image": "?c\\python27\\pythonw.exe",
+        "command_line": None,
+        "children": []
+    },
+    "49d9994a34643bea4cc71a26501d1e58ccabd051a1cf9704184b6374e1ef3764": {
+        "image": "?sys32\\searchprotocolhost.exe",
+        "command_line": None,
+        "children": []
+    },
+    "a54f2146bd3272b89f7b9c7047f2b436a9514f89feeed754bcc6d19d32dc2db3": {
+        "image": "?sys32\\searchfilterhost.exe",
+        "command_line": None,
+        "children": []
+    },
 }
