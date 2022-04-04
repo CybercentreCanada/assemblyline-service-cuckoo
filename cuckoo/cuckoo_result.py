@@ -39,7 +39,7 @@ SCORE_TRANSLATION = {
 
 # Signature Processing Constants
 SKIPPED_MARK_ITEMS = ["type", "suspicious_features", "entropy", "process", "useragent"]
-SKIPPED_CATEGORY_IOCS = ["section"]
+SKIPPED_CATEGORY_IOCS = ["section", "Data received", "Data sent"]
 SKIPPED_FAMILIES = ["generic"]
 SKIPPED_PATHS = ["/"]
 SILENT_IOCS = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_process", "uses_windows_utilities",
@@ -109,7 +109,6 @@ def generate_al_result(
     process_map = get_process_map(behaviour.get("processes", {}), safelist)
 
     if sysmon:
-        add_processes_to_gpm(sysmon, so)
         convert_sysmon_processes(sysmon, safelist, so)
         convert_sysmon_network(sysmon, network, safelist)
 
@@ -135,11 +134,11 @@ def generate_al_result(
             sigs, al_result, validated_random_ip_range, target_filename, process_map, info["id"],
             file_ext, safelist, so)
 
-    build_process_tree(al_result, is_process_martian, so)
-
     if network:
         process_network(network, al_result, validated_random_ip_range, routing, process_map, info["id"],
                         safelist, so)
+
+    build_process_tree(al_result, is_process_martian, so)
 
     process_all_events(al_result, file_ext, so)
 
@@ -380,7 +379,7 @@ def process_signatures(
                 _tag_and_describe_generic_signature(sig_name, mark, sig_res, inetsim_network, safelist, so_sig)
             elif mark["type"] == "ioc" and mark.get("category") not in SKIPPED_CATEGORY_IOCS:
                 _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network,
-                                                process_map, file_ext, safelist, so_sig)
+                                                process_map, file_ext, safelist, so, so_sig)
             elif mark["type"] == "call" and process_name is not None and len(process_names) == 0:
                 sig_res.add_line(f'\tProcess Name: {safe_str(process_name)}')
                 process_names.append(process_name)
@@ -504,7 +503,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                 source_port=network_flow["src_port"],
                 destination_ip=network_flow["dest_ip"],
                 destination_port=network_flow["dest_port"],
-                timestamp=network_flow["timestamp"],
+                time_observed=network_flow["timestamp"],
                 transport_layer_protocol=network_flow["protocol"],
                 direction="outbound")
             nc.update_process(pid=network_flow["pid"], image=process_details.get(
@@ -531,7 +530,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         for item in network_flows_table:
             if item not in unique_netflows:  # Remove duplicates
                 unique_netflows.append(item)
-        netflows_sec.set_body(json.dumps(unique_netflows), BODY_FORMAT.TABLE)
+                netflows_sec.add_row(TableRow(**item))
         network_res.add_subsection(netflows_sec)
 
     # HTTP/HTTPS section
@@ -541,9 +540,9 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         "http_ex": network.get("http_ex", []),
         "https_ex": network.get("https_ex", []),
     }
-    req_table = _process_http_calls(http_level_flows, process_map, safelist)
-
-    if len(req_table) > 0:
+    _process_http_calls(http_level_flows, process_map, safelist, so)
+    http_calls = so.get_network_http()
+    if len(http_calls) > 0:
         http_sec = ResultTableSection("Protocol: HTTP/HTTPS")
         remote_file_access_sec = ResultTextSection("Access Remote File")
         remote_file_access_sec.add_line("The sample attempted to download the following files:")
@@ -551,69 +550,43 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         suspicious_user_agent_sec.add_line("The sample made HTTP calls via the following user agents:")
         sus_user_agents_used = []
         http_sec.set_heuristic(1002)
-        for http_call in req_table:
-            nh = so.create_network_http()
-            _ = add_tag(http_sec, "network.protocol", http_call["protocol"])
-            host = http_call["host"]
-            path = http_call["path"]
-            if ":" in host:  # split on port if port exists
-                host = host.split(":")[0]
-            _ = add_tag(http_sec, "network.dynamic.ip", host)
-            _ = add_tag(http_sec, "network.port", http_call["port"])
-            if path not in SKIPPED_PATHS:
-                _ = add_tag(http_sec, "network.dynamic.domain", host)
-                _ = add_tag(http_sec, "network.dynamic.uri", http_call["uri"])
-                nh.update(request_uri=http_call["uri"])
-                _ = add_tag(http_sec, "network.dynamic.uri_path", path)
-                # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
-                if http_call["method"] == "GET":
-                    split_path = path.rsplit("/", 1)
-                    if len(split_path) > 1 and re.search(r'[^\\]*\.(\w+)$', split_path[-1]):
-                        if add_tag(remote_file_access_sec, "network.dynamic.uri", http_call["uri"]):
-                            remote_file_access_sec.add_line(f"\t{http_call['uri']}")
-                            nh.update(request_uri=http_call["uri"])
-                        if not remote_file_access_sec.heuristic:
-                            remote_file_access_sec.set_heuristic(1003)
-            if any((http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
-                   or sus_user_agent in http_call["request_headers"]
-                   for sus_user_agent in SUSPICIOUS_USER_AGENTS):
-                if suspicious_user_agent_sec.heuristic is None:
-                    suspicious_user_agent_sec.set_heuristic(1007)
-                sus_user_agent_used = next((sus_user_agent for sus_user_agent in SUSPICIOUS_USER_AGENTS
-                                            if (http_call["user-agent"] and sus_user_agent in http_call["user-agent"])
-                                            or sus_user_agent in http_call["request_headers"]), None)
-                if sus_user_agent_used not in sus_user_agents_used:
-                    _ = add_tag(suspicious_user_agent_sec, "network.user_agent", sus_user_agent_used)
-                    suspicious_user_agent_sec.add_line(f"\t{sus_user_agent_used}")
-                    sus_user_agents_used.append(sus_user_agent_used)
-            request_headers = _handle_http_headers(http_call["request_headers"])
-            response_headers = _handle_http_headers(http_call["response_headers"])
-            nh.update(
-                request_method=http_call["method"],
-                request_headers=request_headers, response_headers=response_headers,
-                request_body_path=http_call["request_body_path"],
-                response_body_path=http_call["response_body_path"])
-            nh.update_connection_details(
-                source_ip=http_call["src"],
-                source_port=http_call["sport"],
-                destination_ip=http_call["dst"],
-                destination_port=http_call["port"],
-                direction="outbound", transport_layer_protocol="tcp")
-            so.add_network_http(nh)
-            # now remove keys from the final output
-            del http_call['path']
-            del http_call['uri']
-            del http_call['port']
-            del http_call['user-agent']
-            del http_call["host"]
-            del http_call["method"]
-            del http_call["sport"]
-            del http_call["src"]
-            del http_call["dst"]
-            del http_call["response_headers"]
-            del http_call["request_body_path"]
-            del http_call["response_body_path"]
-        [http_sec.add_row(TableRow(**req)) for req in req_table]
+        _ = add_tag(http_sec, "network.protocol", "http")
+
+        for http_call in http_calls:
+            if not add_tag(http_sec, "network.dynamic.ip", http_call.connection_details.destination_ip) or http_call.connection_details.destination_ip in dns_servers:
+                continue
+            _ = add_tag(http_sec, "network.port", http_call.connection_details.destination_port)
+            _ = add_tag(http_sec, "network.dynamic.domain", so.get_domain_by_destination_ip(
+                http_call.connection_details.destination_ip))
+            _ = add_tag(http_sec, "network.dynamic.uri", http_call.request_uri)
+
+            # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
+            if http_call.request_method == "GET":
+                split_path = http_call.request_uri.rsplit("/", 1)
+                if len(split_path) > 1 and re.search(r'[^\\]*\.(\w+)$', split_path[-1]):
+                    remote_file_access_sec.add_line(f"\t{http_call.request_uri}")
+                    if not remote_file_access_sec.heuristic:
+                        remote_file_access_sec.set_heuristic(1003)
+
+            user_agent = http_call.request_headers.get("UserAgent")
+            if user_agent:
+                if any(sus_user_agent in user_agent
+                       for sus_user_agent in SUSPICIOUS_USER_AGENTS):
+                    if suspicious_user_agent_sec.heuristic is None:
+                        suspicious_user_agent_sec.set_heuristic(1007)
+                    sus_user_agent_used = next((sus_user_agent for sus_user_agent in SUSPICIOUS_USER_AGENTS
+                                                if (sus_user_agent in user_agent)), None)
+                    if sus_user_agent_used not in sus_user_agents_used:
+                        _ = add_tag(suspicious_user_agent_sec, "network.user_agent", sus_user_agent_used)
+                        suspicious_user_agent_sec.add_line(f"\t{sus_user_agent_used}")
+                        sus_user_agents_used.append(sus_user_agent_used)
+
+            http_sec.add_row(
+                TableRow(
+                    process_name=f"{http_call.get_process_image()} ({http_call.get_process_pid()})",
+                    request=http_call.request_headers
+                )
+            )
         if remote_file_access_sec.heuristic:
             http_sec.add_subsection(remote_file_access_sec)
         if suspicious_user_agent_sec.heuristic:
@@ -722,7 +695,7 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
 
 def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
                          flows: Dict[str, List[Dict[str, Any]]],
-                         safelist: Dict[str, Dict[str, List[str]]]) -> Tuple[List[Dict[str, Any]], ResultSection]:
+                         safelist: Dict[str, Dict[str, List[str]]]) -> Tuple[List[Dict[str, Any]], ResultTableSection]:
     """
     This method converts low level network calls to a general format
     :param resolved_ips: A map of process IDs to process names, network calls, and decrypted buffers
@@ -734,7 +707,7 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
     network_flows_table: List[Dict[str, Any]] = []
 
     # This result section will contain all of the "flows" from src ip to dest ip
-    netflows_sec = ResultSection("TCP/UDP Network Traffic")
+    netflows_sec = ResultTableSection("TCP/UDP Network Traffic")
 
     for protocol, network_calls in flows.items():
         if len(network_calls) <= 0:
@@ -789,20 +762,26 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
 
 def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                         process_map: Dict[int, Dict[str, Any]],
-                        safelist: Dict[str, Dict[str, List[str]]]) -> List[Dict[str, Any]]:
+                        safelist: Dict[str, Dict[str, List[str]]], so: SandboxOntology) -> None:
     """
     This method processes HTTP(S) calls and puts them into a nice table
     :param http_level_flows: A list of flows that represent HTTP calls
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
-    :return: A table of dictionaries that each represent an HTTP(S) call
+    :param so: The sandbox ontology class object
+    :return: None
     """
-    req_table: List[Dict[str, Any]] = []
     for protocol, http_calls in http_level_flows.items():
         if len(http_calls) <= 0:
             continue
         for http_call in http_calls:
+
             host = http_call["host"]
+            if ":" in host:  # split on port if port exists
+                host = host.split(":")[0]
+            if not host:
+                continue
+
             if "ex" in protocol:
                 path = http_call["uri"]
                 if host in path:
@@ -810,18 +789,18 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                 request = http_call["request"]
                 port = http_call["dport"]
                 uri = f"{http_call['protocol']}://{host}{path}"
-                proto = http_call["protocol"]
+
             else:
                 path = http_call["path"]
                 request = http_call["data"]
                 port = http_call["port"]
                 uri = http_call["uri"]
-                proto = protocol
+
             if is_safelisted(
                     host, ["network.dynamic.ip", "network.dynamic.domain"],
                     safelist) or is_safelisted(
                     uri, ["network.dynamic.uri"],
-                    safelist):
+                    safelist) or "/wpad.dat" in uri:
                 continue
 
             request_body_path = http_call.get("req", {}).get("path")
@@ -832,33 +811,53 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
             if response_body_path:
                 response_body_path = response_body_path[response_body_path.index("network/"):]
 
-            req = {
-                "protocol": proto,
-                "host": host,  # Note: will be removed, we just need it for tagging
-                "port": port,  # Note: will be removed, we just need it for tagging
-                "path": path,  # Note: will be removed, we just need it for tagging
-                "user-agent": http_call.get("user-agent"),  # Note: will be removed, we just need it for tagging
-                "request_headers": request,
-                "process_name": None,
-                "uri": uri,  # Note: will be removed, we just need it for tagging
-                "method": http_call["method"],  # Note: will be removed, need it to check if a remote file was accessed
-                "sport": http_call.get("sport"),  # Note: will be removed
-                "dst": http_call.get("dst"),  # Note: will be removed
-                "src": http_call.get("src"),  # Note: will be removed
-                "response_headers": http_call.get("response"),  # Note: will be removed
-                "request_body_path": request_body_path,  # Note: will be removed
-                "response_body_path": response_body_path,  # Note: will be removed
-            }
+            request_headers = _handle_http_headers(request)
+            response_headers = _handle_http_headers(http_call.get("response"))
+
+            nh_to_add = False
+            nh = so.get_network_http_by_details(
+                request_uri=uri, request_method=http_call["method"],
+                request_headers=request_headers)
+            if not nh:
+                nh = so.create_network_http()
+                nh_to_add = True
+
             for process, process_details in process_map.items():
                 for network_call in process_details["network_calls"]:
                     send = next((network_call[api_call] for api_call in HTTP_API_CALLS if api_call in network_call), {})
                     if send != {} and (
-                            send.get("service", 0) == 3 or send.get("buffer", "") == req["request_headers"]) or send.get(
-                            "url", "") == req["uri"]:
-                        req["process_name"] = f"{process_details['name']} ({str(process)})"
-            if req not in req_table:
-                req_table.append(req)
-    return req_table
+                            send.get("service", 0) == 3 or send.get("buffer", "") == request) or send.get(
+                            "url", "") == uri:
+                        nh.update_process(image=process_details['name'], pid=process)
+
+            nh.update(
+                request_uri=uri,
+                response_status_code=http_call.get("status"),
+                request_method=http_call["method"],
+                request_headers=request_headers, response_headers=response_headers,
+                request_body_path=request_body_path,
+                response_body_path=response_body_path)
+
+            nh.update_connection_details(
+                source_ip=http_call.get("src"),
+                source_port=http_call.get("sport"),
+                destination_ip=http_call["dst"] if http_call.get("dst") else so.get_destination_ip_by_domain(host),
+                destination_port=port,
+                direction="outbound", transport_layer_protocol="tcp")
+
+            if nh_to_add:
+                so.add_network_http(nh)
+            else:
+                network_connection_to_point_to = so.get_network_connection_by_details(
+                    nh.connection_details.source_ip,
+                    nh.connection_details.source_port,
+                    nh.connection_details.destination_ip,
+                    nh.connection_details.destination_port,
+                    nh.connection_details.direction,
+                    nh.connection_details.transport_layer_protocol,
+                )
+                if network_connection_to_point_to:
+                    nh.set_network_connection(network_connection_to_point_to)
 
 
 def _handle_http_headers(header_string: str) -> Dict[str, str]:
@@ -899,35 +898,31 @@ def process_all_events(
     if not so.get_processes() and not so.get_network_connections():
         return
     events_section = ResultTableSection("Event Log")
-    event_table: List[Dict[str, Any]] = []
     event_ioc_table = ResultTableSection("Event Log IOCs")
-    for event in so.get_events():
+    for event in so.get_events(safelist=SAFE_PROCESS_TREE_LEAF_HASHES.keys()):
         if isinstance(event, NetworkConnection):
             if event.objectid.time_observed in [float("-inf"), float("inf")]:
                 continue
-            event_table.append({
-                "time_observed": datetime.datetime.fromtimestamp(event.objectid.time_observed).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-                "process_name": f"{getattr(event.process, 'image', None)} ({getattr(event.process, 'pid', None)})",
-                "details": {
-                    "protocol": event.transport_layer_protocol,
-                    "domain": so.get_domain_by_destination_ip(event.destination_ip),
-                    "dest_ip": event.destination_ip,
-                    "dest_port": event.destination_port,
-                }
-            })
+            events_section.add_row(
+                TableRow(
+                    time_observed=datetime.datetime.fromtimestamp(event.objectid.time_observed).strftime(
+                        '%Y-%m-%d %H:%M:%S.%f')[: -3],
+                    process_name=f"{getattr(event.process, 'image', None)} ({getattr(event.process, 'pid', None)})",
+                    details={"protocol": event.transport_layer_protocol, "domain": so.get_domain_by_destination_ip(
+                                 event.destination_ip),
+                             "dest_ip": event.destination_ip, "dest_port": event.destination_port, }))
         elif isinstance(event, Process):
             if event.start_time in [float("-inf"), float("inf")]:
                 continue
             _ = add_tag(events_section, "dynamic.process.command_line", event.command_line)
             _extract_iocs_from_text_blob(event.command_line, event_ioc_table, file_ext=file_ext)
             _ = add_tag(events_section, "dynamic.process.file_name", event.image)
-            event_table.append({"time_observed": datetime.datetime.fromtimestamp(event.start_time).strftime(
+            events_section.add_row(TableRow(time_observed=datetime.datetime.fromtimestamp(event.start_time).strftime(
                 '%Y-%m-%d %H:%M:%S.%f')[: -3],
-                "process_name": f"{event.image} ({event.pid})",
-                                "details": {"command_line": event.command_line, }})
+                process_name=f"{event.image} ({event.pid})",
+                details={"command_line": event.command_line, }))
         else:
             raise ValueError(f"{event.as_primitives()} is not of type NetworkConnection or Process.")
-    [events_section.add_row(TableRow(**event)) for event in event_table]
     if event_ioc_table.body:
         events_section.add_subsection(event_ioc_table)
     parent_result_section.add_subsection(events_section)
@@ -963,66 +958,6 @@ def process_curtain(
     if len(curtain_body) > 0:
         [curtain_res.add_row(TableRow(**cur)) for cur in curtain_body]
         parent_result_section.add_subsection(curtain_res)
-
-
-def convert_sysmon_processes(sysmon: List[Dict[str, Any]],
-                             safelist: Dict[str, Dict[str, List[str]]], so: SandboxOntology) -> None:
-    """
-    This method converts processes observed by Sysmon to the format supported by the SandboxOntology helper class
-    :param sysmon: A list of processes observed during the analysis of the task by the Sysmon tool
-    :param safelist: A dictionary containing matches and regexes for use in safelisting values
-    :param so: The sandbox ontology class object
-    :return: None
-    """
-    for event in sysmon:
-        ontology_process = {
-            "pid": None,
-            "ppid": None,
-            "image": None,
-            "command_line": None,
-            "start_time": None,
-            "guid": None,
-            "pguid": None,
-            "integrity_level": None,
-            "image_hash": None,
-            "original_file_name": None,
-        }
-        event_data = event["EventData"]
-        for data in event_data["Data"]:
-            name = data["@Name"]
-            text = data.get("#text")
-
-            if name == "ProcessId":
-                ontology_process["pid"] = int(text)
-            elif name == "ParentProcessId":
-                ontology_process["ppid"] = int(text)
-            elif name == "Image":
-                if not is_safelisted(text, ["dynamic.process.file_name"], safelist):
-                    ontology_process["image"] = text
-            elif name == "CommandLine":
-                if not is_safelisted(text, ["dynamic.process.command_line"], safelist):
-                    ontology_process["command_line"] = text
-            elif name == "UtcTime":
-                ontology_process["start_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
-            elif name == "ProcessGuid":
-                ontology_process["guid"] = text
-            elif name == "SourceProcessGuid" or name == "ParentProcessGuid":
-                ontology_process["pguid"] = text
-            elif name == "OriginalFileName":
-                ontology_process["original_file_name"] = text
-            elif name == "IntegrityLevel":
-                ontology_process["integrity_level"] = text
-            elif name == "Hashes":
-                split_hash = text.split("=")
-                if len(split_hash) == 2:
-                    _, hash_value = split_hash
-                    ontology_process["image_hash"] = hash_value
-
-        # It is okay if the Parent GUID is None
-        if any(ontology_process[key] is None for key in ["pid", "ppid", "image", "command_line", "start_time", "guid"]):
-            continue
-        else:
-            so.update_process(**ontology_process)
 
 
 def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any],
@@ -1311,6 +1246,8 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
                 fp_count += 1
         elif name == "network_cnc_http" and mark["type"] == "generic":
             http_string = mark["suspicious_request"].split()
+            if "/wpad.dat" in http_string[1]:
+                fp_count += 1
             if contains_safelisted_value(http_string[1], safelist):
                 fp_count += 1
         elif name == "nolookup_communication" and mark["type"] == "generic":
@@ -1382,6 +1319,8 @@ def _create_signature_result_section(
         if attack_id in revoke_map:
             attack_id = revoke_map[attack_id]
         sig_res.heuristic.add_attack_id(attack_id)
+        so_sig.add_attack_id(attack_id)
+    for attack_id in sig_res.heuristic.attack_ids:
         so_sig.add_attack_id(attack_id)
 
     # Getting the signature family and tagging it
@@ -1464,7 +1403,7 @@ def _tag_and_describe_generic_signature(
     """
     if signature_name == "network_cnc_http":
         http_string = mark["suspicious_request"].split()
-        if not contains_safelisted_value(http_string[1], safelist):
+        if "/wpad.dat" not in http_string[1] and not contains_safelisted_value(http_string[1], safelist):
             sig_res.add_line(
                 f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
             if add_tag(sig_res, "network.dynamic.uri", http_string[1]):
@@ -1474,10 +1413,11 @@ def _tag_and_describe_generic_signature(
             sig_res.add_line(f"\tIOC: {mark['host']}")
             so_sig.add_subject(ip=mark["host"])
     elif signature_name == "suspicious_powershell":
-        if mark.get("options"):
-            sig_res.add_line(f'\tIOC: {safe_str(mark["value"])} via {safe_str(mark["option"])}')
-        else:
-            sig_res.add_line(f'\tIOC: {safe_str(mark["value"])}')
+        if not sig_res.body or (sig_res.body and safe_str(mark["value"]) not in sig_res.body):
+            if mark.get("options"):
+                sig_res.add_line(f'\tIOC: {safe_str(mark["value"])} via {safe_str(mark["option"])}')
+            else:
+                sig_res.add_line(f'\tIOC: {safe_str(mark["value"])}')
     elif signature_name == "exploit_heapspray":
         sig_res.add_line(f"\tFun fact: Data was committed to memory at the protection level "
                          f"{safe_str(mark['protection'])}")
@@ -1497,6 +1437,7 @@ def _tag_and_describe_ioc_signature(
         signature_name: str, mark: Dict[str, Any],
         sig_res: ResultTextSection, inetsim_network: IPv4Network, process_map: Dict[int, Dict[str, Any]],
         file_ext: str, safelist: Dict[str, Dict[str, List[str]]],
+        so: SandboxOntology,
         so_sig: SandboxOntology.Signature) -> None:
     """
     This method adds the appropriate tags and descriptions for "ioc" signatures
@@ -1507,6 +1448,7 @@ def _tag_and_describe_ioc_signature(
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param file_ext: The file extension of the file to be submitted
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
+    :param so: The sandbox ontology object instance
     :param so_sig: The signature for the Sandbox Ontology
     :return: None
     """
@@ -1540,9 +1482,14 @@ def _tag_and_describe_ioc_signature(
         sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
 
     if mark["category"] in ["file", "dll"] and signature_name != "ransomware_mass_file_delete":
-        _ = add_tag(sig_res, "dynamic.process.file_name", ioc)
+        if add_tag(sig_res, "dynamic.process.file_name", ioc):
+            so_sig.add_subject(file=ioc)
     elif mark["category"] == "cmdline":
+        ioc = ioc.strip()
         if add_tag(sig_res, "dynamic.process.command_line", ioc):
+            process = so.get_process_by_command_line(ioc)
+            if process:
+                so_sig.add_process_subject(**process.as_primitives())
             sig_ioc_table = ResultTableSection("Command line IOCs")
             _extract_iocs_from_text_blob(ioc, sig_ioc_table, so_sig, file_ext)
             if sig_ioc_table.body:
@@ -1568,16 +1515,20 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         file_path = mark["call"].get("arguments", {}).get("filepath")
         if add_tag(sig_res, "dynamic.process.file_name", file_path):
             sig_res.add_line(f"IOC: {file_path}")
+            so_sig.add_subject(file=file_path)
     elif signature_name == "moves_self":
         oldfilepath = mark["call"].get("arguments", {}).get("oldfilepath")
         newfilepath = mark["call"].get("arguments", {}).get("newfilepath")
         if oldfilepath and newfilepath:
             sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}\n\tNew file path: {safe_str(newfilepath)}')
-            _ = add_tag(sig_res, "dynamic.process.file_name", oldfilepath)
-            _ = add_tag(sig_res, "dynamic.process.file_name", newfilepath)
+            if add_tag(sig_res, "dynamic.process.file_name", oldfilepath):
+                so_sig.add_subject(file=oldfilepath)
+            if add_tag(sig_res, "dynamic.process.file_name", newfilepath):
+                so_sig.add_subject(file=newfilepath)
         elif oldfilepath and newfilepath == "":
             sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}\n\tNew file path: File deleted itself')
-            _ = add_tag(sig_res, "dynamic.process.file_name", oldfilepath)
+            if add_tag(sig_res, "dynamic.process.file_name", oldfilepath):
+                so_sig.add_subject(file=oldfilepath)
     elif signature_name == "creates_service":
         service_name = mark["call"].get("arguments", {}).get("service_name")
         if service_name:
@@ -1592,7 +1543,8 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         download_path = mark["call"].get("arguments", {}).get("filepath")
         url = mark["call"].get("arguments", {}).get("url")
         if download_path:
-            _ = add_tag(sig_res, "dynamic.process.file_name", download_path)
+            if add_tag(sig_res, "dynamic.process.file_name", download_path):
+                so_sig.add_subject(file=download_path)
         if url:
             _ = add_tag(sig_res, "network.dynamic.uri", url)
             so_sig.add_subject(uri=url)
@@ -1687,8 +1639,6 @@ def _extract_iocs_from_text_blob(
         for uri_path in re.findall(URI_PATH, uri):
             if add_tag(result_section, "network.dynamic.uri_path", uri_path):
                 result_section.add_row(TableRow(ioc_type="uri_path", ioc=uri_path))
-                if so_sig:
-                    so_sig.add_subject(uri_path=uri_path)
 
 
 def is_safelisted(
@@ -1782,59 +1732,68 @@ def _validate_tag(result_section: ResultSection, tag: str, value: Any, inetsim_n
         return True
 
 
-def add_processes_to_gpm(sysmon: List[Dict[str, Any]], so: SandboxOntology):
+def convert_sysmon_processes(
+        sysmon: List[Dict[str, Any]],
+        safelist: Dict[str, Dict[str, List[str]]],
+        so: SandboxOntology):
     """
     This method creates the GUID -> Process lookup table
     :param sysmon: A list of processes observed during the analysis of the task by the Sysmon tool
+    :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :param so: The sandbox ontology object instance
     :return: None
     """
     for event in sysmon:
         event_id = int(event["System"]["EventID"])
-        process = {
-            "pid": None,
-            "start_time": float("-inf"),
-            "end_time": float("inf"),
-            "guid": None,
-            "image": None,
-        }
+        process: Dict[str, str] = {}
+        event_data = event["EventData"]["Data"]
+        for data in event_data:
+            name = data["@Name"].lower()
+            text = data.get("#text")
 
-        # Process Create and Terminate
-        if event_id in [1, 5]:
-            for data in event["EventData"]["Data"]:
-                name = data["@Name"]
-                text = data.get("#text")
-                if name == "UtcTime":
-                    if event_id == 1:
-                        process["start_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
-                    else:
-                        process["end_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
-                elif name == "ProcessGuid":
-                    process["guid"] = text
-                elif name == "ProcessId":
-                    process["pid"] = int(text)
-                elif name == "Image":
+            # Process Create and Terminate
+            if name == "utctime" and event_id in [1, 5]:
+                if event_id == 1:
+                    process["start_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                else:
+                    process["end_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+            elif name == "utctime":
+                process["time_observed"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+            elif name in ["sourceprocessguid", "parentprocessguid"]:
+                process["pguid"] = text
+            elif name in ["processguid", "targetprocessguid"]:
+                process["guid"] = text
+            elif name in ["parentprocessid", "sourceprocessid"]:
+                process["ppid"] = int(text)
+            elif name in ["processid", "targetprocessid"]:
+                process["pid"] = int(text)
+            elif name in ["sourceimage"]:
+                process["pimage"] = text
+            elif name in ["image", "targetimage"]:
+                if not is_safelisted(text, ["dynamic.process.file_name"], safelist):
                     process["image"] = text
-        else:
-            for data in event["EventData"]["Data"]:
-                name = data["@Name"]
-                text = data.get("#text")
-                if name in ["ProcessGuid", "SourceProcessGUID"]:
-                    process["guid"] = text
-                elif name in ["ProcessId", "SourceProcessId"]:
-                    process["pid"] = int(text)
-                elif name == "Image":
-                    process["image"] = text
+            elif name in ["parentcommandline"]:
+                if not is_safelisted(text, ["dynamic.process.command_line"], safelist):
+                    process["pcommand_line"] = text
+            elif name in ["commandline"]:
+                if not is_safelisted(text, ["dynamic.process.command_line"], safelist):
+                    process["command_line"] = text
+            elif name == "originalfilename":
+                process["original_file_name"] = text
+            elif name == "integritylevel":
+                process["integrity_level"] = text
+            elif name == "hashes":
+                split_hash = text.split("=")
+                if len(split_hash) == 2:
+                    _, hash_value = split_hash
+                    process["image_hash"] = hash_value
 
-        if not process["guid"] or not process["image"]:
+        if not process.get("guid") or not process.get("image"):
             continue
+
         if so.is_guid_in_gpm(process["guid"]):
-            process_with_guid = so.get_process_by_guid(process["guid"])
-            if process_with_guid.start_time == float("-inf") and process["start_time"] != float("-inf"):
-                process_with_guid.set_start_time(process["start_time"])
-            elif process_with_guid.end_time == float("inf") and process["end_time"] != float("inf"):
-                process_with_guid.set_end_time(process["end_time"])
-        elif process["pid"]:
+            so.update_process(**process)
+        else:
             p = so.create_process(**process)
             so.add_process(p)
 
@@ -1862,4 +1821,4 @@ if __name__ == "__main__":
         safelist,
         so)
 
-    so.as_primitives()
+    print(json.dumps(so.as_primitives(), indent=4))
