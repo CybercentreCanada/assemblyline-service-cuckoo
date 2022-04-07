@@ -6,13 +6,13 @@ import json
 from tld import get_tld
 from ipaddress import ip_address, ip_network, IPv4Network
 from urllib.parse import urlparse
-from typing import List, Dict, Any, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
 from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, URI_PATH, DOMAIN_ONLY_REGEX
-from assemblyline_v4_service.common.result import BODY_FORMAT, ResultSection, ResultKeyValueSection, ResultTextSection, ResultTableSection, TableRow
+from assemblyline_v4_service.common.result import ResultSection, ResultKeyValueSection, ResultTextSection, ResultTableSection, TableRow
 
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
@@ -359,8 +359,6 @@ def process_signatures(
             continue
 
         # Used for detecting if signature is a false positive
-        process_names: List[str] = []
-        injected_processes: List[str] = []
 
         translated_score = SCORE_TRANSLATION[sig["severity"]]
         so_sig = so.create_signature()
@@ -368,6 +366,9 @@ def process_signatures(
 
         if sig_name == "console_output":
             _write_console_output_to_file(task_id, sig_marks)
+
+        if sig_name == "injection_write_memory_exe":
+            _write_injected_exe_to_file(task_id, sig_marks)
 
         # Find any indicators of compromise from the signature marks
         for mark in sig_marks:
@@ -381,23 +382,19 @@ def process_signatures(
             elif mark["type"] == "ioc" and mark.get("category") not in SKIPPED_CATEGORY_IOCS:
                 _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network,
                                                 process_map, file_ext, safelist, so, so_sig)
-            elif mark["type"] == "call" and process_name is not None and len(process_names) == 0:
+            elif mark["type"] == "call" and process_name is not None:
                 sig_res.add_line(f'\tProcess Name: {safe_str(process_name)}')
-                process_names.append(process_name)
                 _tag_and_describe_call_signature(sig_name, mark, sig_res, process_map, so_sig)
                 # Displaying the injected process
                 if get_signature_category(sig_name) == "Injection":
                     injected_process = mark["call"].get("arguments", {}).get("process_identifier")
                     injected_process_name = process_map.get(injected_process, {}).get("name")
-                    if injected_process_name and injected_process_name not in injected_processes:
-                        injected_processes.append(injected_process_name)
-                        sig_res.add_line(f'\tInjected Process: {safe_str(injected_process_name)}')
-                        so_sig.add_process_subject(pid=injected_process, image=injected_process_name,
-                                                   start_time=mark["call"].get("time"))
+                    sig_res.add_line(f'\tInjected Process: {safe_str(injected_process_name)}')
+                    so_sig.add_process_subject(pid=injected_process, image=injected_process_name,
+                                               start_time=mark["call"].get("time"))
 
-        if not (process_names != [] and injected_processes != [] and process_names == injected_processes):
-            sigs_res.add_subsection(sig_res)
-            so.add_signature(so_sig)
+        sigs_res.add_subsection(sig_res)
+        so.add_signature(so_sig)
     if len(sigs_res.subsections) > 0:
         parent_result_section.add_subsection(sigs_res)
     return is_process_martian
@@ -926,7 +923,8 @@ def process_all_events(
             raise ValueError(f"{event.as_primitives()} is not of type NetworkConnection or Process.")
     if event_ioc_table.body:
         events_section.add_subsection(event_ioc_table)
-    parent_result_section.add_subsection(events_section)
+    if events_section.body:
+        parent_result_section.add_subsection(events_section)
 
 
 def process_curtain(
@@ -1350,6 +1348,22 @@ def _write_console_output_to_file(task_id: int, marks: List[Dict[str, Any]]) -> 
     f.close()
 
 
+def _write_injected_exe_to_file(task_id: int, marks: List[Dict[str, Any]]) -> None:
+    """
+    Write a temporary file containing the injected exe observed during analysis
+    :param task_id: The ID of the Cuckoo Task
+    :param marks: The indicators that Cuckoo has returned for why the signature has been raised
+    :return: None
+    """
+    for index, mark in enumerate(marks):
+        injected_exe_file_path = os.path.join("/tmp", f"{task_id}_injected_memory_{index}.exe")
+        with open(injected_exe_file_path, "wb") as f:
+            buffer = mark["call"].get("arguments", {}).get("buffer")
+            if buffer:
+                f.write(buffer.encode())
+        f.close()
+
+
 def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[str, Any]],
                                      network_res: ResultSection) -> None:
     """
@@ -1422,6 +1436,12 @@ def _tag_and_describe_generic_signature(
     elif signature_name == "exploit_heapspray":
         sig_res.add_line(f"\tFun fact: Data was committed to memory at the protection level "
                          f"{safe_str(mark['protection'])}")
+    elif signature_name == "persistence_autorun":
+        reg_key = mark.get("reg_key")
+        reg_value = mark.get("reg_value")
+        if reg_key and reg_value:
+            sig_res.add_line(f"\tThe registry key {reg_key} was set to {reg_value}")
+            so_sig.add_subject(registry=reg_key)
     else:
         for item in mark:
             if item in SKIPPED_MARK_ITEMS:
@@ -1495,6 +1515,8 @@ def _tag_and_describe_ioc_signature(
             _extract_iocs_from_text_blob(ioc, sig_ioc_table, so_sig, file_ext)
             if sig_ioc_table.body:
                 sig_res.add_subsection(sig_ioc_table)
+    elif mark["category"] == "registry":
+        so_sig.add_subject(registry=ioc)
 
 
 def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultTextSection,
@@ -1802,6 +1824,7 @@ def convert_sysmon_processes(
 if __name__ == "__main__":
     from sys import argv
     from json import loads
+    from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 
     report_path = argv[1]
     file_ext = argv[2]
@@ -1822,4 +1845,5 @@ if __name__ == "__main__":
         safelist,
         so)
 
+    so.preprocess_ontology(SAFE_PROCESS_TREE_LEAF_HASHES.keys())
     print(json.dumps(so.as_primitives(), indent=4))

@@ -36,6 +36,7 @@ from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
 ENCRYPTED_BUFFER_REGEX = "^\/tmp\/%s_[0-9]{1,}_encrypted_buffer_[0-9]{1,2}\.txt$"
+INJECTED_EXE_REGEX = "^\/tmp\/%s_injected_memory_[0-9]{1,2}\.exe$"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
@@ -1299,6 +1300,7 @@ class Cuckoo(ServiceBase):
 
         # Submit dropped files and pcap if available:
         self._extract_console_output(cuckoo_task.id)
+        self._extract_injected_exes(cuckoo_task.id)
         self._extract_encrypted_buffers(cuckoo_task.id)
         self.check_dropped(cuckoo_task)
         self.check_powershell(cuckoo_task.id, parent_section)
@@ -1475,6 +1477,30 @@ class Cuckoo(ServiceBase):
             }
             self.artifact_list.append(artifact)
             self.log.debug(f"Adding supplementary file {console_output_file_name}")
+
+    def _extract_injected_exes(self, task_id: int) -> None:
+        """
+        This method adds files containing injected exes, if they exist
+        :param task_id: An integer representing the Cuckoo Task ID
+        :return: None
+        """
+        # Check if there are any files consisting of injected exes
+        temp_dir = "/tmp"
+        injected_exes: List[str] = []
+        for f in os.listdir(temp_dir):
+            file_path = os.path.join(temp_dir, f)
+            if os.path.isfile(file_path) and re.match(INJECTED_EXE_REGEX % task_id, file_path):
+                injected_exes.append(file_path)
+
+        for injected_exe in injected_exes:
+            artifact = {
+                "name": injected_exe,
+                "path": injected_exe,
+                "description": "Injected executable was found written to memory",
+                "to_be_extracted": True
+            }
+            self.artifact_list.append(artifact)
+            self.log.debug(f"Adding extracted file for task {task_id}: {injected_exe}")
 
     def _extract_encrypted_buffers(self, task_id: int) -> None:
         """

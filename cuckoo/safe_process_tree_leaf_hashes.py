@@ -226,4 +226,26 @@ SAFE_PROCESS_TREE_LEAF_HASHES = {
         "command_line": None,
         "children": []
     },
+    "1d038671bb56576c62a176c7902e6867a978732d1ecafe792c8ac6ac3dde79ba": {
+        "image": "?sys32\\svchost.exe",
+        "command_line": None,
+        "children": [
+            {
+                "image": "?win\\explorer.exe",
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    "5f4653a82121522720fbb9bdab186d70bf7f21e1ca475cb87b12f448ea71e1ca": {
+        "image": "?sys32\\svchost.exe",
+        "command_line": None,
+        "children": [
+            {
+                "image": "?sys32\\conhost.exe",
+                "command_line": "\\??\\C:\\Windows\\system32\\conhost.exe \"-28232134049486641315307486691639655269-80106784-108753052346563986-549529209\"",
+                "children": []
+            }
+        ]
+    }
 }
