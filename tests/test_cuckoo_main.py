@@ -216,6 +216,33 @@ def check_section_equality(this, that) -> bool:
             this.heuristic.score_map == that.heuristic.score_map and \
             this.heuristic.signatures == that.heuristic.signatures
 
+        if not result_heuristic_equality:
+            print("The heuristics are not equal:")
+            if this.heuristic.attack_ids != that.heuristic.attack_ids:
+                print("The attack_ids are different:")
+                print(f"{this.heuristic.attack_ids}")
+                print(f"{that.heuristic.attack_ids}")
+            if this.heuristic.frequency != that.heuristic.frequency:
+                print("The frequencies are different:")
+                print(f"{this.heuristic.frequency}")
+                print(f"{that.heuristic.frequency}")
+            if this.heuristic.heur_id != that.heuristic.heur_id:
+                print("The heur_ids are different:")
+                print(f"{this.heuristic.heur_id}")
+                print(f"{that.heuristic.heur_id}")
+            if this.heuristic.score != that.heuristic.score:
+                print("The scores are different:")
+                print(f"{this.heuristic.score}")
+                print(f"{that.heuristic.score}")
+            if this.heuristic.score_map != that.heuristic.score_map:
+                print("The score_maps are different:")
+                print(f"{this.heuristic.score_map}")
+                print(f"{that.heuristic.score_map}")
+            if this.heuristic.signatures != that.heuristic.signatures:
+                print("The signatures are different:")
+                print(f"{this.heuristic.signatures}")
+                print(f"{that.heuristic.signatures}")
+
     elif not this.heuristic and not that.heuristic:
         result_heuristic_equality = True
     else:
@@ -243,6 +270,8 @@ def check_section_equality(this, that) -> bool:
 
     if not current_section_equality:
         print("The current sections are not equal:")
+        if not result_heuristic_equality:
+            print("The result heuristics are not equal")
         if this.body != that.body:
             print("The bodies are different:")
             print(f"{this.body}")
@@ -1538,6 +1567,7 @@ class TestCuckooMain:
         from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, 'query_report', return_value=tar_report)
         mocker.patch.object(Cuckoo, '_extract_console_output', return_value=None)
+        mocker.patch.object(Cuckoo, '_extract_injected_exes', return_value=None)
         mocker.patch.object(Cuckoo, '_extract_encrypted_buffers', return_value=None)
         mocker.patch.object(Cuckoo, 'check_dropped', return_value=None)
         mocker.patch.object(Cuckoo, 'check_powershell', return_value=None)
@@ -1716,6 +1746,19 @@ class TestCuckooMain:
         assert cuckoo_class_instance.artifact_list[0]["name"] == "1_console_output.txt"
         assert cuckoo_class_instance.artifact_list[0]["description"] == "Console Output Observed"
         assert not cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
+
+    @staticmethod
+    def test_extract_injected_exes(cuckoo_class_instance, dummy_request_class, mocker):
+        mocker.patch('os.listdir', return_value=["1_injected_memory_0.exe"])
+        mocker.patch('os.path.isfile', return_value=True)
+        cuckoo_class_instance.request = dummy_request_class()
+        cuckoo_class_instance.artifact_list = []
+        task_id = 1
+        cuckoo_class_instance._extract_injected_exes(task_id)
+        assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/1_injected_memory_0.exe"
+        assert cuckoo_class_instance.artifact_list[0]["name"] == "/tmp/1_injected_memory_0.exe"
+        assert cuckoo_class_instance.artifact_list[0]["description"] == "Injected executable was found written to memory"
+        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
     @staticmethod
     def test_extract_encrypted_buffers(cuckoo_class_instance, dummy_request_class, mocker):

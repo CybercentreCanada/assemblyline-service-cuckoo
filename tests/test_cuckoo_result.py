@@ -172,12 +172,13 @@ class TestCuckooResult:
     @pytest.mark.parametrize(
         "processes, correct_event",
         [([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1,
-            "guid": "{12345678-1234-5678-1234-567812345678}", "pguid": "{12345678-1234-5678-1234-567812345679}", "first_seen": 1.0}],
+            "guid": "{12345678-1234-5678-1234-567812345678}", "pguid": "{12345678-1234-5678-1234-567812345679}",
+            "first_seen": 1.0}],
           {'start_time': 1.0, 'end_time': float("inf"),
            'objectid':
            {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'time_observed': 1.0,
-            'richid': None},
-           'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'richid': None},
+            'processtree': None},
+           'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'processtree': None},
            'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 0, 'image': 'blah', 'command_line': 'blah',
            'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
          ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1,
@@ -310,8 +311,8 @@ class TestCuckooResult:
           "192.0.2.0/24", "", {},
           'No description for signature.', False,
           {"name": "console_output", "description": "No description for signature.", "attack": [{'attack_id': 'T1003', 'categories': ['credential-access'],
-             'pattern': 'OS Credential Dumping'}, {'attack_id': 'T1005', 'categories': ['collection'],
-             'pattern': 'Data from Local System'}]}),
+                                                                                                 'pattern': 'OS Credential Dumping'}, {'attack_id': 'T1005', 'categories': ['collection'],
+                                                                                                                                       'pattern': 'Data from Local System'}]}),
          ("generic", [{"name": "generic", "severity": 1, "markcount": 1, "marks": [{"pid": 1, "type": "generic"}]}],
           "192.0.2.0/24", "", {},
           'No description for signature.\n\tIOC: 1', False,
@@ -347,7 +348,7 @@ class TestCuckooResult:
           'No description for signature.\n\t"blah 11.11.11.11" is suspicious because "blah"', False,
           {"name": "network_cnc_http", "description": "No description for signature.", "process.pid": 1,
            "iocs": [{"uri": "11.11.11.11"}], "attack": [{'attack_id': 'T1071', 'categories': ['command-and-control'],
-             'pattern': 'Application Layer Protocol'}]}),
+                                                         'pattern': 'Application Layer Protocol'}]}),
          ("nolookup_communication",
           [{"name": "nolookup_communication", "severity": 1, "markcount": 1,
             "marks": [{"pid": 1, "type": "generic", "host": "11.11.11.11"}]}],
@@ -355,7 +356,7 @@ class TestCuckooResult:
           'No description for signature.\n\tIOC: 11.11.11.11', False,
           {"name": "nolookup_communication", "description": "No description for signature.", "process.pid": 1,
            "iocs": [{"ip": "11.11.11.11"}], "attack": [{'attack_id': 'T1071', 'categories': ['command-and-control'],
-             'pattern': 'Application Layer Protocol'}]}),
+                                                        'pattern': 'Application Layer Protocol'}]}),
          ("nolookup_communication",
           [{"name": "nolookup_communication", "severity": 1, "markcount": 1,
             "marks": [{"pid": 1, "type": "generic", "host": "127.0.0.1"}]}],
@@ -379,15 +380,16 @@ class TestCuckooResult:
           'No description for signature.\n\tProcess Name: blah1\n\tInjected Process: blah2', False,
           {"name": "injection_explorer", "description": "No description for signature.", "process.pid": 2,
            "process.image": "blah1", "iocs": [{"process.pid": 1, "process.image": "blah2"}], "attack": [{'attack_id': 'T1055', 'categories': ['defense-evasion', 'privilege-escalation'],
-             'pattern': 'Process Injection'}]}),
+                                                                                                         'pattern': 'Process Injection'}]}),
          ("process_interest",
           [{"name": "process_interest", "markcount": 1, "severity": 1,
             "marks": [{"type": "call", "pid": 2, "call": {"arguments": {"process_identifier": 1}}}]}],
           "192.0.2.0/24", "", {2: {"name": "blah"},
                                1: {"name": "blah"}},
-          None, False,
+          'No description for signature.\n\tProcess Name: blah\n\tInjected Process: blah', False,
           {"name": "process_interest", "description": "No description for signature.", "process.pid": 2,
-           "process.image": "blah", "iocs": [{"process.pid": 1, "process.image": "blah"}]}),
+           "process.image": "blah", "attack": [{'attack_id': 'T1055', 'categories': ['defense-evasion', 'privilege-escalation'],
+                                                'pattern': 'Process Injection'}], "iocs": [{"process.pid": 1, "process.image": "blah"}]}),
          ("network_cnc_http",
           [{"name": "network_cnc_http", "severity": 1, "markcount": 1,
             "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 127.0.0.1"}]},
@@ -395,7 +397,12 @@ class TestCuckooResult:
             "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 127.0.0.1"}]}],
           "192.0.2.0/24", "", {2: {"name": "blah"},
                                1: {"name": "blah"}},
-          None, False, {}), ])
+          None, False, {}),
+        ("injection_write_memory_exe",
+          [{"name": "injection_write_memory_exe", "severity": 1, "markcount": 1,
+            "marks": [{"type": "call", "call": {"arguments": {"buffer": "blah"}}}]}],
+          "192.0.2.0/24", "", {},  'No description for signature.', False, {"description": "No description for signature.", "attack": [{'attack_id': 'T1055', 'categories': ['defense-evasion', 'privilege-escalation'],
+                                                'pattern': 'Process Injection'}]}), ])
     def test_process_signatures(
             sig_name, sigs, random_ip_range, target_filename, process_map, correct_body, correct_is_process_martian,
             expected_sig):
@@ -405,7 +412,7 @@ class TestCuckooResult:
         from ipaddress import ip_network
         from assemblyline_v4_service.common.result import ResultSection
         so = SandboxOntology()
-        so_sig = SandboxOntology.Signature().as_primitives()
+        so_sig = SandboxOntology.Signature(name=sig_name).as_primitives()
         al_result = ResultSection("blah")
         task_id = 1
         file_ext = ".exe"
@@ -438,6 +445,8 @@ class TestCuckooResult:
                     so_sig[key1]["objectid"]["tag"] = value
             else:
                 so_sig[key] = value
+        if so_sig["process"] and not so_sig["process"]["objectid"]["guid"]:
+            so_sig["process"] = None
         if so.signatures:
             assert so.signatures[0].as_primitives() == so_sig
         if correct_body is None:
@@ -458,6 +467,12 @@ class TestCuckooResult:
                 correct_subsection.heuristic.add_attack_id('T1005')
                 correct_result_section.add_subsection(correct_subsection)
                 os.remove(f"/tmp/{task_id}_console_output.txt")
+            elif sig_name == "injection_write_memory_exe":
+                correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
+                correct_subsection.set_heuristic(17)
+                correct_subsection.heuristic.add_signature_id(sig_name, 10)
+                correct_result_section.add_subsection(correct_subsection)
+                os.remove(f"/tmp/{task_id}_injected_memory_0.exe")
             elif sig_name in ["network_cnc_http", "nolookup_communication"]:
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
                 correct_subsection.set_heuristic(22)
@@ -471,6 +486,12 @@ class TestCuckooResult:
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
                 correct_subsection.set_heuristic(17)
                 correct_subsection.heuristic.add_signature_id(sig_name, 10)
+                correct_result_section.add_subsection(correct_subsection)
+            elif sig_name == "process_interest":
+                correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
+                correct_subsection.set_heuristic(17)
+                correct_subsection.heuristic.add_signature_id(sig_name, 10)
+                correct_subsection.heuristic.add_attack_id('T1055')
                 correct_result_section.add_subsection(correct_subsection)
             else:
                 correct_subsection = ResultSection(f"Signature: {sig_name}", body=correct_body)
@@ -619,6 +640,14 @@ class TestCuckooResult:
         assert True
 
     @staticmethod
+    def test_write_injected_exe_to_file():
+        from os import remove
+        from cuckoo.cuckoo_result import _write_injected_exe_to_file
+        _write_injected_exe_to_file(1, [{"call": {"arguments": {"buffer": "blah"}}}])
+        remove("/tmp/1_injected_memory_0.exe")
+        assert True
+
+    @staticmethod
     @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body, expected_ioc",
                              [("blah", {},
                                {},
@@ -675,7 +704,10 @@ class TestCuckooResult:
                                '\tIOC: blah', {}),
                               ("blah", {"description": "blah"},
                                {},
-                               '\tFun fact: blah', {}), ])
+                               '\tFun fact: blah', {}),
+                              ("persistence_autorun", {"reg_key": "blah", "reg_value": "blah"},
+                               {},
+                               '\tThe registry key blah was set to blah', {"registry": "blah"}), ])
     def test_tag_and_describe_generic_signature(signature_name, mark, expected_tags, expected_body, expected_ioc):
         from ipaddress import ip_network
         from assemblyline_v4_service.common.result import ResultSection
@@ -733,6 +765,8 @@ class TestCuckooResult:
              "dynamic.process.command_line": ["blah"]}, '\tIOC: blah', {}),
             ("process_interest", {"ioc": "blah", "category": "process: super bad file"},
              {}, {}, '\tIOC: blah is a super bad file.', {}),
+            ("blah", {"ioc": "blah", "category": "registry"},
+             {}, {}, "\tIOC: blah", {"registry": "blah"}),
         ]
     )
     def test_tag_and_describe_ioc_signature(
@@ -818,9 +852,8 @@ class TestCuckooResult:
                 else:
                     so_sig_ioc[key] = value
             default_sig["subjects"].append(so_sig_ioc)
-        if mark.get("call", {}).get("time"):
-            default_sig["process"] = Process().as_primitives()
-            default_sig["process"]["start_time"] = mark["call"]["time"]
+        so = SandboxOntology()
+        so.add_signature(so_sig)
         assert so_sig.as_primitives() == default_sig
 
     @staticmethod
@@ -991,15 +1024,15 @@ class TestCuckooResult:
             ({}, {}, []),
             ({}, {"http": [], "https": [], "http_ex": [], "https_ex": []}, []),
             ({}, {"http": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, [
-             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "http_ex": [], "https_ex": []}, [
-             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [], "http_ex": [{"host": "blah", "request": "blah", "dport": "blah", "uri": "blah", "protocol": "http", "method": "blah"}], "https_ex": []}, [
-             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'http://blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'http://blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [], "http_ex": [{"host": "nope", "request": "blah", "dport": "blah", "uri": "blah", "protocol": "http", "method": "blah"}], "https_ex": []}, [
-             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'http://nopeblah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'http://nopeblah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [], "http_ex": [], "https_ex": [{"host": "nope", "request": "blah", "dport": "blah", "uri": "blah", "protocol": "https", "method": "blah"}]}, [
-             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'https://nopeblah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+             {'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'https://nopeblah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [{"host": "192.168.0.1", "path": "blah", "data": "blah", "port": "blah",
              "uri": "blah", "method": "blah"}], "https": [], "http_ex": [], "https_ex": []}, []),
             ({}, {"http": [{"host": "something.adobe.com", "path": "blah", "data": "blah", "port": "blah",
@@ -1015,17 +1048,17 @@ class TestCuckooResult:
                     "https": [],
                     "http_ex": [],
                     "https_ex": []},
-                [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+                [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({1: {"network_calls": [{"send": {"service": 3}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "blah", "port": "blah", "uri": "blah", "method": "blah"}], "https": [], "http_ex": [
-            ], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+            ], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({1: {"network_calls": [{"InternetConnectW": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [
-            ], "http_ex": [], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+            ], "http_ex": [], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({1: {"network_calls": [{"InternetConnectA": {"buffer": "check me"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "blah", "method": "blah"}], "https": [
-            ], "http_ex": [], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+            ], "http_ex": [], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'blah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({1: {"network_calls": [{"URLDownloadToFileW": {"url": "bad.evil"}}], "name": "blah"}}, {"http": [{"host": "blah", "path": "blah", "data": "check me", "port": "blah", "uri": "bad.evil", "method": "blah"}], "https": [
-            ], "http_ex": [], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'bad.evil', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
+            ], "http_ex": [], "https_ex": []}, [{'connection_details': {'objectid': {'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': None, 'source_port': None, 'destination_ip': None, 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'bad.evil', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': None, 'response_body_path': None}]),
             ({}, {"http": [], "https": [], "http_ex": [], "https_ex": [{"host": "nope", "req": {"path": "blahblah/network/blahblah"}, "resp": {"path": "blahblah/network/blahblah"}, "dport": "blah", "uri": "blah", "protocol": "https", "method": "blah", "sport": 123, "dst": "blah", "src": "blah", "response": "blah", "request": "blah"}]}, [
-             {'connection_details': {'objectid': {'tag': 'blah:blah', 'treeid': None, 'richid': None, 'time_observed': None}, 'process': None, 'source_ip': 'blah', 'source_port': 123, 'destination_ip': 'blah', 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'https://nopeblah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': 'network/blahblah', 'response_body_path': 'network/blahblah'}]),
+             {'connection_details': {'objectid': {'tag': 'blah:blah', 'treeid': None, 'processtree': None, 'time_observed': None}, 'process': None, 'source_ip': 'blah', 'source_port': 123, 'destination_ip': 'blah', 'destination_port': 'blah', 'transport_layer_protocol': 'tcp', 'direction': 'outbound'}, 'request_uri': 'https://nopeblah', 'request_headers': {}, 'request_body': None, 'request_method': 'blah', 'response_headers': {}, 'response_status_code': None, 'response_body': None, 'request_body_path': 'network/blahblah', 'response_body_path': 'network/blahblah'}]),
 
         ]
     )
@@ -1045,7 +1078,6 @@ class TestCuckooResult:
             nh_as_prim["connection_details"] = nh_as_prim["connection_details"].__dict__
             nh_as_prim["connection_details"]["objectid"] = nh_as_prim["connection_details"]["objectid"].__dict__
             nh_as_prim["connection_details"]["objectid"].pop("guid")
-            print(nh_as_prim)
             actual_req_table.append(nh_as_prim)
         assert expected_req_table == actual_req_table
 
@@ -1197,73 +1229,91 @@ class TestCuckooResult:
         [([],
           {}),
          ([{"System": {"EventID": 2},
-             "EventData":
-             {
-                 "Data":
-                 [{"@Name": "ParentProcessId", "#text": "2"},
-                  {"@Name": "Image", "#text": "blah.exe"},
-                     {"@Name": "CommandLine", "#text": "./blah"},
-                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "ParentProcessId", "#text": "2"},
+              {"@Name": "Image", "#text": "blah.exe"},
+              {"@Name": "CommandLine", "#text": "./blah"},
+              {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
           {}),
          ([{"System": {"EventID": 2},
-             "EventData":
-             {
-                 "Data":
-                 [{"@Name": "ProcessId", "#text": "1"},
-                  {"@Name": "ParentProcessId", "#text": "2"},
-                     {"@Name": "Image", "#text": "blah.exe"},
-                     {"@Name": "CommandLine", "#text": "./blah"},
-                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
-          {'start_time': float("-inf"), 'end_time': float("inf"),
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "ProcessId", "#text": "1"},
+              {"@Name": "ParentProcessId", "#text": "2"},
+              {"@Name": "Image", "#text": "blah.exe"},
+              {"@Name": "CommandLine", "#text": "./blah"},
+              {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"}]}}],
+          {'start_time': float("-inf"),
+           'end_time': float("inf"),
            'objectid':
-           {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None, 'time_observed': float("-inf"),
-            'richid': None},
-           'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'richid': None},
+           {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None,
+            'time_observed': float("-inf"),
+            'processtree': None},
+           'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'processtree': None},
            'pimage': None, 'pcommand_line': None, 'ppid': 2, 'pid': 1, 'image': 'blah.exe', 'command_line': './blah',
            'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
          ([{"System": {"EventID": 2},
-             "EventData":
-             {
-                 "Data":
-                 [{"@Name": "ProcessId", "#text": "1"},
-                  {"@Name": "ParentProcessId", "#text": "2"},
-                     {"@Name": "Image", "#text": "blah.exe"},
-                     {"@Name": "CommandLine", "#text": "./blah"},
-                     {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"},
-                     {"@Name": "SourceProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"}]}}],
-                {'start_time': float("-inf"), 'end_time': float("inf"),
-                'objectid':
-                {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None, 'time_observed': float("-inf"),
-                    'richid': None},
-                'pobjectid':
-                {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': None, 'treeid': None, 'time_observed': None,
-                    'richid': None},
-                'pimage': None, 'pcommand_line': None, 'ppid': 2, 'pid': 1, 'image': 'blah.exe', 'command_line': './blah',
-                'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
-           ([{"System": {"EventID": 1},
-                "EventData":
-                {
-                "Data":
-                [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "ProcessId", "#text": "1"},
+              {"@Name": "ParentProcessId", "#text": "2"},
+              {"@Name": "Image", "#text": "blah.exe"},
+              {"@Name": "CommandLine", "#text": "./blah"},
+              {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345679}"},
+              {"@Name": "SourceProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"}]}}],
+          {'start_time': float("-inf"),
+           'end_time': float("inf"),
+           'objectid':
+           {'guid': '{12345678-1234-5678-1234-567812345679}', 'tag': 'blah.exe', 'treeid': None,
+            'time_observed': float("-inf"),
+            'processtree': None},
+           'pobjectid':
+           {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': None, 'treeid': None, 'time_observed': None,
+            'processtree': None},
+           'pimage': None, 'pcommand_line': None, 'ppid': 2, 'pid': 1, 'image': 'blah.exe', 'command_line': './blah',
+           'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
+         ([{"System": {"EventID": 1},
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
+              {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
+              {"@Name": "ProcessId", "#text": "123"},
+              {"@Name": "Image", "#text": "blah"}]}}],
+          {'start_time': 45630.123, 'end_time': float("inf"),
+           'objectid':
+           {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'processtree': None,
+            'time_observed': 45630.123},
+           'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None},
+           'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 123, 'image': 'blah', 'command_line': None,
+           'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
+         ([{"System": {"EventID": 1},
+            "EventData":
+            {
+             "Data":
+             [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
+              {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
+              {"@Name": "ProcessId", "#text": "123"},
+              {"@Name": "Image", "#text": "blah"}]}},
+           {"System": {"EventID": 5},
+            "EventData":
+            {
+               "Data":
+               [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:31.123"},
                 {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
-                {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}}],
-            {'start_time': 45630.123, 'end_time': float("inf"), 'objectid': {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'richid': None, 'time_observed': 45630.123}, 'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 123, 'image': 'blah', 'command_line': None, 'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
-            ([{"System": {"EventID": 1},
-                "EventData":
-                {
-                "Data":
-                [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:30.123"},
-                {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
-                {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}},
-            {"System": {"EventID": 5},
-                "EventData":
-                {
-                "Data":
-                [{"@Name": "UtcTime", "#text": "1970-01-01 12:40:31.123"},
-                    {"@Name": "ProcessGuid", "#text": "{12345678-1234-5678-1234-567812345678}"},
-                    {"@Name": "ProcessId", "#text": "123"}, {"@Name": "Image", "#text": "blah"}]}}],
-            {'start_time': 45630.123, 'end_time': 45631.123, 'objectid': {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'richid': None, 'time_observed': 45630.123}, 'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'richid': None, 'time_observed': None}, 'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 123, 'image': 'blah', 'command_line': None, 'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
-            ])
+                   {"@Name": "ProcessId", "#text": "123"},
+                   {"@Name": "Image", "#text": "blah"}]}}],
+          {'start_time': 45630.123, 'end_time': 45631.123,
+           'objectid':
+           {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'processtree': None,
+            'time_observed': 45630.123},
+           'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'processtree': None, 'time_observed': None},
+           'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 123, 'image': 'blah', 'command_line': None,
+           'integrity_level': None, 'image_hash': None, 'original_file_name': None}), ])
     def test_convert_sysmon_processes(sysmon, expected_process):
         from cuckoo.cuckoo_result import convert_sysmon_processes
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
