@@ -1825,6 +1825,7 @@ if __name__ == "__main__":
     from sys import argv
     from json import loads
     from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
+    from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
     report_path = argv[1]
     file_ext = argv[2]
@@ -1832,7 +1833,7 @@ if __name__ == "__main__":
     routing = argv[4]
     safelist = loads(argv[5])
 
-    so = SandboxOntology()
+    so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
 
     with open(report_path, "r") as f:
         api_report = loads(f.read())
@@ -1847,3 +1848,4 @@ if __name__ == "__main__":
 
     so.preprocess_ontology(SAFE_PROCESS_TREE_LEAF_HASHES.keys())
     print(json.dumps(so.as_primitives(), indent=4))
+    Sandbox(data=so.as_primitives())
