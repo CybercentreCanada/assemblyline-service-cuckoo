@@ -816,7 +816,7 @@ class TestCuckooResult:
           '\tNew service name: blah', []),
          ("terminates_remote_process", {"call": {"arguments": {"process_identifier": 1}}},
           {},
-          '\tTerminated Remote Process: blah', []),
+          '\tTerminated Remote Process: blah (1)', []),
          ("network_document_file",
           {"call": {"time": 1, "arguments": {"filepath": "C:\\bad.exe", "url": "http://bad.com"}}},
           {"dynamic.process.file_name": ["C:\\bad.exe"],
@@ -971,22 +971,22 @@ class TestCuckooResult:
            "")),
          ({},
           {"udp": [{"dst": "blah", "src": "1.1.1.1", "time": "blah", "dport": "blah"}]},
-          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None,
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'image': None, 'pid': None,
              'protocol': 'udp', 'src_ip': None, 'src_port': None, 'timestamp': 'blah'}],
            "")),
          ({},
           {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]},
-          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'guid': None, 'image': None, 'pid': None,
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': None, 'image': None, 'pid': None,
              'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
            "")),
          ({"blah": {"domain": "blah"}},
           {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]},
-          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': None, 'pid': None,
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'image': None, 'pid': None,
              'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
            "")),
          ({"blah": {"domain": "blah", "process_name": "blah", "process_id": "blah"}},
           {"udp": [{"dst": "blah", "src": "blah", "sport": "blah", "time": "blah", "dport": "blah"}]},
-          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'guid': None, 'image': "blah", 'pid': "blah",
+          ([{'dest_ip': 'blah', 'dest_port': 'blah', 'domain': "blah", 'image': "blah", 'pid': "blah",
              'protocol': 'udp', 'src_ip': "blah", 'src_port': "blah", 'timestamp': 'blah'}],
            "")),
          ({},
@@ -1010,7 +1010,7 @@ class TestCuckooResult:
                 flows["udp"].append({"dst": "blah", "src": "1.1.1.1", "dport": f"blah{i}", "time": "blah"})
                 expected_network_flows_table.append({"protocol": "udp", "domain": None, "dest_ip": "blah",
                                                      "src_ip": None, "src_port": None, "dest_port": f"blah{i}",
-                                                     "timestamp": "blah", "image": None, "pid": None, "guid": None})
+                                                     "timestamp": "blah", "image": None, "pid": None})
             expected_network_flows_table = expected_network_flows_table[:100]
 
         safelist = {"regex": {"network.dynamic.ip": ["(^1\.1\.1\.1$)|(^8\.8\.8\.8$)"]}}
@@ -1684,3 +1684,18 @@ class TestCuckooResult:
         res_sec = ResultSection("blah")
         assert add_tag(res_sec, tag, value, ip_network(inetsim_network) if inetsim_network else None) == added_tag
         assert res_sec.tags == expected_tags
+
+    @staticmethod
+    def test_update_process_map():
+        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
+        from cuckoo.cuckoo_result import _update_process_map
+
+        process_map = {}
+        _update_process_map(process_map, [])
+        assert process_map == {}
+
+        default_so = SandboxOntology()
+        p = default_so.create_process(pid=1, image="blah")
+
+        _update_process_map(process_map, [p])
+        assert process_map == {1: {"name": "blah", "network_calls": [], "decrypted_buffers": []}}
