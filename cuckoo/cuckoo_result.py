@@ -43,11 +43,12 @@ SKIPPED_MARK_ITEMS = ["type", "suspicious_features", "entropy", "process", "user
 SKIPPED_CATEGORY_IOCS = ["section", "Data received", "Data sent"]
 SKIPPED_FAMILIES = ["generic"]
 SKIPPED_PATHS = ["/"]
-SILENT_IOCS = ["ransomware_mass_file_delete"]
+SILENT_IOCS = ["ransomware_mass_file_delete", "injection_ntsetcontextthread", "injection_resumethread"]
 
 INETSIM = "INetSim"
 DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
-HTTP_API_CALLS = ["send", "InternetConnectW", "InternetConnectA", "URLDownloadToFileW", "InternetCrackUrlW"]
+HTTP_API_CALLS = ["send", "InternetConnectW", "InternetConnectA",
+                  "URLDownloadToFileW", "InternetCrackUrlW", "InternetOpenUrlA"]
 BUFFER_API_CALLS = ["send", "WSASend"]
 SUSPICIOUS_USER_AGENTS = [
     "Microsoft BITS", "Excel Service"
@@ -57,6 +58,7 @@ SUPPORTED_EXTENSIONS = [
     'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt',
     'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
 ]
+FALSE_POSITIVE_DOMAINS_FOUND_IN_PATHS = ["microsoft.net"]
 ANALYSIS_ERRORS = 'Analysis Errors'
 # Substring of Warning Message frm https://github.com/cuckoosandbox/cuckoo/blob/50452a39ff7c3e0c4c94d114bc6317101633b958/cuckoo/core/guest.py#L561
 GUEST_LOSING_CONNNECTIVITY = 'Virtual Machine /status failed. This can indicate the guest losing network connectivity'
@@ -64,6 +66,7 @@ GUEST_LOSING_CONNNECTIVITY = 'Virtual Machine /status failed. This can indicate 
 GUEST_CANNOT_REACH_HOST = "it appears that this Virtual Machine hasn't been configured properly as the Cuckoo Host wasn't able to connect to the Guest."
 GUEST_LOST_CONNECTIVITY = 5
 SIGNATURES_SECTION_TITLE = "Signatures"
+ENCRYPTED_BUFFER_LIMIT = 25
 
 
 # noinspection PyBroadException
@@ -124,6 +127,9 @@ def generate_al_result(
         else:
             # Otherwise, moving on!
             process_behaviour(behaviour, safelist, so)
+
+    if so.get_processes():
+        _update_process_map(process_map, so.get_processes())
 
     is_process_martian = False
     if sigs:
@@ -490,12 +496,17 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                 for process in process_map:
                     process_details = process_map[process]
                     for network_call in process_details["network_calls"]:
-                        connect = network_call.get("connect", {}) or network_call.get("InternetConnectW", {}) or \
-                            network_call.get("InternetConnectA", {})
-                        if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or
-                                              connect.get("hostname", "") == network_flow["dest_ip"]) and \
-                                connect["port"] == network_flow["dest_port"]:
+                        connect = network_call.get(
+                            "connect", {}) or network_call.get(
+                            "InternetConnectW", {}) or network_call.get(
+                            "InternetConnectA", {}) or network_call.get(
+                            "WSAConnect", {}) or network_call.get(
+                            "InternetOpenUrlA", {})
+                        if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or connect.get(
+                            "hostname", "") == network_flow["dest_ip"]) and connect["port"] == network_flow[
+                                "dest_port"] or network_flow["domain"] in connect.get("url", ""):
                             network_flow["image"] = process_details["name"] + " (" + str(process) + ")"
+                            network_flow["pid"] = process
                             break
                     if network_flow["image"]:
                         break
@@ -579,6 +590,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                         remote_file_access_sec.add_line(f"\t{http_call.request_uri}")
                     if not remote_file_access_sec.heuristic:
                         remote_file_access_sec.set_heuristic(1003)
+                    _ = add_tag(remote_file_access_sec, "network.dynamic.uri", http_call.request_uri)
 
             user_agent = http_call.request_headers.get("UserAgent")
             if user_agent:
@@ -763,14 +775,11 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
                 "dest_port": network_call["dport"],
                 "image": network_call.get("image"),
                 "pid": network_call.get("pid"),
-                "guid": network_call.get("guid")
             }
             if dst in resolved_ips.keys():
                 network_flow["domain"] = resolved_ips[dst]["domain"]
                 if not network_flow["image"]:
                     network_flow["image"] = resolved_ips[dst].get("process_name")
-                if not network_flow["guid"]:
-                    network_flow["guid"] = resolved_ips[dst].get("guid")
                 if network_flow["image"] and not network_flow["pid"]:
                     network_flow["pid"] = resolved_ips[dst]["process_id"]
             network_flows_table.append(network_flow)
@@ -1181,6 +1190,7 @@ def get_process_map(processes: List[Dict[str, Any]],
         # DNS and Connecting to IP, if service = 3 then HTTP
         "send": ["buffer"],  # HTTP Request
         "WSASend": ["buffer"],  # Socket connection
+        "WSAConnect": ["ip_address", "port"],  # Connecting to IP
         # "HttpOpenRequestW": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
         # "HttpOpenRequestA": ["http_method", "path"],  # HTTP Request TODO not sure what to do with this yet
         # "InternetOpenW": ["user-agent"],  # HTTP Request TODO not sure what to do with this yet
@@ -1190,6 +1200,7 @@ def get_process_map(processes: List[Dict[str, Any]],
         "OutputDebugStringA": ["string"],  # Used for certain malware files that use configuration files
         "URLDownloadToFileW": ["url"],
         "InternetCrackUrlW": ["url"],
+        "InternetOpenUrlA": ["url"],
     }
     for process in processes:
         if is_safelisted(process["process_path"], ["dynamic.process.file_name"], safelist):
@@ -1408,6 +1419,8 @@ def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[s
         for network_call in process_details["network_calls"]:
             for api_call in BUFFER_API_CALLS:
                 if api_call in network_call:
+                    if buffer_count >= ENCRYPTED_BUFFER_LIMIT:
+                        continue
                     buffer = network_call[api_call]["buffer"]
                     _extract_iocs_from_text_blob(buffer, encrypted_buffer_ioc_table)
                     encrypted_buffer_file_path = os.path.join(
@@ -1588,7 +1601,10 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         terminated_process_name = process_map.get(terminated_pid, {}).get("name")
         so_sig.add_process_subject(pid=terminated_pid, image=terminated_process_name)
         if terminated_process_name:
-            sig_res.add_line(f'\tTerminated Remote Process: {terminated_process_name}')
+            if not sig_res.body:
+                sig_res.add_line(f'\tTerminated Remote Process: {terminated_process_name} ({terminated_pid})')
+            elif f'\tTerminated Remote Process: {terminated_process_name} ({terminated_pid})' not in sig_res.body:
+                sig_res.add_line(f'\tTerminated Remote Process: {terminated_process_name} ({terminated_pid})')
     elif signature_name == "network_document_file":
         download_path = mark["call"].get("arguments", {}).get("filepath")
         url = mark["call"].get("arguments", {}).get("url")
@@ -1666,6 +1682,8 @@ def _extract_iocs_from_text_blob(
     for domain in domains:
         # File names match the domain and URI regexes, so we need to avoid tagging them
         # Note that get_tld only takes URLs so we will prepend http:// to the domain to work around this
+        if domain in FALSE_POSITIVE_DOMAINS_FOUND_IN_PATHS:
+            continue
         tld = next((tld.lower() for tld in TLDS_ALPHA_BY_DOMAIN if domain.lower().endswith(f".{tld}".lower())), None)
         if tld is None or tld in SUPPORTED_EXTENSIONS:
             continue
@@ -1789,12 +1807,15 @@ def _validate_tag(result_section: ResultSection, tag: str, value: Any, inetsim_n
             domain = re.search(DOMAIN_REGEX, value)
             if domain:
                 domain = domain.group()
-                tld = next((tld.lower()
-                           for tld in TLDS_ALPHA_BY_DOMAIN if domain.lower().endswith(f".{tld}".lower())), None)
-                if tld is None or tld in SUPPORTED_EXTENSIONS:
+                if domain in FALSE_POSITIVE_DOMAINS_FOUND_IN_PATHS:
                     pass
-                elif not is_safelisted(value, ["network.dynamic.domain"], global_safelist):
-                    result_section.add_tag("network.dynamic.domain", safe_str(domain))
+                else:
+                    tld = next((tld.lower()
+                                for tld in TLDS_ALPHA_BY_DOMAIN if domain.lower().endswith(f".{tld}".lower())), None)
+                    if tld is None or tld in SUPPORTED_EXTENSIONS:
+                        pass
+                    elif not is_safelisted(value, ["network.dynamic.domain"], global_safelist):
+                        result_section.add_tag("network.dynamic.domain", safe_str(domain))
             # Then try to get the IP
             ip = re.search(IP_REGEX, value)
             if ip:
@@ -1835,6 +1856,8 @@ def convert_sysmon_processes(
                     process["start_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
                 else:
                     process["end_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+            elif name == "utctime" and event_id in [10]:
+                process["start_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
             elif name == "utctime":
                 process["time_observed"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
             elif name in ["sourceprocessguid", "parentprocessguid"]:
@@ -1874,6 +1897,24 @@ def convert_sysmon_processes(
         else:
             p = so.create_process(**process)
             so.add_process(p)
+
+
+def _update_process_map(process_map: Dict[int, Dict[str, Any]], processes: List[Process]) -> None:
+    """
+    This method updates the process map with the processes added to the sandbox ontology
+    :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :param processes: A list of processes
+    :return: None
+    """
+    for process in processes:
+        if process.pid in process_map:
+            continue
+
+        process_map[process.pid] = {
+            "name": process.image,
+            "network_calls": [],
+            "decrypted_buffers": []
+        }
 
 
 if __name__ == "__main__":
