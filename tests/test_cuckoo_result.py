@@ -377,7 +377,7 @@ class TestCuckooResult:
             "marks": [{"type": "call", "pid": 2, "call": {"arguments": {"process_identifier": 1}}}]}],
           "192.0.2.0/24", "", {2: {"name": "blah1"},
                                1: {"name": "blah2"}},
-          'No description for signature.\n\tProcess Name: blah1\n\tInjected Process: blah2', False,
+          'No description for signature.\n\tProcess Name: blah1 (2)\n\tInjected Process: blah2 (1)', False,
           {"name": "injection_explorer", "description": "No description for signature.", "process.pid": 2,
            "process.image": "blah1", "attack": [{'attack_id': 'T1055', 'categories': ['defense-evasion', 'privilege-escalation'],
                                                  'pattern': 'Process Injection'}]}),
@@ -386,7 +386,7 @@ class TestCuckooResult:
             "marks": [{"type": "call", "pid": 2, "call": {"arguments": {"process_identifier": 1}}}]}],
           "192.0.2.0/24", "", {2: {"name": "blah"},
                                1: {"name": "blah"}},
-          'No description for signature.\n\tProcess Name: blah\n\tInjected Process: blah', False,
+          'No description for signature.\n\tProcess Name: blah (2)\n\tInjected Process: blah (1)', False,
           {"name": "process_interest", "description": "No description for signature.", "process.pid": 2,
            "process.image": "blah", "attack": [{'attack_id': 'T1055', 'categories': ['defense-evasion', 'privilege-escalation'],
                                                 'pattern': 'Process Injection'}]}),
@@ -415,11 +415,10 @@ class TestCuckooResult:
         so_sig = SandboxOntology.Signature(name=sig_name).as_primitives()
         al_result = ResultSection("blah")
         task_id = 1
-        file_ext = ".exe"
         safelist = {"match": {"network.dynamic.ip": ["127.0.0.1"], "file.path": [
             "desktop.ini"]}, "regex": {"network.dynamic.domain": [".*\.adobe\.com$"]}}
         assert process_signatures(sigs, al_result, ip_network(random_ip_range), target_filename,
-                                  process_map, task_id, file_ext, safelist, so) == correct_is_process_martian
+                                  process_map, task_id, safelist, so) == correct_is_process_martian
         if any("process" in key for key in expected_sig.keys()):
             so_sig["process"] = Process().as_primitives()
         for key, value in expected_sig.items():
@@ -478,7 +477,7 @@ class TestCuckooResult:
                 correct_subsection.set_heuristic(22)
                 correct_subsection.heuristic.add_signature_id(sig_name, 10)
                 if sig_name == "network_cnc_http":
-                    correct_subsection.add_tag('network.dynamic.uri', '11.11.11.11')
+                    correct_subsection.add_tag('network.dynamic.ip', '11.11.11.11')
                 elif sig_name == "nolookup_communication":
                     correct_subsection.add_tag("network.dynamic.ip", "11.11.11.11")
                 correct_result_section.add_subsection(correct_subsection)
@@ -654,7 +653,7 @@ class TestCuckooResult:
                                None, {}),
                               ("network_cnc_http",
                                {"suspicious_request": "evil http://evil.com", "suspicious_features": "http://evil.com"},
-                               {'network.dynamic.uri': ['http://evil.com']},
+                               {'network.dynamic.uri': ['http://evil.com'], "network.dynamic.domain": ["evil.com"]},
                                '\t"evil http://evil.com" is suspicious because "http://evil.com"',
                                {"uri": "http://evil.com"}),
                               ("network_cnc_http", {"suspicious_request": "benign http://w3.org"},
@@ -735,11 +734,11 @@ class TestCuckooResult:
             ("blah", {"ioc": "http://w3.org", "category": "blah"}, {}, {}, None, {}),
             ("network_http", {"ioc": "evil http://evil.org", "category": "blah"},
              {},
-             {'network.dynamic.uri': ['http://evil.org']},
+             {'network.dynamic.uri': ['http://evil.org'], 'network.dynamic.domain': ['evil.org']},
              '\tIOC: evil http://evil.org', {"uri": "http://evil.org"}),
             ("network_http", {"ioc": "evil http://evil.org", "category": "blah"},
              {},
-             {'network.dynamic.uri': ['http://evil.org']},
+             {'network.dynamic.uri': ['http://evil.org'], 'network.dynamic.domain': ['evil.org']},
              '\tIOC: evil http://evil.org', {"uri": "http://evil.org"}),
             ("network_http", {"ioc": "evil http://evil.org/", "category": "blah"}, {}, {}, None, {}),
             ("network_http_post", {"ioc": "evil http://evil.org/", "category": "blah"}, {}, {}, None, {}),
@@ -749,14 +748,10 @@ class TestCuckooResult:
              {}, {"dynamic.autorun_location": ["blah"]}, None, {}),
             ("creates_shortcut", {"ioc": "blah", "category": "blah"}, {}, {}, None, {}),
             ("ransomware_mass_file_delete", {"ioc": "blah", "category": "blah"}, {}, {}, None, {}),
-            ("suspicious_process", {"ioc": "blah", "category": "blah"}, {}, {}, None, {}),
-            ("uses_windows_utilities", {"ioc": "blah", "category": "blah"}, {}, {}, None, {}),
-            ("creates_exe", {"ioc": "blah", "category": "blah"}, {}, {}, None, {}),
-            ("deletes_executed_files", {"ioc": "blah", "category": "blah"}, {}, {}, None, {}),
             ("p2p_cnc", {"ioc": "10.10.10.10", "category": "blah"}, {}, {
              "network.dynamic.ip": ["10.10.10.10"]}, '\tIOC: 10.10.10.10', {"ip": "10.10.10.10"}),
             ("blah", {"ioc": "1", "category": "blah"}, {}, {}, '\tIOC: 1', {}),
-            ("blah", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: blah', {}),
+            ("blah", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: blah (1)', {}),
             ("blah", {"ioc": "blah", "category": "file"}, {}, {
              "dynamic.process.file_name": ["blah"]}, '\tIOC: blah', {"file": "blah"}),
             ("blah", {"ioc": "blah", "category": "dll"}, {}, {
@@ -782,10 +777,9 @@ class TestCuckooResult:
         inetsim_network = ip_network("192.0.2.0/24")
         expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
         actual_result = ResultSection("blah")
-        file_ext = ".exe"
         safelist = {"regex": {"network.dynamic.domain": ["(www\.)?w3\.org$"]}}
         _tag_and_describe_ioc_signature(signature_name, mark, actual_result,
-                                        inetsim_network, process_map, file_ext, safelist, so, so_sig)
+                                        inetsim_network, process_map, safelist, so, so_sig)
         assert check_section_equality(actual_result, expected_result)
         for key, value in expected_ioc.items():
             so_sig_ioc[key] = value
@@ -794,40 +788,44 @@ class TestCuckooResult:
         assert so_sig.as_primitives() == default_sig
 
     @staticmethod
-    @pytest.mark.parametrize("signature_name, mark, expected_tags, expected_body, expected_iocs",
-                             [("blah", {"blah": "blah"},
-                               {},
-                               None, []),
-                              ("creates_hidden_file", {"call": {"arguments": {}}},
-                               {},
-                               None, []),
-                              ("creates_hidden_file", {"call": {"arguments": {"filepath": "blah"}}},
-                               {"dynamic.process.file_name": ["blah"]},
-                               "IOC: blah", [{"file": "blah"}]),
-                              ("moves_self", {"call": {"arguments": {}}},
-                               {},
-                               None, []),
-                              ("moves_self",
-                               {"call": {"arguments": {"oldfilepath": "blah1", "newfilepath": "blah2"}}},
-                               {"dynamic.process.file_name": ["blah1", "blah2"]},
-                               '\tOld file path: blah1\n\tNew file path: blah2', [{"file": "blah1"}, {"file": "blah2"}]),
-                              ("moves_self", {"call": {"arguments": {"oldfilepath": "blah", "newfilepath": ""}}},
-                               {"dynamic.process.file_name": ["blah"]},
-                               '\tOld file path: blah\n\tNew file path: File deleted itself', [{"file": "blah"}]),
-                              ("creates_service", {"call": {"arguments": {}}},
-                               {},
-                               None, []),
-                              ("creates_service", {"call": {"arguments": {"service_name": "blah"}}},
-                               {},
-                               '\tNew service name: blah', []),
-                              ("terminates_remote_process", {"call": {"arguments": {"process_identifier": 1}}},
-                               {},
-                               '\tTerminated Remote Process: blah', []),
-                              ("network_document_file",
-                               {"call": {"time": 1, "arguments": {"filepath": "C:\\bad.exe", "url": "http://bad.com"}}},
-                               {"dynamic.process.file_name": ["C:\\bad.exe"], "network.dynamic.uri": ["http://bad.com"]},
-                               '\tThe file at http://bad.com was attempted to be downloaded to C:\\bad.exe',
-                               [{"file": "C:\\bad.exe"}, {"uri": "http://bad.com"}]), ])
+    @pytest.mark.parametrize(
+        "signature_name, mark, expected_tags, expected_body, expected_iocs",
+        [("blah", {"blah": "blah"},
+          {},
+          None, []),
+         ("creates_hidden_file", {"call": {"arguments": {}}},
+          {},
+          None, []),
+         ("creates_hidden_file", {"call": {"arguments": {"filepath": "blah"}}},
+          {"dynamic.process.file_name": ["blah"]},
+          "IOC: blah", [{"file": "blah"}]),
+         ("moves_self", {"call": {"arguments": {}}},
+          {},
+          None, []),
+         ("moves_self", {"call": {"arguments": {"oldfilepath": "blah1", "newfilepath": "blah2"}}},
+          {"dynamic.process.file_name": ["blah1", "blah2"]},
+          '\tOld file path: blah1\n\tNew file path: blah2', [{"file": "blah1"},
+                                                             {"file": "blah2"}]),
+         ("moves_self", {"call": {"arguments": {"oldfilepath": "blah", "newfilepath": ""}}},
+          {"dynamic.process.file_name": ["blah"]},
+          '\tOld file path: blah\n\tNew file path: File deleted itself', [{"file": "blah"}]),
+         ("creates_service", {"call": {"arguments": {}}},
+          {},
+          None, []),
+         ("creates_service", {"call": {"arguments": {"service_name": "blah"}}},
+          {},
+          '\tNew service name: blah', []),
+         ("terminates_remote_process", {"call": {"arguments": {"process_identifier": 1}}},
+          {},
+          '\tTerminated Remote Process: blah', []),
+         ("network_document_file",
+          {"call": {"time": 1, "arguments": {"filepath": "C:\\bad.exe", "url": "http://bad.com"}}},
+          {"dynamic.process.file_name": ["C:\\bad.exe"],
+           "network.dynamic.uri": ["http://bad.com"],
+           "network.dynamic.domain": ["bad.com"]},
+          '\tThe file at http://bad.com was attempted to be downloaded to C:\\bad.exe',
+          [{"file": "C:\\bad.exe"},
+           {"uri": "http://bad.com"}]), ])
     def test_tag_and_describe_call_signature(signature_name, mark, expected_tags, expected_body, expected_iocs):
         from assemblyline_v4_service.common.result import ResultSection
         from cuckoo.cuckoo_result import _tag_and_describe_call_signature
@@ -951,11 +949,15 @@ class TestCuckooResult:
              "",
              {'answer': {'domain': 'request', 'process_id': 1, 'process_name': 'blah', "guid": None, "time": None, "type": "dns_type"}}),
             ([{"answers": []}], {1: {"name": "blah", "network_calls": [{"gethostbyname": {"hostname": "request"}}]}}, "", {}),
+            ([{"answers": [{"data": "1.1.1.1"}],
+               "request": "request", "type": "dns_type"}],
+             {1: {"network_calls": [{"blah": {"hostname": "blah"}}]}}, "", {}),
         ]
     )
     def test_get_dns_map(dns_calls, process_map, routing, expected_return):
         from cuckoo.cuckoo_result import _get_dns_map
-        assert _get_dns_map(dns_calls, process_map, routing) == expected_return
+        dns_servers = ["1.1.1.1"]
+        assert _get_dns_map(dns_calls, process_map, routing, dns_servers) == expected_return
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1071,7 +1073,8 @@ class TestCuckooResult:
             {"network.dynamic.ip": ["(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*"],
              "network.dynamic.domain": [".*\.adobe\.com$"],
              "network.dynamic.uri": ["(?:ftp|http)s?://localhost(?:$|/.*)"]}}
-        _process_http_calls(http_level_flows, process_map, safelist, default_so)
+        dns_servers = []
+        _process_http_calls(http_level_flows, process_map, dns_servers, safelist, default_so)
         actual_req_table = []
         for nh in default_so.get_network_http():
             nh_as_prim = nh.__dict__
@@ -1176,8 +1179,7 @@ class TestCuckooResult:
             correct_ioc_table.add_row(TableRow(**item))
         correct_result_section.add_subsection(correct_ioc_table)
 
-        file_ext = ".exe"
-        process_all_events(al_result, file_ext, default_so)
+        process_all_events(al_result, default_so)
         assert check_section_equality(al_result.subsections[0], correct_result_section)
 
     @staticmethod
@@ -1484,15 +1486,17 @@ class TestCuckooResult:
                                '[{"Decrypted Buffer": "blah.ca"}]', {'network.dynamic.domain': ['blah.ca']},
                                [{"ioc_type": "domain", "ioc": "blah.ca"}]),
                               ({0: {"decrypted_buffers": [{"OutputDebugStringA": {"string": "127.0.0.1:999"}}]}},
-                               '[{"Decrypted Buffer": "127.0.0.1:999"}]', {'network.dynamic.ip': ['127.0.0.1']},
-                               [{"ioc_type": "ip", "ioc": "127.0.0.1"}]), ])
+                               '[{"Decrypted Buffer": "127.0.0.1:999"}]',
+                               {'network.dynamic.ip': ['127.0.0.1'],
+                                "network.dynamic.uri": ["127.0.0.1:999"]},
+                               [{"ioc_type": "ip", "ioc": "127.0.0.1"},
+                                {"ioc_type": "uri", "ioc": "127.0.0.1:999"}]), ])
     def test_process_decrypted_buffers(process_map, correct_buffer_body, correct_tags, correct_body):
         from cuckoo.cuckoo_result import process_decrypted_buffers
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT, ResultTableSection, TableRow
 
         parent_section = ResultSection("blah")
-        file_ext = ".exe"
-        process_decrypted_buffers(process_map, parent_section, file_ext)
+        process_decrypted_buffers(process_map, parent_section)
 
         if correct_buffer_body is None:
             assert parent_section.subsections == []
@@ -1526,32 +1530,32 @@ class TestCuckooResult:
         "processes, correct_process_map",
         [
             ([], {}),
-            ([{"process_name": "C:\\windows\\System32\\lsass.exe", "calls": [], "pid": 1}], {}),
-            ([{"process_name": "blah.exe", "calls": [], "pid": 1}], {
+            ([{"process_path": "C:\\windows\\System32\\lsass.exe", "calls": [], "pid": 1}], {}),
+            ([{"process_path": "blah.exe", "calls": [], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"api": "blah"}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"api": "blah"}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "getaddrinfo", "arguments": {"hostname": "blah"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "network", "api": "getaddrinfo", "arguments": {"hostname": "blah"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [{"getaddrinfo": {"hostname": "blah"}}], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "GetAddrInfoW", "arguments": {"hostname": "blah"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "network", "api": "GetAddrInfoW", "arguments": {"hostname": "blah"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [{"GetAddrInfoW": {"hostname": "blah"}}], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "connect", "arguments": {"ip_address": "blah", "port": "blah"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "network", "api": "connect", "arguments": {"ip_address": "blah", "port": "blah"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [{"connect": {"ip_address": "blah", "port": "blah"}}], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectW", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectW", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [{"InternetConnectW": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectA", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "network", "api": "InternetConnectA", "arguments": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [{"InternetConnectA": {"username": "blah", "service": "blah", "password": "blah", "hostname": "blah", "port": "blah"}}], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "send", "arguments": {"buffer": "blah"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "network", "api": "send", "arguments": {"buffer": "blah"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [{"send": {"buffer": "blah"}}], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "crypto", "api": "CryptDecrypt", "arguments": {"buffer": "blah"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "crypto", "api": "CryptDecrypt", "arguments": {"buffer": "blah"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': [{"CryptDecrypt": {"buffer": "blah"}}]}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {
+            ([{"process_path": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {
              "string": "blah"}}], "pid": 1}], {1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "cfg:blah"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "system", "api": "OutputDebugStringA", "arguments": {"string": "cfg:blah"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [], 'decrypted_buffers': [{"OutputDebugStringA": {"string": "cfg:blah"}}]}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "URLDownloadToFileW", "arguments": {"url": "bad.evil"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "network", "api": "URLDownloadToFileW", "arguments": {"url": "bad.evil"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [{"URLDownloadToFileW": {"url": "bad.evil"}}], 'decrypted_buffers': []}}),
-            ([{"process_name": "blah.exe", "calls": [{"category": "network", "api": "WSASend", "arguments": {"buffer": "blahblahblah bad.evil blahblahblah"}}], "pid": 1}], {
+            ([{"process_path": "blah.exe", "calls": [{"category": "network", "api": "WSASend", "arguments": {"buffer": "blahblahblah bad.evil blahblahblah"}}], "pid": 1}], {
              1: {'name': 'blah.exe', 'network_calls': [{"WSASend": {"buffer": "blahblahblah bad.evil blahblahblah"}}], 'decrypted_buffers': []}}),
         ]
     )
@@ -1575,38 +1579,38 @@ class TestCuckooResult:
 
     @staticmethod
     @pytest.mark.parametrize(
-        "blob, file_ext, correct_tags, expected_iocs",
-        [("", "", {}, [{}]),
-         ("192.168.100.1", "", {'network.dynamic.ip': ['192.168.100.1']}, [{"ip": "192.168.100.1"}]),
-         ("blah.ca", ".exe", {'network.dynamic.domain': ['blah.ca']}, [{"domain": "blah.ca"}]),
-         ("https://blah.ca", ".exe",
+        "blob, correct_tags, expected_iocs",
+        [("", {}, [{}]),
+         ("192.168.100.1", {'network.dynamic.ip': ['192.168.100.1']}, [{"ip": "192.168.100.1"}]),
+         ("blah.ca", {'network.dynamic.domain': ['blah.ca']}, [{"domain": "blah.ca"}]),
+         ("https://blah.ca",
           {'network.dynamic.domain': ['blah.ca'],
            'network.dynamic.uri': ['https://blah.ca']}, [{"domain": "blah.ca"}, {"uri": "https://blah.ca"}]),
-         ("https://blah.ca/blah", ".exe",
+         ("https://blah.ca/blah",
           {'network.dynamic.domain': ['blah.ca'],
            'network.dynamic.uri': ['https://blah.ca/blah'],
            "network.dynamic.uri_path": ["/blah"]}, [{"domain": "blah.ca"}, {"uri": "https://blah.ca/blah"}]),
-         ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", ".exe", {}, [{}]),
+         ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", {}, [{}]),
          (
             "DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC",
-            ".exe", {}, [{}]),
+            {}, [{}]),
          ("DRIVE:\\\\PATH TO\\\\PYTHON27.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.py",
-          ".py", {}, [{}]),
+          {}, [{}]),
          (
             "POST /some/thing/bad.exe HTTP/1.0\nUser-Agent: Mozilla\nHost: evil.ca\nAccept: */*\nContent-Type: application/octet-stream\nContent-Encoding: binary\n\nConnection: close",
-            "", {"network.dynamic.domain": ["evil.ca"]}, [{"domain": "evil.ca"}]),
-         ("evil.ca/some/thing/bad.exe", "",
+            {"network.dynamic.domain": ["evil.ca"]}, [{"domain": "evil.ca"}]),
+         ("evil.ca/some/thing/bad.exe",
           {"network.dynamic.domain": ["evil.ca"],
            "network.dynamic.uri": ["evil.ca/some/thing/bad.exe"],
            "network.dynamic.uri_path": ["/some/thing/bad.exe"]}, [{"domain": "evil.ca"}, {"uri": "evil.ca/some/thing/bad.exe"}]), ])
-    def test_extract_iocs_from_text_blob(blob, file_ext, correct_tags, expected_iocs):
+    def test_extract_iocs_from_text_blob(blob, correct_tags, expected_iocs):
         from cuckoo.cuckoo_result import _extract_iocs_from_text_blob
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultTableSection
         test_result_section = ResultTableSection("blah")
         so_sig = SandboxOntology.Signature()
         default_iocs = []
-        _extract_iocs_from_text_blob(blob, test_result_section, so_sig=so_sig, file_ext=file_ext)
+        _extract_iocs_from_text_blob(blob, test_result_section, so_sig=so_sig)
         assert test_result_section.tags == correct_tags
         if correct_tags:
             for expected_ioc in expected_iocs:
