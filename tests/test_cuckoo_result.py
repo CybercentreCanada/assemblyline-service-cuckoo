@@ -746,7 +746,6 @@ class TestCuckooResult:
             ("network_http_post", {"ioc": "evil evil http://evil.org", "category": "blah"}, {}, {}, None, {}),
             ("persistence_autorun", {"ioc": "blah", "category": "blah"},
              {}, {"dynamic.autorun_location": ["blah"]}, None, {}),
-            ("creates_shortcut", {"ioc": "blah", "category": "blah"}, {}, {}, None, {}),
             ("ransomware_mass_file_delete", {"ioc": "blah", "category": "blah"}, {}, {}, None, {}),
             ("p2p_cnc", {"ioc": "10.10.10.10", "category": "blah"}, {}, {
              "network.dynamic.ip": ["10.10.10.10"]}, '\tIOC: 10.10.10.10', {"ip": "10.10.10.10"}),

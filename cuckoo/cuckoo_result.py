@@ -43,7 +43,7 @@ SKIPPED_MARK_ITEMS = ["type", "suspicious_features", "entropy", "process", "user
 SKIPPED_CATEGORY_IOCS = ["section", "Data received", "Data sent"]
 SKIPPED_FAMILIES = ["generic"]
 SKIPPED_PATHS = ["/"]
-SILENT_IOCS = ["creates_shortcut", "ransomware_mass_file_delete"]
+SILENT_IOCS = ["ransomware_mass_file_delete"]
 
 INETSIM = "INetSim"
 DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
@@ -392,6 +392,8 @@ def process_signatures(
                     injected_process = mark["call"].get("arguments", {}).get("process_identifier")
                     injected_process_name = process_map.get(injected_process, {}).get("name")
                     if injected_process_name:
+                        if (injected_process_name, injected_process) == (process_name, pid):
+                            continue
                         if not sig_res.body:
                             sig_res.add_line(
                                 f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})')
