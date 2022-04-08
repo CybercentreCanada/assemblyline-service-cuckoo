@@ -3,16 +3,17 @@ from logging import getLogger
 import re
 import os
 import json
-from tld import get_tld
 from ipaddress import ip_address, ip_network, IPv4Network
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
+from assemblyline.common.net_static import TLDS_ALPHA_BY_DOMAIN
 from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, URI_PATH, DOMAIN_ONLY_REGEX
 from assemblyline_v4_service.common.result import ResultSection, ResultKeyValueSection, ResultTextSection, ResultTableSection, TableRow
+
 
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
@@ -42,12 +43,11 @@ SKIPPED_MARK_ITEMS = ["type", "suspicious_features", "entropy", "process", "user
 SKIPPED_CATEGORY_IOCS = ["section", "Data received", "Data sent"]
 SKIPPED_FAMILIES = ["generic"]
 SKIPPED_PATHS = ["/"]
-SILENT_IOCS = ["creates_shortcut", "ransomware_mass_file_delete", "suspicious_process", "uses_windows_utilities",
-               "creates_exe", "deletes_executed_files"]
+SILENT_IOCS = ["creates_shortcut", "ransomware_mass_file_delete"]
 
 INETSIM = "INetSim"
 DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
-HTTP_API_CALLS = ["send", "InternetConnectW", "InternetConnectA", "URLDownloadToFileW"]
+HTTP_API_CALLS = ["send", "InternetConnectW", "InternetConnectA", "URLDownloadToFileW", "InternetCrackUrlW"]
 BUFFER_API_CALLS = ["send", "WSASend"]
 SUSPICIOUS_USER_AGENTS = [
     "Microsoft BITS", "Excel Service"
@@ -132,7 +132,7 @@ def generate_al_result(
         target_filename = target_file.get("name", "missing_name")
         is_process_martian = process_signatures(
             sigs, al_result, validated_random_ip_range, target_filename, process_map, info["id"],
-            file_ext, safelist, so)
+            safelist, so)
 
     if network:
         process_network(network, al_result, validated_random_ip_range, routing, process_map, info["id"],
@@ -140,7 +140,7 @@ def generate_al_result(
 
     build_process_tree(al_result, is_process_martian, so)
 
-    process_all_events(al_result, file_ext, so)
+    process_all_events(al_result, so)
 
     if curtain:
         process_curtain(curtain, al_result, process_map)
@@ -149,7 +149,7 @@ def generate_al_result(
         process_hollowshunter(hollowshunter, al_result, process_map)
 
     if process_map:
-        process_decrypted_buffers(process_map, al_result, file_ext)
+        process_decrypted_buffers(process_map, al_result)
 
 
 def process_info(info: Dict[str, Any], routing: str, parent_result_section: ResultSection, so: SandboxOntology) -> None:
@@ -314,8 +314,7 @@ def process_signatures(
         sigs: List[Dict[str, Any]],
         parent_result_section: ResultSection, inetsim_network: IPv4Network, target_filename: str,
         process_map: Dict[int, Dict[str, Any]],
-        task_id: int, file_ext: str,
-        safelist: Dict[str, Dict[str, List[str]]],
+        task_id: int, safelist: Dict[str, Dict[str, List[str]]],
         so: SandboxOntology) -> bool:
     """
     This method processes the signatures section of the Cuckoo report, adding anything noteworthy to the
@@ -326,7 +325,6 @@ def process_signatures(
     :param target_filename: The name of the file that was submitted for analysis
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param task_id: An integer representing the Cuckoo Task ID
-    :param file_ext: The file extension of the file to be submitted
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :param so: The sandbox ontology class object
     :return: A boolean flag that indicates if the is_process_martian signature was raised
@@ -381,15 +379,26 @@ def process_signatures(
                 _tag_and_describe_generic_signature(sig_name, mark, sig_res, inetsim_network, safelist, so_sig)
             elif mark["type"] == "ioc" and mark.get("category") not in SKIPPED_CATEGORY_IOCS:
                 _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network,
-                                                process_map, file_ext, safelist, so, so_sig)
+                                                process_map, safelist, so, so_sig)
             elif mark["type"] == "call" and process_name is not None:
-                sig_res.add_line(f'\tProcess Name: {safe_str(process_name)}')
+                if not sig_res.body:
+                    sig_res.add_line(f'\tProcess Name: {safe_str(process_name)} ({pid})')
+                elif f'\tProcess Name: {safe_str(process_name)} ({pid})' not in sig_res.body:
+                    sig_res.add_line(f'\tProcess Name: {safe_str(process_name)} ({pid})')
+
                 _tag_and_describe_call_signature(sig_name, mark, sig_res, process_map, so_sig)
                 # Displaying the injected process
                 if get_signature_category(sig_name) == "Injection":
                     injected_process = mark["call"].get("arguments", {}).get("process_identifier")
                     injected_process_name = process_map.get(injected_process, {}).get("name")
-                    sig_res.add_line(f'\tInjected Process: {safe_str(injected_process_name)}')
+                    if injected_process_name:
+                        if not sig_res.body:
+                            sig_res.add_line(
+                                f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})')
+                        elif f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})' not in sig_res.body:
+                            sig_res.add_line(
+                                f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})')
+
                     so_sig.add_process_subject(pid=injected_process, image=injected_process_name,
                                                start_time=mark["call"].get("time"))
 
@@ -447,7 +456,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     # DNS
     dns_servers: List[str] = network.get("dns_servers", [])
     dns_calls: List[Dict[str, Any]] = network.get("dns", [])
-    resolved_ips: Dict[str, Dict[str, Any]] = _get_dns_map(dns_calls, process_map, routing)
+    resolved_ips: Dict[str, Dict[str, Any]] = _get_dns_map(dns_calls, process_map, routing, dns_servers)
     dns_res_sec: Optional[ResultTableSection] = _get_dns_sec(resolved_ips)
 
     low_level_flows = {
@@ -538,7 +547,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         "http_ex": network.get("http_ex", []),
         "https_ex": network.get("https_ex", []),
     }
-    _process_http_calls(http_level_flows, process_map, safelist, so)
+    _process_http_calls(http_level_flows, process_map, dns_servers, safelist, so)
     http_calls = so.get_network_http()
     if len(http_calls) > 0:
         http_sec = ResultTableSection("Protocol: HTTP/HTTPS")
@@ -562,7 +571,10 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             if http_call.request_method == "GET":
                 split_path = http_call.request_uri.rsplit("/", 1)
                 if len(split_path) > 1 and re.search(r'[^\\]*\.(\w+)$', split_path[-1]):
-                    remote_file_access_sec.add_line(f"\t{http_call.request_uri}")
+                    if not remote_file_access_sec.body:
+                        remote_file_access_sec.add_line(f"\t{http_call.request_uri}")
+                    elif f"\t{http_call.request_uri}" not in remote_file_access_sec.body:
+                        remote_file_access_sec.add_line(f"\t{http_call.request_uri}")
                     if not remote_file_access_sec.heuristic:
                         remote_file_access_sec.set_heuristic(1003)
 
@@ -590,7 +602,8 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         if suspicious_user_agent_sec.heuristic:
             suspicious_user_agent_sec.add_line(' | '.join(sus_user_agents_used))
             http_sec.add_subsection(suspicious_user_agent_sec)
-        network_res.add_subsection(http_sec)
+        if http_sec.body or http_sec.subsections:
+            network_res.add_subsection(http_sec)
     else:
         _process_non_http_traffic_over_http(network_res, unique_netflows)
 
@@ -627,12 +640,13 @@ def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]]) -> ResultTableSection:
 
 
 def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[str, Any]],
-                 routing: str) -> Dict[str, Dict[str, Any]]:
+                 routing: str, dns_servers: List[str]) -> Dict[str, Dict[str, Any]]:
     """
     This method creates a map between domain calls and IPs returned
     :param dns_calls: DNS details that were captured by Cuckoo
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param routing: The method of routing used in the Cuckoo environment
+    :param dns_servers: A list of DNS servers
     :return: the mapping of resolved IPs and their corresponding domains
     """
     resolved_ips: Dict[str, Dict[str, Any]] = {}
@@ -664,6 +678,9 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
                 }
             elif dns_type == "PTR" and "ip6.arpa" in request:
                 # Drop it
+                continue
+            # Some Windows nonsense
+            elif answer in dns_servers:
                 continue
             # An 'A' record provides the IP address associated with a domain name.
             else:
@@ -759,12 +776,13 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
 
 
 def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
-                        process_map: Dict[int, Dict[str, Any]],
+                        process_map: Dict[int, Dict[str, Any]], dns_servers: List[str],
                         safelist: Dict[str, Dict[str, List[str]]], so: SandboxOntology) -> None:
     """
     This method processes HTTP(S) calls and puts them into a nice table
     :param http_level_flows: A list of flows that represent HTTP calls
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :param dns_servers: A list of DNS servers
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :param so: The sandbox ontology class object
     :return: None
@@ -820,14 +838,6 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                 nh = so.create_network_http()
                 nh_to_add = True
 
-            for process, process_details in process_map.items():
-                for network_call in process_details["network_calls"]:
-                    send = next((network_call[api_call] for api_call in HTTP_API_CALLS if api_call in network_call), {})
-                    if send != {} and (
-                            send.get("service", 0) == 3 or send.get("buffer", "") == request) or send.get(
-                            "url", "") == uri:
-                        nh.update_process(image=process_details['name'], pid=process)
-
             nh.update(
                 request_uri=uri,
                 response_status_code=http_call.get("status"),
@@ -839,9 +849,22 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
             nh.update_connection_details(
                 source_ip=http_call.get("src"),
                 source_port=http_call.get("sport"),
-                destination_ip=http_call["dst"] if http_call.get("dst") else so.get_destination_ip_by_domain(host),
-                destination_port=port,
-                direction="outbound", transport_layer_protocol="tcp")
+                destination_ip=http_call["dst"]
+                if http_call.get("dst") and http_call["dst"] not in dns_servers else so.get_destination_ip_by_domain(
+                    host), destination_port=port, direction="outbound", transport_layer_protocol="tcp")
+
+            match = False
+            for process, process_details in process_map.items():
+                for network_call in process_details["network_calls"]:
+                    send = next((network_call[api_call] for api_call in HTTP_API_CALLS if api_call in network_call), {})
+                    if send != {} and (
+                            send.get("service", 0) == 3 or send.get("buffer", "") == request) or send.get(
+                            "url", "") == uri:
+                        nh.update_process(image=process_details['name'], pid=process)
+                        match = True
+                        break
+                if match:
+                    break
 
             if nh_to_add:
                 so.add_network_http(nh)
@@ -855,6 +878,9 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                     nh.connection_details.transport_layer_protocol,
                 )
                 if network_connection_to_point_to:
+                    if match:
+                        # Do not allow unvalidated process to linger after unlinking
+                        nh.connection_details.process = None
                     nh.set_network_connection(network_connection_to_point_to)
 
 
@@ -879,11 +905,10 @@ def _handle_http_headers(header_string: str) -> Dict[str, str]:
 
 
 def process_all_events(
-        parent_result_section: ResultSection, file_ext: str, so: SandboxOntology) -> None:
+        parent_result_section: ResultSection, so: SandboxOntology) -> None:
     """
     This method converts all events to a table that is sorted by timestamp
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
-    :param file_ext: The file extension of the file to be submitted
     :param so: The sandbox ontology class object
     :return: None
     """
@@ -913,7 +938,7 @@ def process_all_events(
             if event.start_time in [float("-inf"), float("inf")]:
                 continue
             _ = add_tag(events_section, "dynamic.process.command_line", event.command_line)
-            _extract_iocs_from_text_blob(event.command_line, event_ioc_table, file_ext=file_ext)
+            _extract_iocs_from_text_blob(event.command_line, event_ioc_table)
             _ = add_tag(events_section, "dynamic.process.file_name", event.image)
             events_section.add_row(TableRow(time_observed=datetime.datetime.fromtimestamp(event.start_time).strftime(
                 '%Y-%m-%d %H:%M:%S.%f')[: -3],
@@ -1085,13 +1110,11 @@ def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: 
         parent_result_section.add_subsection(hollowshunter_res)
 
 
-def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_result_section: ResultSection,
-                              file_ext: str) -> None:
+def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_result_section: ResultSection) -> None:
     """
     This method checks for any decrypted buffers found in the process map, and adds them to the Assemblyline report
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param parent_result_section: The overarching result section detailing what image this task is being sent to
-    :param file_ext: The file extension of the file to be submitted
     :return:
     """
     buffer_res = ResultTableSection("Decrypted Buffers")
@@ -1110,7 +1133,7 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
                 buffer = call["OutputDebugStringA"]["string"]
             if not buffer:
                 continue
-            _extract_iocs_from_text_blob(buffer, buffer_ioc_table, file_ext=file_ext)
+            _extract_iocs_from_text_blob(buffer, buffer_ioc_table)
             if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
                 buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
     if len(buffer_body) > 0:
@@ -1164,9 +1187,10 @@ def get_process_map(processes: List[Dict[str, Any]],
         "CryptDecrypt": ["buffer"],  # Used for certain malware files that use configuration files
         "OutputDebugStringA": ["string"],  # Used for certain malware files that use configuration files
         "URLDownloadToFileW": ["url"],
+        "InternetCrackUrlW": ["url"],
     }
     for process in processes:
-        if is_safelisted(process["process_name"], ["dynamic.process.file_name"], safelist):
+        if is_safelisted(process["process_path"], ["dynamic.process.file_name"], safelist):
             continue
         network_calls = []
         decrypted_buffers = []
@@ -1202,7 +1226,7 @@ def get_process_map(processes: List[Dict[str, Any]],
                     decrypted_buffers.append({api: args_of_interest})
         pid = process["pid"]
         process_map[pid] = {
-            "name": process["process_name"],
+            "name": process["process_path"],
             "network_calls": network_calls,
             "decrypted_buffers": decrypted_buffers
         }
@@ -1274,7 +1298,7 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
                     if url_pieces.path in SKIPPED_PATHS or not re.match(FULL_URI, http_string[1]):
                         fp_count += 1
                 elif name in ["dead_host"]:
-                    ip, port = ioc.split(":")
+                    ip, _ = ioc.split(":")
                     if is_ip(ip) and ip_address(ip) in inetsim_network:
                         fp_count += 1
                 elif name != "persistence_autorun" and name not in SILENT_IOCS and \
@@ -1457,7 +1481,7 @@ def _tag_and_describe_generic_signature(
 def _tag_and_describe_ioc_signature(
         signature_name: str, mark: Dict[str, Any],
         sig_res: ResultTextSection, inetsim_network: IPv4Network, process_map: Dict[int, Dict[str, Any]],
-        file_ext: str, safelist: Dict[str, Dict[str, List[str]]],
+        safelist: Dict[str, Dict[str, List[str]]],
         so: SandboxOntology,
         so_sig: SandboxOntology.Signature) -> None:
     """
@@ -1467,7 +1491,6 @@ def _tag_and_describe_ioc_signature(
     :param sig_res: A ResultTextSection containing details about the signature
     :param inetsim_network: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
-    :param file_ext: The file extension of the file to be submitted
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :param so: The sandbox ontology object instance
     :param so_sig: The signature for the Sandbox Ontology
@@ -1498,8 +1521,7 @@ def _tag_and_describe_ioc_signature(
             # If process ID in ioc, replace with process name
             for key in process_map:
                 if str(key) in ioc:
-                    ioc = ioc.replace(str(key), process_map[key]["name"])
-                    break
+                    ioc = ioc.replace(str(key), f"{process_map[key]['name']} ({key})")
         sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
 
     if mark["category"] in ["file", "dll"] and signature_name != "ransomware_mass_file_delete":
@@ -1512,11 +1534,14 @@ def _tag_and_describe_ioc_signature(
             if process:
                 so_sig.add_process_subject(**process.as_primitives())
             sig_ioc_table = ResultTableSection("Command line IOCs")
-            _extract_iocs_from_text_blob(ioc, sig_ioc_table, so_sig, file_ext)
+            _extract_iocs_from_text_blob(ioc, sig_ioc_table, so_sig)
             if sig_ioc_table.body:
                 sig_res.add_subsection(sig_ioc_table)
     elif mark["category"] == "registry":
         so_sig.add_subject(registry=ioc)
+    elif mark["category"] == "request":
+        if add_tag(sig_res, "network.dynamic.uri", ioc):
+            so_sig.add_subject(uri=ioc)
 
 
 def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultTextSection,
@@ -1612,13 +1637,12 @@ def _remove_network_http_noise(sigs: List[Dict[str, Any]]) -> List[Dict[str, Any
 
 
 def _extract_iocs_from_text_blob(
-        blob: str, result_section: ResultTableSection, so_sig: SandboxOntology.Signature = None, file_ext: str = "") -> None:
+        blob: str, result_section: ResultTableSection, so_sig: SandboxOntology.Signature = None) -> None:
     """
     This method searches for domains, IPs and URIs used in blobs of text and tags them
     :param blob: The blob of text that we will be searching through
     :param result_section: The result section that that tags will be added to
     :param so_sig: The signature for the Sandbox Ontology
-    :param file_ext: The file extension of the file to be submitted
     :return: None
     """
     if not blob:
@@ -1629,39 +1653,44 @@ def _extract_iocs_from_text_blob(
     domains = set(re.findall(DOMAIN_REGEX, blob)) - ips
     # There is overlap here between regular expressions, so we want to isolate uris that are not domains
     uris = set(re.findall(URL_REGEX, blob)) - domains - ips
-
     for ip in ips:
         if add_tag(result_section, "network.dynamic.ip", ip):
-            result_section.add_row(TableRow(ioc_type="ip", ioc=ip))
+            if not result_section.section_body.body:
+                result_section.add_row(TableRow(ioc_type="ip", ioc=ip))
+            elif json.dumps({"ioc_type": "ip", "ioc": ip}) not in result_section.section_body.body:
+                result_section.add_row(TableRow(ioc_type="ip", ioc=ip))
             if so_sig:
                 so_sig.add_subject(ip=ip)
     for domain in domains:
         # File names match the domain and URI regexes, so we need to avoid tagging them
         # Note that get_tld only takes URLs so we will prepend http:// to the domain to work around this
-        tld = get_tld(f"http://{domain}", fail_silently=True)
-        if tld is None or f".{tld}" == file_ext:
+        tld = next((tld.lower() for tld in TLDS_ALPHA_BY_DOMAIN if domain.lower().endswith(f".{tld}".lower())), None)
+        if tld is None or tld in SUPPORTED_EXTENSIONS:
             continue
         if add_tag(result_section, "network.dynamic.domain", domain):
-            result_section.add_row(TableRow(ioc_type="domain", ioc=domain))
+            if not result_section.section_body.body:
+                result_section.add_row(TableRow(ioc_type="domain", ioc=domain))
+            elif json.dumps({"ioc_type": "domain", "ioc": domain}) not in result_section.section_body.body:
+                result_section.add_row(TableRow(ioc_type="domain", ioc=domain))
             if so_sig:
                 so_sig.add_subject(domain=domain)
 
     for uri in uris:
-        if not any(protocol in uri for protocol in ["http", "ftp", "icmp", "ssh"]):
-            tld = get_tld(f"http://{uri}", fail_silently=True)
-        else:
-            tld = get_tld(uri, fail_silently=True)
-        if tld is None or f".{tld}" == file_ext:
-            continue
         if add_tag(result_section, "network.dynamic.uri", uri):
-            result_section.add_row(TableRow(ioc_type="uri", ioc=uri))
+            if not result_section.section_body.body:
+                result_section.add_row(TableRow(ioc_type="uri", ioc=uri))
+            elif json.dumps({"ioc_type": "uri", "ioc": uri}) not in result_section.section_body.body:
+                result_section.add_row(TableRow(ioc_type="uri", ioc=uri))
             if so_sig:
                 so_sig.add_subject(uri=uri)
         if "//" in uri:
             uri = uri.split("//")[1]
         for uri_path in re.findall(URI_PATH, uri):
             if add_tag(result_section, "network.dynamic.uri_path", uri_path):
-                result_section.add_row(TableRow(ioc_type="uri_path", ioc=uri_path))
+                if not result_section.section_body.body:
+                    result_section.add_row(TableRow(ioc_type="uri_path", ioc=uri_path))
+                elif json.dumps({"ioc_type": "uri_path", "ioc": uri_path}) not in result_section.section_body.body:
+                    result_section.add_row(TableRow(ioc_type="uri_path", ioc=uri_path))
 
 
 def is_safelisted(
@@ -1750,8 +1779,32 @@ def _validate_tag(result_section: ResultSection, tag: str, value: Any, inetsim_n
         reg_to_match = IP_REGEX
     if reg_to_match and not re.match(reg_to_match, value):
         return False
+
     if not is_safelisted(value, [tag], global_safelist):
-        result_section.add_tag(tag, safe_str(value))
+        # if "uri" is in the tag, let's try to extract its domain/ip and tag it.
+        if "uri" in tag:
+            # First try to get the domain
+            domain = re.search(DOMAIN_REGEX, value)
+            if domain:
+                domain = domain.group()
+                tld = next((tld.lower()
+                           for tld in TLDS_ALPHA_BY_DOMAIN if domain.lower().endswith(f".{tld}".lower())), None)
+                if tld is None or tld in SUPPORTED_EXTENSIONS:
+                    pass
+                elif not is_safelisted(value, ["network.dynamic.domain"], global_safelist):
+                    result_section.add_tag("network.dynamic.domain", safe_str(domain))
+            # Then try to get the IP
+            ip = re.search(IP_REGEX, value)
+            if ip:
+                ip = ip.group()
+                if not is_safelisted(value, ["network.dynamic.ip"], global_safelist):
+                    result_section.add_tag("network.dynamic.ip", safe_str(ip))
+
+            if value not in [domain, ip]:
+                result_section.add_tag(tag, safe_str(value))
+        else:
+            result_section.add_tag(tag, safe_str(value))
+
         return True
 
 
