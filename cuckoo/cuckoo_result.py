@@ -504,7 +504,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                             "InternetOpenUrlA", {})
                         if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or connect.get(
                             "hostname", "") == network_flow["dest_ip"]) and connect["port"] == network_flow[
-                                "dest_port"] or network_flow.get("domain", "") in connect.get("url", ""):
+                                "dest_port"] or (network_flow["domain"] and network_flow["domain"] in connect.get("url", "")):
                             network_flow["image"] = process_details["name"] + " (" + str(process) + ")"
                             network_flow["pid"] = process
                             break
