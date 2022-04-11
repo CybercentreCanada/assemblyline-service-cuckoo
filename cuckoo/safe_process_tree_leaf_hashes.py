@@ -247,5 +247,27 @@ SAFE_PROCESS_TREE_LEAF_HASHES = {
                 "children": []
             }
         ]
+    },
+    "78f84277f3383d654d64679ea93be5614d09b588006f0e9ca7395bb797a6f942": {
+        "image": "?sys32\\svchost.exe",
+        "command_line": None,
+        "children": [
+            {
+                "image": '?c\\python27\\pythonw.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    "da60beb532bc62cd2208910c086bcbabc4488d45e2dcc4e8414b3969e7902fc7": {
+        "image": "?sys32\\svchost.exe",
+        "command_line": None,
+        "children": [
+            {
+                "image": "?sys32\\svchost.exe",
+                "command_line": None,
+                "children": []
+            }
+        ]
     }
 }
