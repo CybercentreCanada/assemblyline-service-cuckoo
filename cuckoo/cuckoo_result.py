@@ -502,9 +502,10 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                             "InternetConnectA", {}) or network_call.get(
                             "WSAConnect", {}) or network_call.get(
                             "InternetOpenUrlA", {})
-                        if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or connect.get(
-                            "hostname", "") == network_flow["dest_ip"]) and connect["port"] == network_flow[
-                                "dest_port"] or (network_flow["domain"] and network_flow["domain"] in connect.get("url", "")):
+                        if connect != {} and (
+                                connect.get("ip_address", "") == network_flow["dest_ip"] or connect.get("hostname", "") ==
+                                network_flow["dest_ip"]) and connect["port"] == network_flow["dest_port"] or (
+                                network_flow["domain"] and network_flow["domain"] in connect.get("url", "")):
                             network_flow["image"] = process_details["name"] + " (" + str(process) + ")"
                             network_flow["pid"] = process
                             break
@@ -827,7 +828,7 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                     host, ["network.dynamic.ip", "network.dynamic.domain"],
                     safelist) or is_safelisted(
                     uri, ["network.dynamic.uri"],
-                    safelist) or "/wpad.dat" in uri:
+                    safelist) or "/wpad.dat" in uri or not re.match(FULL_URI, uri):
                 continue
 
             request_body_path = http_call.get("req", {}).get("path")
@@ -1396,7 +1397,7 @@ def _write_injected_exe_to_file(task_id: int, marks: List[Dict[str, Any]]) -> No
     for index, mark in enumerate(marks):
         injected_exe_file_path = os.path.join("/tmp", f"{task_id}_injected_memory_{index}.exe")
         with open(injected_exe_file_path, "wb") as f:
-            buffer = mark["call"].get("arguments", {}).get("buffer")
+            buffer = mark.get("call", {}).get("arguments", {}).get("buffer")
             if buffer:
                 f.write(buffer.encode())
         f.close()
