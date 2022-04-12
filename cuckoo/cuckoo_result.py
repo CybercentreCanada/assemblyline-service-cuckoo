@@ -1203,7 +1203,8 @@ def get_process_map(processes: List[Dict[str, Any]],
         "InternetOpenUrlA": ["url"],
     }
     for process in processes:
-        if is_safelisted(process["process_path"], ["dynamic.process.file_name"], safelist):
+        process_name = process["process_path"] if process.get("process_path") else process["process_name"]
+        if is_safelisted(process_name, ["dynamic.process.file_name"], safelist):
             continue
         network_calls = []
         decrypted_buffers = []
@@ -1239,7 +1240,7 @@ def get_process_map(processes: List[Dict[str, Any]],
                     decrypted_buffers.append({api: args_of_interest})
         pid = process["pid"]
         process_map[pid] = {
-            "name": process["process_path"],
+            "name": process_name,
             "network_calls": network_calls,
             "decrypted_buffers": decrypted_buffers
         }
@@ -1611,8 +1612,7 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         if download_path:
             if add_tag(sig_res, "dynamic.process.file_name", download_path):
                 so_sig.add_subject(file=download_path)
-        if url:
-            _ = add_tag(sig_res, "network.dynamic.uri", url)
+        if url and add_tag(sig_res, "network.dynamic.uri", url):
             so_sig.add_subject(uri=url)
         if download_path and url:
             sig_res.add_line(f'\tThe file at {safe_str(url)} was attempted to be downloaded to {download_path}')
