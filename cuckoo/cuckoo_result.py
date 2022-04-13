@@ -66,7 +66,6 @@ GUEST_LOSING_CONNNECTIVITY = 'Virtual Machine /status failed. This can indicate 
 GUEST_CANNOT_REACH_HOST = "it appears that this Virtual Machine hasn't been configured properly as the Cuckoo Host wasn't able to connect to the Guest."
 GUEST_LOST_CONNECTIVITY = 5
 SIGNATURES_SECTION_TITLE = "Signatures"
-ENCRYPTED_BUFFER_LIMIT = 25
 
 
 # noinspection PyBroadException
@@ -502,9 +501,10 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                             "InternetConnectA", {}) or network_call.get(
                             "WSAConnect", {}) or network_call.get(
                             "InternetOpenUrlA", {})
-                        if connect != {} and (connect.get("ip_address", "") == network_flow["dest_ip"] or connect.get(
-                            "hostname", "") == network_flow["dest_ip"]) and connect["port"] == network_flow[
-                                "dest_port"] or (network_flow["domain"] and network_flow["domain"] in connect.get("url", "")):
+                        if connect != {} and (
+                                connect.get("ip_address", "") == network_flow["dest_ip"] or connect.get("hostname", "") ==
+                                network_flow["dest_ip"]) and connect["port"] == network_flow["dest_port"] or (
+                                network_flow["domain"] and network_flow["domain"] in connect.get("url", "")):
                             network_flow["image"] = process_details["name"] + " (" + str(process) + ")"
                             network_flow["pid"] = process
                             break
@@ -621,7 +621,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     else:
         _process_non_http_traffic_over_http(network_res, unique_netflows)
 
-    _write_encrypted_buffers_to_file(task_id, process_map, network_res)
+    _extract_iocs_from_encrypted_buffers(process_map, network_res)
 
     if len(network_res.subsections) > 0:
         parent_result_section.add_subsection(network_res)
@@ -1151,6 +1151,7 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
         [buffer_res.add_row(TableRow(**buffer)) for buffer in buffer_body]
         if buffer_ioc_table.body:
             buffer_res.add_subsection(buffer_ioc_table)
+            buffer_res.set_heuristic(1006)
         parent_result_section.add_subsection(buffer_res)
 
 
@@ -1402,44 +1403,25 @@ def _write_injected_exe_to_file(task_id: int, marks: List[Dict[str, Any]]) -> No
         f.close()
 
 
-def _write_encrypted_buffers_to_file(task_id: int, process_map: Dict[int, Dict[str, Any]],
-                                     network_res: ResultSection) -> None:
+def _extract_iocs_from_encrypted_buffers(process_map: Dict[int, Dict[str, Any]],
+                                         network_res: ResultSection) -> None:
     """
-    Write temporary files containing encrypted buffers observed during network analysis
-    :param task_id: The ID of the Cuckoo Task
+    Extract IOCs from encrypted buffers observed during network analysis
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param network_res: The result section containing details about the network behaviour
     :return: None
     """
-    buffer_count = 0
-    buffers = set()
-    encrypted_buffer_result_section = ResultTextSection("Placeholder")
     encrypted_buffer_ioc_table = ResultTableSection(
-        "IOCs found in encrypted buffers")
-    for pid, process_details in process_map.items():
+        "IOCs found in encrypted buffers used in network calls")
+    for _, process_details in process_map.items():
         for network_call in process_details["network_calls"]:
             for api_call in BUFFER_API_CALLS:
                 if api_call in network_call:
-                    if buffer_count >= ENCRYPTED_BUFFER_LIMIT:
-                        continue
                     buffer = network_call[api_call]["buffer"]
                     _extract_iocs_from_text_blob(buffer, encrypted_buffer_ioc_table)
-                    encrypted_buffer_file_path = os.path.join(
-                        "/tmp", f"{task_id}_{pid}_encrypted_buffer_{buffer_count}.txt")
-                    buffers.add(encrypted_buffer_file_path)
-                    with open(encrypted_buffer_file_path, "wb") as f:
-                        f.write(buffer.encode())
-                    f.close()
-                    buffer_count += 1
-    if buffer_count > 0:
-        if encrypted_buffer_ioc_table.body:
-            encrypted_buffer_result_section.add_subsection(encrypted_buffer_ioc_table)
-        encrypted_buffer_result_section.title_text = f"{buffer_count} Encrypted Buffer(s) Found"
-        encrypted_buffer_result_section.set_heuristic(1006)
-        encrypted_buffer_result_section.add_line("The following buffers were found in network calls and "
-                                                 "extracted as files for further analysis:")
-        encrypted_buffer_result_section.add_lines(list(buffers))
-        network_res.add_subsection(encrypted_buffer_result_section)
+    if encrypted_buffer_ioc_table.body:
+        encrypted_buffer_ioc_table.set_heuristic(1006)
+        network_res.add_subsection(encrypted_buffer_ioc_table)
 
 
 def _tag_and_describe_generic_signature(

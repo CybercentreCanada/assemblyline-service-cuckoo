@@ -1100,21 +1100,19 @@ class TestCuckooResult:
         assert _handle_http_headers(header_string) == expected_header_dict
 
     @staticmethod
-    def test_write_encrypted_buffers_to_file():
-        from os import remove
-        from assemblyline_v4_service.common.result import ResultSection
-        from cuckoo.cuckoo_result import _write_encrypted_buffers_to_file
+    def test_extract_iocs_from_encrypted_buffers():
+        from assemblyline_v4_service.common.result import ResultSection, ResultTableSection, TableRow
+        from cuckoo.cuckoo_result import _extract_iocs_from_encrypted_buffers
         test_parent_section = ResultSection("blah")
-        correct_result_section = ResultSection("2 Encrypted Buffer(s) Found")
+        correct_result_section = ResultTableSection("IOCs found in encrypted buffers used in network calls")
         correct_result_section.set_heuristic(1006)
-        correct_result_section.add_line(
-            "The following buffers were found in network calls and extracted as files for further analysis:")
-        correct_result_section.add_lines(list({"/tmp/1_1_encrypted_buffer_0.txt", "/tmp/1_2_encrypted_buffer_1.txt"}))
-        _write_encrypted_buffers_to_file(1, {1: {"network_calls": [{"send": {"buffer": "blah"}}]}, 2: {
-                                         "network_calls": [{"send": {"buffer": "blah"}}]}}, test_parent_section)
+        correct_result_section.add_row(TableRow({"ioc_type": "domain", "ioc": "blah.com"}))
+        correct_result_section.add_row(TableRow({"ioc_type": "domain", "ioc": "blah.ca"}))
+        correct_result_section.add_tag("network.dynamic.domain", "blah.com")
+        correct_result_section.add_tag("network.dynamic.domain", "blah.ca")
+        _extract_iocs_from_encrypted_buffers({1: {"network_calls": [{"send": {"buffer": "blah.com"}}]}, 2: {
+                                         "network_calls": [{"send": {"buffer": "blah.ca"}}]}}, test_parent_section)
         assert check_section_equality(test_parent_section.subsections[0], correct_result_section)
-        remove("/tmp/1_1_encrypted_buffer_0.txt")
-        remove("/tmp/1_2_encrypted_buffer_1.txt")
 
     @staticmethod
     def test_process_non_http_traffic_over_http():
@@ -1508,6 +1506,7 @@ class TestCuckooResult:
                 buffer_ioc_table.add_row(TableRow(**item))
             if correct_body:
                 correct_result_section.add_subsection(buffer_ioc_table)
+                correct_result_section.set_heuristic(1006)
             for tag, values in correct_tags.items():
                 for value in values:
                     buffer_ioc_table.add_tag(tag, value)
