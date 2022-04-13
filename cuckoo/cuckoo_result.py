@@ -1531,9 +1531,13 @@ def _tag_and_describe_ioc_signature(
             process = so.get_process_by_command_line(ioc)
             if process:
                 so_sig.add_process_subject(**process.as_primitives())
-            sig_ioc_table = ResultTableSection("Command line IOCs")
+            command_line_iocs = "Command line IOCs"
+            if any(subsection.title_text == command_line_iocs for subsection in sig_res.subsections):
+                sig_ioc_table = next((subsection for subsection in sig_res.subsections if subsection.title_text == command_line_iocs))
+            else:
+                sig_ioc_table = ResultTableSection(command_line_iocs)
             _extract_iocs_from_text_blob(ioc, sig_ioc_table, so_sig)
-            if sig_ioc_table.body:
+            if sig_ioc_table not in sig_res.subsections and sig_ioc_table.body:
                 sig_res.add_subsection(sig_ioc_table)
     elif mark["category"] == "registry":
         so_sig.add_subject(registry=ioc)
