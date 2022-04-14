@@ -552,6 +552,8 @@ class TestCuckooResult:
              "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
             ("persistence_autorun", [{"ioc": "super http://evil.com",
              "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+            ("network_icmp", [{"ioc": "192.0.2.123",
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
             ("creates_shortcut", [{"ioc": "super http://evil.com",
              "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
             ("ransomware_mass_file_delete", [{"ioc": "super http://evil.com",
@@ -761,6 +763,10 @@ class TestCuckooResult:
              {}, {}, '\tIOC: blah is a super bad file.', {}),
             ("blah", {"ioc": "blah", "category": "registry"},
              {}, {}, "\tIOC: blah", {"registry": "blah"}),
+            ("network_icmp", {"ioc": "1.1.1.1", "category": "ip"},
+             {}, {"network.dynamic.ip": ["1.1.1.1"]}, "\tPinged 1.1.1.1.", {"ip": "1.1.1.1"}),
+            ("network_icmp", {"ioc": "192.0.2.123", "category": "ip"},
+             {}, {"network.dynamic.domain": ["blah.com"]}, "\tPinged blah.com.", {"domain": "blah.com"}),
         ]
     )
     def test_tag_and_describe_ioc_signature(
@@ -770,6 +776,8 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _tag_and_describe_ioc_signature
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         so = SandboxOntology()
+        nd = so.create_network_dns(domain="blah.com", resolved_ips=["192.0.2.123"])
+        so.add_network_dns(nd)
         so_sig = SandboxOntology.Signature()
         so_sig_ioc = SandboxOntology.Signature.Subject().as_primitives()
         default_sig = so_sig.as_primitives()
