@@ -132,6 +132,11 @@ def generate_al_result(
         _update_process_map(process_map, so.get_processes())
 
     is_process_martian = False
+
+    if network:
+        process_network(network, al_result, validated_random_ip_range, routing, process_map, info["id"],
+                        safelist, so)
+
     if sigs:
         target = api_report.get("target", {})
         target_file = target.get("file", {})
@@ -139,10 +144,6 @@ def generate_al_result(
         is_process_martian = process_signatures(
             sigs, al_result, validated_random_ip_range, target_filename, process_map, info["id"],
             safelist, so)
-
-    if network:
-        process_network(network, al_result, validated_random_ip_range, routing, process_map, info["id"],
-                        safelist, so)
 
     build_process_tree(al_result, is_process_martian, so)
 
@@ -1316,7 +1317,7 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
                     ip, _ = ioc.split(":")
                     if is_ip(ip) and ip_address(ip) in inetsim_network:
                         fp_count += 1
-                elif name != "persistence_autorun" and name not in SILENT_IOCS and \
+                elif name not in ["persistence_autorun", "network_icmp"] and name not in SILENT_IOCS and \
                         (is_ip(ioc) and ip_address(ioc) in inetsim_network):
                     fp_count += 1
 
@@ -1527,6 +1528,15 @@ def _tag_and_describe_ioc_signature(
         _ = add_tag(sig_res, "dynamic.autorun_location", ioc)
     elif signature_name == "process_interest":
         sig_res.add_line(f'\tIOC: {safe_str(ioc)} is a {mark["category"].replace("process: ", "")}.')
+    elif signature_name == "network_icmp":
+        if add_tag(sig_res, "network.dynamic.ip", ioc, inetsim_network):
+            so_sig.add_subject(ip=ioc)
+            sig_res.add_line(f'\tPinged {safe_str(ioc)}.')
+        else:
+            domain = so.get_domain_by_destination_ip(ioc)
+            if add_tag(sig_res, "network.dynamic.domain", domain):
+                so_sig.add_subject(domain=domain)
+                sig_res.add_line(f'\tPinged {safe_str(domain)}.')
     elif signature_name in SILENT_IOCS:
         # Nothing to see here, just avoiding printing out the IOC line in the result body
         pass
