@@ -456,8 +456,11 @@ class TestCuckooMain:
         cuckoo_class_instance.start()
         assert cuckoo_class_instance.ssdeep_match_pct == int(
             cuckoo_class_instance.config.get('dedup_similar_percent', 40))
-        assert cuckoo_class_instance.timeout == 120
+        assert cuckoo_class_instance.connection_timeout_in_seconds == cuckoo_class_instance.config.get('connection_timeout_in_seconds', 30)
+        assert cuckoo_class_instance.connection_attempts == cuckoo_class_instance.config.get('connection_attempts', 3)
+        assert cuckoo_class_instance.timeout == cuckoo_class_instance.config.get('rest_timeout_in_seconds', 150)
         assert cuckoo_class_instance.max_report_size == cuckoo_class_instance.config.get('max_report_size', 275000000)
+        assert cuckoo_class_instance.allowed_images == cuckoo_class_instance.config.get('allowed_images', [])
 
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
@@ -465,7 +468,7 @@ class TestCuckooMain:
         from assemblyline_v4_service.common.task import Task
         from assemblyline.odm.messages.task import Task as ServiceTask
         from assemblyline_v4_service.common.request import ServiceRequest
-        from cuckoo.cuckoo_main import Cuckoo
+        from cuckoo.cuckoo_main import Cuckoo, CuckooHostsUnavailable
 
         mocker.patch('cuckoo.cuckoo_main.generate_random_words', return_value="blah")
         mocker.patch.object(Cuckoo, "_decode_mime_encoded_file_name", return_value=None)
@@ -484,6 +487,9 @@ class TestCuckooMain:
 
         # Coverage test
         mocker.patch.object(Cuckoo, "_assign_file_extension", return_value=None)
+        with pytest.raises(CuckooHostsUnavailable):
+            cuckoo_class_instance.execute(service_request)
+        cuckoo_class_instance.hosts = [{"ip": "1.1.1.1"}]
         cuckoo_class_instance.execute(service_request)
         assert True
 
@@ -1049,20 +1055,24 @@ class TestCuckooMain:
         from cuckoo.cuckoo_main import CuckooHostsUnavailable, CUCKOO_API_QUERY_MACHINES
 
         # Prerequisites before we can mock query_machines response
-        cuckoo_class_instance.hosts = [{"ip": "1.1.1.1", "port": 8000, "auth_header": {"blah": "blah"}}]
-        query_machines_url = f"http://{cuckoo_class_instance.hosts[0]['ip']}:{cuckoo_class_instance.hosts[0]['port']}/{CUCKOO_API_QUERY_MACHINES}"
+        query_machines_url = f"http://1.1.1.1:8000/{CUCKOO_API_QUERY_MACHINES}"
         cuckoo_class_instance.session = Session()
+        cuckoo_class_instance.connection_timeout_in_seconds = 30
+        cuckoo_class_instance.connection_attempts = 3
 
         correct_rest_response = {"machines": ["blah"]}
         with requests_mock.Mocker() as m:
             if status_code is None:
+                cuckoo_class_instance.hosts = [{"ip": "1.1.1.1", "port": 8000, "auth_header": {"blah": "blah"}}]
                 m.get(query_machines_url, exc=exceptions.Timeout)
                 with pytest.raises(CuckooHostsUnavailable):
                     cuckoo_class_instance.query_machines()
+                cuckoo_class_instance.hosts = [{"ip": "1.1.1.1", "port": 8000, "auth_header": {"blah": "blah"}}]
                 m.get(query_machines_url, exc=ConnectionError)
-                with pytest.raises(Exception):
+                with pytest.raises(CuckooHostsUnavailable):
                     cuckoo_class_instance.query_machines()
             else:
+                cuckoo_class_instance.hosts = [{"ip": "1.1.1.1", "port": 8000, "auth_header": {"blah": "blah"}}]
                 m.get(query_machines_url, json=correct_rest_response, status_code=status_code)
                 # IF the status code is 200, then we expect a dictionary
                 if status_code == 200:
