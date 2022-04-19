@@ -1120,9 +1120,28 @@ def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: 
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :return: None
     """
-    # TODO: obviously a huge work in progress
     hollowshunter_body: List[Any] = []
     hollowshunter_res = ResultTableSection("HollowsHunter Analysis")
+    # We care about implanted PEs
+    # Process (PID)       Indicator       Description
+    for pid, details in hollowshunter.items():
+        implanted_pes = details["scanned"].get("modified", {}).get("implanted_pe")
+        if implanted_pes > 0:
+            implanted_pe_count = 0
+            modules = []
+            for scan in details["scans"]:
+                if "workingset_scan" in scan:
+                    scan_details = scan["workingset_scan"]
+                    # Confirm that Implanted PEs exist
+                    if scan_details["has_pe"]:
+                        modules.append(scan_details["module"])
+                        implanted_pe_count += 1
+            if implanted_pes == implanted_pe_count:
+                hollowshunter_body.append({
+                    "Process": f"{process_map.get(int(pid), {}).get('name')} ({pid})",
+                    "Indicator": "Implanted PE",
+                    "Description": f"Modules found: {modules}"
+                })
     if len(hollowshunter_body) > 0:
         [hollowshunter_res.add_row(TableRow(**hh)) for hh in hollowshunter_body]
         parent_result_section.add_subsection(hollowshunter_res)
