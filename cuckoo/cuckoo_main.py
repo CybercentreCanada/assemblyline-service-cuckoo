@@ -35,7 +35,6 @@ from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 
 HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
-ENCRYPTED_BUFFER_REGEX = "^\/tmp\/%s_[0-9]{1,}_encrypted_buffer_[0-9]{1,2}\.txt$"
 INJECTED_EXE_REGEX = "^\/tmp\/%s_injected_memory_[0-9]{1,2}\.exe$"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
@@ -1301,7 +1300,6 @@ class Cuckoo(ServiceBase):
         # Submit dropped files and pcap if available:
         self._extract_console_output(cuckoo_task.id)
         self._extract_injected_exes(cuckoo_task.id)
-        self._extract_encrypted_buffers(cuckoo_task.id)
         self.check_dropped(cuckoo_task)
         self.check_powershell(cuckoo_task.id, parent_section)
         # self.check_pcap(cuckoo_task)
@@ -1501,30 +1499,6 @@ class Cuckoo(ServiceBase):
             }
             self.artifact_list.append(artifact)
             self.log.debug(f"Adding extracted file for task {task_id}: {injected_exe}")
-
-    def _extract_encrypted_buffers(self, task_id: int) -> None:
-        """
-        This method adds files containing encrypted buffers, if any exist
-        :param task_id: An integer representing the Cuckoo Task ID
-        :return: None
-        """
-        # Check if there are any files consisting of encrypted buffers
-        temp_dir = "/tmp"
-        encrypted_buffer_files: List[str] = []
-        for f in os.listdir(temp_dir):
-            file_path = os.path.join(temp_dir, f)
-            if os.path.isfile(file_path) and re.match(ENCRYPTED_BUFFER_REGEX % task_id, file_path):
-                encrypted_buffer_files.append(file_path)
-
-        for encrypted_buffer_file in encrypted_buffer_files:
-            artifact = {
-                "name": encrypted_buffer_file,
-                "path": encrypted_buffer_file,
-                "description": "Encrypted Buffer Observed in Network Traffic",
-                "to_be_extracted": True
-            }
-            self.artifact_list.append(artifact)
-            self.log.debug(f"Adding extracted file for task {task_id}: {encrypted_buffer_file}")
 
     def _extract_artifacts(self, tar_obj: tarfile.TarFile, task_id: int, parent_section: ResultSection,
                            so: SandboxOntology) -> None:
@@ -1919,7 +1893,7 @@ class Cuckoo(ServiceBase):
         temp_dir = "/tmp"
         for file in os.listdir(temp_dir):
             file_path = os.path.join(temp_dir, file)
-            if any(leftover_file_name in file_path for leftover_file_name in ["_console_output", "_encrypted_buffer_"]):
+            if any(leftover_file_name in file_path for leftover_file_name in ["_console_output", "_injected_memory_"]):
                 os.remove(file_path)
 
     def _get_machine_by_name(self, machine_name) -> Optional[Dict[str, Any]]:

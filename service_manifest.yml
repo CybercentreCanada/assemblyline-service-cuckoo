@@ -538,10 +538,10 @@ heuristics:
     description: Cuckoo detected non-HTTP traffic being made over HTTP ports (80, 443)
 
   - heur_id: 1006
-    name: Encrypted Buffer
+    name: IOC found in Buffer
     score: 500
     filetype: '*'
-    description: Cuckoo detected an encrypted buffer being transferred through a network call
+    description: Cuckoo detected an IOC found in a buffer, either encrypted or decrypted
 
   - heur_id: 1007
     name: Suspicious User Agent

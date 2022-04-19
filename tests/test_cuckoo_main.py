@@ -1568,7 +1568,6 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, 'query_report', return_value=tar_report)
         mocker.patch.object(Cuckoo, '_extract_console_output', return_value=None)
         mocker.patch.object(Cuckoo, '_extract_injected_exes', return_value=None)
-        mocker.patch.object(Cuckoo, '_extract_encrypted_buffers', return_value=None)
         mocker.patch.object(Cuckoo, 'check_dropped', return_value=None)
         mocker.patch.object(Cuckoo, 'check_powershell', return_value=None)
         mocker.patch.object(Cuckoo, '_unpack_tar', return_value=None)
@@ -1758,19 +1757,6 @@ class TestCuckooMain:
         assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/1_injected_memory_0.exe"
         assert cuckoo_class_instance.artifact_list[0]["name"] == "/tmp/1_injected_memory_0.exe"
         assert cuckoo_class_instance.artifact_list[0]["description"] == "Injected executable was found written to memory"
-        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
-
-    @staticmethod
-    def test_extract_encrypted_buffers(cuckoo_class_instance, dummy_request_class, mocker):
-        mocker.patch('os.listdir', return_value=["1_1_encrypted_buffer_0.txt"])
-        mocker.patch('os.path.isfile', return_value=True)
-        cuckoo_class_instance.request = dummy_request_class()
-        cuckoo_class_instance.artifact_list = []
-        task_id = 1
-        cuckoo_class_instance._extract_encrypted_buffers(task_id)
-        assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/1_1_encrypted_buffer_0.txt"
-        assert cuckoo_class_instance.artifact_list[0]["name"] == "/tmp/1_1_encrypted_buffer_0.txt"
-        assert cuckoo_class_instance.artifact_list[0]["description"] == "Encrypted Buffer Observed in Network Traffic"
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
     @staticmethod
@@ -2139,7 +2125,7 @@ class TestCuckooMain:
         number_of_files_in_tmp_pre_call = len(os.listdir(temp_dir))
         with open("/tmp/blah_console_output.txt", "w") as f:
             f.write("blah")
-        with open("/tmp/blah_encrypted_buffer_blah.txt", "w") as f:
+        with open("/tmp/blah_injected_memory_blah.exe", "w") as f:
             f.write("blah")
         number_of_files_in_tmp_post_write = len(os.listdir(temp_dir))
         assert number_of_files_in_tmp_post_write == number_of_files_in_tmp_pre_call + 2
