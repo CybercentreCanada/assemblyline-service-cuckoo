@@ -1459,22 +1459,26 @@ class TestCuckooResult:
         convert_sysmon_network(sysmon, actual_network, safelist)
         assert actual_network == correct_network
 
-    # TODO: method is in the works
-    # @staticmethod
-    # def test_process_hollowshunter(dummy_result_class_instance):
-    #     from cuckoo.cuckoo_result import process_hollowshunter
-    #     from assemblyline_v4_service.common.result import ResultSection
-    #
-    #     hollowshunter = {"blah": "blah"}
-    #     process_map = {"blah": "blah"}
-    #
-    #     al_result = dummy_result_class_instance()
-    #     hollowshunter_body = []
-    #     correct_result_section = ResultSection(title_text="HollowsHunter Analysis", body_format=BODY_FORMAT.TABLE)
-    #     correct_result_section.set_body(json.dumps(hollowshunter_body))
-    #
-    #     process_hollowshunter(hollowshunter, al_result, process_map)
-    #     assert check_section_equality(al_result.sections[0], correct_result_section)
+    @staticmethod
+    def test_process_hollowshunter():
+        from cuckoo.cuckoo_result import process_hollowshunter
+        from assemblyline_v4_service.common.result import ResultSection, TableRow, ResultTableSection
+
+        hollowshunter = {}
+        process_map = {123: {"name": "blah"}}
+        al_result = ResultSection("blah")
+
+        process_hollowshunter(hollowshunter, al_result, process_map)
+        assert al_result.subsections == []
+
+        hollowshunter = {"123": {"scanned": {"modified": {"implanted_pe": 1}}, "scans": [{"workingset_scan": {"has_pe": 1, "module": "400000"}}]}}
+        hollowshunter_body = [{"Process": "blah (123)", "Indicator": "Implanted PE", "Description": "Modules found: ['400000']"}]
+        correct_result_section = ResultTableSection("HollowsHunter Analysis")
+        [correct_result_section.add_row(TableRow(**row)) for row in hollowshunter_body]
+
+        process_hollowshunter(hollowshunter, al_result, process_map)
+        assert check_section_equality(al_result.subsections[0], correct_result_section)
+
 
     @staticmethod
     @pytest.mark.parametrize("process_map, correct_buffer_body, correct_tags, correct_body",
