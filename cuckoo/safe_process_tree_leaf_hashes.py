@@ -269,5 +269,25 @@ SAFE_PROCESS_TREE_LEAF_HASHES = {
                 "children": []
             }
         ]
+    },
+    "6dea6b390c3611c05f7ce0a8d56b136431168161237ae254f4f0a3eeedb52fa9": {
+        "image": "?sys32\\userinit.exe",
+        "command_line": None,
+        "children": []
+    },
+    "fe1b33fe682a3ce734f5e66aface2e59bad7a91741a6166b793e1658a44cab7b": {
+        "image": "?win\\microsoft.net\\framework64\\v4.0.30319\\mscorsvw.exe",
+        "command_line": None,
+        "children": []
+    },
+    "eea8165b1ac8e04a4257e249753f1b8085e712521e3fc44718a49bb94851ff1b": {
+        "image": "?win\\microsoft.net\\framework\\v4.0.30319\\mscorsvw.exe",
+        "command_line": None,
+        "children": []
+    },
+    "5a5f1f8bf9b80413fff222a0a88c3c52c018f9539f0904590999d46c75df012b": {
+        "image": "?sys32\\wevtutil.exe",
+        "command_line": None,
+        "children": []
     }
 }
