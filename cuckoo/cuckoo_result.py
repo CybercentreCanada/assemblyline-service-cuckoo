@@ -44,6 +44,7 @@ SKIPPED_CATEGORY_IOCS = ["section", "Data received", "Data sent"]
 SKIPPED_FAMILIES = ["generic"]
 SKIPPED_PATHS = ["/"]
 SILENT_IOCS = ["ransomware_mass_file_delete", "injection_ntsetcontextthread", "injection_resumethread"]
+SILENT_PROCESS_NAMES = ["injection_write_memory_exe", "injection_write_memory", "injection_modifies_memory"]
 
 INETSIM = "INetSim"
 DNS_API_CALLS = ["getaddrinfo", "InternetConnectW", "InternetConnectA", "GetAddrInfoW", "gethostbyname"]
@@ -67,6 +68,7 @@ GUEST_CANNOT_REACH_HOST = "it appears that this Virtual Machine hasn't been conf
 GUEST_LOST_CONNECTIVITY = 5
 SIGNATURES_SECTION_TITLE = "Signatures"
 ENCRYPTED_BUFFER_LIMIT = 25
+SYSTEM_PROCESS_ID = 4
 
 
 # noinspection PyBroadException
@@ -370,8 +372,7 @@ def process_signatures(
 
         if sig_name == "console_output":
             _write_console_output_to_file(task_id, sig_marks)
-
-        if sig_name == "injection_write_memory_exe":
+        elif sig_name == "injection_write_memory_exe":
             _write_injected_exe_to_file(task_id, sig_marks)
 
         # Find any indicators of compromise from the signature marks
@@ -387,7 +388,9 @@ def process_signatures(
                 _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network,
                                                 process_map, safelist, so, so_sig)
             elif mark["type"] == "call" and process_name is not None:
-                if not sig_res.body:
+                if sig_name in SILENT_PROCESS_NAMES:
+                    pass
+                elif not sig_res.body:
                     sig_res.add_line(f'\tProcess Name: {safe_str(process_name)} ({pid})')
                 elif f'\tProcess Name: {safe_str(process_name)} ({pid})' not in sig_res.body:
                     sig_res.add_line(f'\tProcess Name: {safe_str(process_name)} ({pid})')
@@ -400,7 +403,9 @@ def process_signatures(
                     if injected_process_name:
                         if (injected_process_name, injected_process) == (process_name, pid):
                             continue
-                        if not sig_res.body:
+                        if sig_name in SILENT_PROCESS_NAMES:
+                            pass
+                        elif not sig_res.body:
                             sig_res.add_line(
                                 f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})')
                         elif f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})' not in sig_res.body:
@@ -1523,8 +1528,6 @@ def _tag_and_describe_ioc_signature(
             sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
             if add_tag(sig_res, "network.dynamic.uri", http_string[1]):
                 so_sig.add_subject(uri=http_string[1])
-    elif signature_name == "persistence_autorun":
-        _ = add_tag(sig_res, "dynamic.autorun_location", ioc)
     elif signature_name == "process_interest":
         sig_res.add_line(f'\tIOC: {safe_str(ioc)} is a {mark["category"].replace("process: ", "")}.')
     elif signature_name in SILENT_IOCS:
@@ -1534,11 +1537,13 @@ def _tag_and_describe_ioc_signature(
         if signature_name == "p2p_cnc":
             if add_tag(sig_res, "network.dynamic.ip", ioc, inetsim_network):
                 so_sig.add_subject(ip=ioc)
+        elif signature_name == "persistence_autorun":
+            _ = add_tag(sig_res, "dynamic.autorun_location", ioc)
         else:
             # If process ID in ioc, replace with process name
             for key in process_map:
-                if str(key) in ioc:
-                    ioc = ioc.replace(str(key), f"{process_map[key]['name']} ({key})")
+                if f" {key}" in ioc:
+                    ioc = ioc.replace(f" {key}", f" {process_map[key]['name']} ({key})")
         sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
 
     if mark["category"] in ["file", "dll"] and signature_name != "ransomware_mass_file_delete":
@@ -1908,7 +1913,7 @@ def _update_process_map(process_map: Dict[int, Dict[str, Any]], processes: List[
     :return: None
     """
     for process in processes:
-        if process.pid in process_map:
+        if process.pid in process_map or process.pid == SYSTEM_PROCESS_ID:
             continue
 
         process_map[process.pid] = {

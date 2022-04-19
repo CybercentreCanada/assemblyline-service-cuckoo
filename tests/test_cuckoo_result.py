@@ -745,12 +745,12 @@ class TestCuckooResult:
             ("network_http_post", {"ioc": "evil evil http://evil.org", "category": "blah"}, {}, {}, None, {}),
             ("network_http_post", {"ioc": "evil evil http://evil.org", "category": "blah"}, {}, {}, None, {}),
             ("persistence_autorun", {"ioc": "blah", "category": "blah"},
-             {}, {"dynamic.autorun_location": ["blah"]}, None, {}),
+             {}, {"dynamic.autorun_location": ["blah"]}, '\tIOC: blah', {}),
             ("ransomware_mass_file_delete", {"ioc": "blah", "category": "blah"}, {}, {}, None, {}),
             ("p2p_cnc", {"ioc": "10.10.10.10", "category": "blah"}, {}, {
              "network.dynamic.ip": ["10.10.10.10"]}, '\tIOC: 10.10.10.10', {"ip": "10.10.10.10"}),
             ("blah", {"ioc": "1", "category": "blah"}, {}, {}, '\tIOC: 1', {}),
-            ("blah", {"ioc": "1", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: blah (1)', {}),
+            ("blah", {"ioc": "process 1 did a thing", "category": "blah"}, {1: {"name": "blah"}}, {}, '\tIOC: process blah (1) did a thing', {}),
             ("blah", {"ioc": "blah", "category": "file"}, {}, {
              "dynamic.process.file_name": ["blah"]}, '\tIOC: blah', {"file": "blah"}),
             ("blah", {"ioc": "blah", "category": "dll"}, {}, {
