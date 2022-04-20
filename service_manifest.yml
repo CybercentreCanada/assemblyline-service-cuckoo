@@ -17,31 +17,21 @@ is_external: false
 licence_count: 0
 
 config:
-  # Cuckoo host specifications.
+# See README for in-depth descriptions of configuration values
+  # Cuckoo host configurations
+
   remote_host_details:
     hosts:
       - ip: "127.0.0.1"
         port: 8090
         api_key: "sample_api_token"
 
-  # Strings representing images for specific submission to a VM pool of a certain image. See README.
-  allowed_images: []
-
-  # Cuckoo request specification
-  max_file_size: 80000000
-  recursion_limit: 10000
-
-  # INetSim specifications
-  random_ip_range: 192.0.2.0/24
-
-  # Cuckoo Service specifications
-  dedup_similar_percent: 40
-  max_dll_exports_exec: 5
-  default_analysis_timeout_in_seconds: 150
-  machinery_supports_memory_dumps: false
+  connection_timeout_in_seconds: 30
   rest_timeout_in_seconds: 120
-  reboot_supported: false
-  sig_highlight_min_score: 0
+  connection_attempts: 3
+
+  # Cuckoo victim configurations
+  allowed_images: []
   # This is used if the "auto" specific image will select multiple images and you want to override it with less images
   auto_architecture:
     win:
@@ -51,11 +41,24 @@ config:
       x64: []
       x86: []
 
-  # Docker Container Limit
+  # Cuckoo analysis configurations
+  max_file_size: 80000000
+  default_analysis_timeout_in_seconds: 150
+  max_dll_exports_exec: 5
+  machinery_supports_memory_dumps: false
+  reboot_supported: false
+
+  # Cuckoo reporting configurations
+  recursion_limit: 10000
   max_report_size: 275000000
 
+  # INetSim specifications
+  random_ip_range: 192.0.2.0/24
+
+  # Assemblyline service specifications
+  dedup_similar_percent: 40
+
 submission_params:
-  # Cuckoo analysis specifications
   - default: 0
     name: analysis_timeout_in_seconds
     type: int
@@ -104,8 +107,6 @@ submission_params:
     type: bool
     value: false
 
-  # This is a development option, as users can select it without understanding what it is for and then double
-  # processing time
   - default: false
     name: reboot
     type: bool
@@ -121,7 +122,6 @@ submission_params:
     type: str
     value: ""
 
-  # format %m-%d-%Y %H:%M:%S
   - default: ""
     name: clock
     type: str
@@ -132,21 +132,16 @@ submission_params:
     type: str
     value: ""
 
-  # Used for development, when you want to send a file to a specific machine on a specific host. String format is
-  # "<host-ip>:<machine-name>" if more than one host exists. If only one host exists, then format can be either "<host-ip>:<machine-name>" or "<machine-name>"
   - default: ""
     name: specific_machine
     type: str
     value: ""
 
-  # The maximum total size of all files uploaded per analysis
   - default: 134217728
     name: max_total_size_of_uploaded_files
     type: int
     value: 134217728
 
-  # If you don't care about the version of the operating system that you get, as long as it matches the platform, use this
-  # This has the second-highest precedence when submitting a file
   - default: "none"
     name: platform
     type: list

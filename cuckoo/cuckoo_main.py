@@ -50,6 +50,9 @@ CUCKOO_POLL_DELAY = 5
 GUEST_VM_START_TIMEOUT = 360  # Give the VM at least 6 minutes to start up
 REPORT_GENERATION_TIMEOUT = 420  # Give the analysis at least 7 minutes to generate the report
 ANALYSIS_TIMEOUT = 150
+DEFAULT_REST_TIMEOUT = 120
+DEFAULT_CONNECTION_TIMEOUT = 120
+DEFAULT_CONNECTION_ATTEMPTS = 3
 
 LINUX_IMAGE_PREFIX = "ub"
 WINDOWS_IMAGE_PREFIX = "win"
@@ -198,7 +201,9 @@ class Cuckoo(ServiceBase):
         self.request: Optional[ServiceRequest] = None
         self.session: Optional[requests.sessions.Session] = None
         self.ssdeep_match_pct: Optional[int] = None
+        self.connection_timeout_in_seconds: Optional[int] = None
         self.timeout: Optional[int] = None
+        self.connection_attempts: Optional[int] = None
         self.max_report_size: Optional[int] = None
         self.allowed_images: List[str] = []
         self.artifact_list: Optional[List[Dict[str, str]]] = None
@@ -213,7 +218,9 @@ class Cuckoo(ServiceBase):
             del host["api_key"]
         self.hosts = self.config["remote_host_details"]["hosts"]
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
-        self.timeout = self.config.get("rest_timeout_in_seconds", 120)
+        self.connection_timeout_in_seconds = self.config.get("connection_timeout_in_seconds", DEFAULT_CONNECTION_TIMEOUT)
+        self.timeout = self.config.get("rest_timeout_in_seconds", DEFAULT_REST_TIMEOUT)
+        self.connection_attempts = self.config.get("connection_attempts", DEFAULT_CONNECTION_ATTEMPTS)
         self.max_report_size = self.config.get('max_report_size', 275000000)
         self.allowed_images = self.config.get("allowed_images", [])
 
@@ -226,6 +233,10 @@ class Cuckoo(ServiceBase):
 
     # noinspection PyTypeChecker
     def execute(self, request: ServiceRequest) -> None:
+        if not len(self.hosts):
+            raise CuckooHostsUnavailable(
+                f"All hosts are unavailable at the moment, as determined by a previous execution.")
+
         self.request = request
         self.session = requests.Session()
         self.artifact_list = []
@@ -765,35 +776,44 @@ class Cuckoo(ServiceBase):
     def query_machines(self) -> None:
         """
         This method queries what machines exist in the Cuckoo configuration on the Cuckoo server
+        This is the initial request to each Cuckoo host.
         :return: None
         """
         number_of_unavailable_hosts = 0
         number_of_hosts = len(self.hosts)
         hosts_copy = self.hosts[:]
+
         for host in hosts_copy:
-            query_machines_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_MACHINES}"
-            try:
-                resp = self.session.get(query_machines_url, headers=host["auth_header"], timeout=self.timeout)
-            except requests.exceptions.Timeout:
-                self.log.error(f"{query_machines_url} timed out after {self.timeout}s while trying to query machines")
-                number_of_unavailable_hosts += 1
-                self.hosts.remove(host)
-                continue
-            except requests.ConnectionError:
-                self.log.error(f"Unable to reach the Cuckoo nest ({host['ip']}) while trying to query machines. "
-                               f"Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside "
-                               f"of Assemblyline first before running the service.")
-                number_of_unavailable_hosts += 1
-                self.hosts.remove(host)
-                continue
-            if resp.status_code != 200:
-                self.log.error(f"Failed to query machines for {host['ip']}:{host['port']}. "
-                               f"Status code: {resp.status_code}")
-                number_of_unavailable_hosts += 1
-                self.hosts.remove(host)
-            else:
-                resp_json = resp.json()
-                host["machines"] = resp_json["machines"]
+            for attempt in range(self.connection_attempts):
+                query_machines_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_MACHINES}"
+                try:
+                    resp = self.session.get(query_machines_url, headers=host["auth_header"], timeout=self.connection_timeout_in_seconds)
+                except requests.exceptions.Timeout:
+                    self.log.error(
+                        f"{query_machines_url} timed out after {self.connection_timeout_in_seconds}s while trying to query machines")
+                    if attempt == self.connection_attempts - 1:
+                        number_of_unavailable_hosts += 1
+                        self.hosts.remove(host)
+                    continue
+                except requests.ConnectionError:
+                    self.log.error(
+                        f"Unable to reach the Cuckoo nest ({host['ip']}) while trying to query machines. "
+                        f"Be sure to checkout the README and ensure that you have a Cuckoo nest setup outside "
+                        f"of Assemblyline first before running the service.")
+                    if attempt == self.connection_attempts - 1:
+                        number_of_unavailable_hosts += 1
+                        self.hosts.remove(host)
+                    continue
+                if resp.status_code != 200:
+                    self.log.error(f"Failed to query machines for {host['ip']}:{host['port']}. "
+                                   f"Status code: {resp.status_code}")
+                    number_of_unavailable_hosts += 1
+                    self.hosts.remove(host)
+                    break
+                else:
+                    resp_json = resp.json()
+                    host["machines"] = resp_json["machines"]
+                    break
 
         if number_of_unavailable_hosts == number_of_hosts:
             raise CuckooHostsUnavailable(f"Failed to reach any of the hosts "
