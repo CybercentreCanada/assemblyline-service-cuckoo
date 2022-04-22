@@ -9,6 +9,23 @@ SAFE_PROCESS_TREE_LEAF_HASHES = {
         "command_line": "\"C:\\Program Files\\Common Files\\Microsoft Shared\\OfficeSoftwareProtectionPlatform\\OSPPSVC.EXE\"",
         "children": []
     },
+    "a1d7889895b3a83edb3306c85df424da544369567d860215a75f5cbffe635375": {
+        "image": '?sys32\\lsass.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\services.exe',
+                "command_line": None,
+                "children": [
+                    {
+                        "image": "?pf86\\common files\\microsoft shared\\officesoftwareprotectionplatform\\osppsvc.exe",
+                        "command_line": "\"C:\\Program Files\\Common Files\\Microsoft Shared\\OfficeSoftwareProtectionPlatform\\OSPPSVC.EXE\"",
+                        "children": []
+                    }
+                ]
+            }
+        ]
+    },
     "7e2c38006c7720d214b726be34bf3bbfca1c8f02c3b36f7c8b7c7198f119c8a2": {
         "image": "?sys32\\sppsvc.exe",
         "command_line": "C:\\Windows\\system32\\sppsvc.exe",
@@ -111,6 +128,17 @@ SAFE_PROCESS_TREE_LEAF_HASHES = {
         "image": "?win\\systemapps\\microsoftwindows.client.cbs_cw5n1h2txyewy\\inputapp\\textinputhost.exe",
         "command_line": "\"C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\InputApp\\TextInputHost.exe\" -ServerName:InputApp.AppX9jnwykgrccxc8by3hsrsh07r423xzvav.mca",
         "children": []
+    },
+    "04184d24f08dadab15c91374f7aedba484d8214d0d3c2e8b240e3b7b6f25d959": {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": "?win\\systemapps\\microsoftwindows.client.cbs_cw5n1h2txyewy\\inputapp\\textinputhost.exe",
+                "command_line": "\"C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\InputApp\\TextInputHost.exe\" -ServerName:InputApp.AppX9jnwykgrccxc8by3hsrsh07r423xzvav.mca",
+                "children": []
+            }
+        ]
     },
     "24954e76154b030985354403bdb85d0a334c0007c842f5381ed8a0544f11466b": {
         "image": "?sys32\\wbem\\wmiadap.exe",
@@ -289,5 +317,114 @@ SAFE_PROCESS_TREE_LEAF_HASHES = {
         "image": "?sys32\\wevtutil.exe",
         "command_line": None,
         "children": []
-    }
+    },
+    '683045c417897765931f9c4de5799babaf16b2ab34a6a3a30eb442512c7df6cf': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?pf86\\microsoft\\edgeupdate\\microsoftedgeupdate.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    'ca2681bddeb1b3c58f48ab9244d677808317cc73efb553bf6376621456696386': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\wbem\\wmiprvse.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    '34f75b36eb062dd4e2fceecea864aeb679d15099f6b76d46d9e881cdc0c2565f': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?pf86\\windowsapps\\microsoft.yourphone_1.22022.180.0_x64__8wekyb3d8bbwe\\yourphone.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    'd5eaaf0f58b9480f6d77d6f8cc07fc7de6f0100fd9cb20ffffcd4e3755ac2c91': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?win\\microsoft.net\\framework64\\v4.0.30319\\smsvchost.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    '9c1ab7458090e539853fc3467a646f6609bfd65562c493123a0a0bbbf8010756': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\mqsvc.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    'f2917a808064123e3affa565e9bcbe222ed377a586291c5db0c253647c094d44': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\dwm.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    '31c722814723945f3a75457cc44353b4d3569c6a352af85dccafa182c58ad653': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\fontdrvhost.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    'eae18f81f6dd53ad84a780d67f1f91c6f8427e2aba53aeb3617e2c6a64ca6731': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\sihost.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    'aa43ef5d5f78c7017d4ba1ad33b988ca68e2a2635f5010d8c0bc8157816770c2': {
+        "image": '?sys32\\ctfmon.exe',
+        "command_line": None,
+        "children": []
+    },
+    'f26db097862af031c8a7ab84423f063be7f6e01f50699cdd3bfc23542af6a5b4': {
+        "image": '?sys32\\services.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\svchost.exe',
+                "command_line": 'C:\\WINDOWS\\System32\\svchost.exe -k netsvcs -p -s BITS',
+                "children": []
+            }
+        ]
+    },
+    '44e862ebd67cd7ffe848064c41aa16111ec0d95c918bb792d1625df1d98b29aa': {
+        "image": '?sys32\\smss.exe',
+        "command_line": None,
+        "children": []
+    },
 }

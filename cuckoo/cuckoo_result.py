@@ -1941,6 +1941,8 @@ def _update_process_map(process_map: Dict[int, Dict[str, Any]], processes: List[
 if __name__ == "__main__":
     from sys import argv
     from json import loads
+    # pip install PyYAML
+    import yaml
     from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
     from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
@@ -1948,7 +1950,10 @@ if __name__ == "__main__":
     file_ext = argv[2]
     random_ip_range = argv[3]
     routing = argv[4]
-    safelist = loads(argv[5])
+    safelist_path = argv[5]
+
+    with open(safelist_path, "r") as f:
+        safelist = yaml.safe_load(f)
 
     so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
 

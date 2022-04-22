@@ -91,6 +91,7 @@ regex:
   # Sysmon
   - C:\\Windows\\System32\\csrss\.exe
   - C:\\Windows\\System32\\SearchIndexer\.exe
+  - C:\\Windows\\SMaster(32|64).exe
   # Azure
   - C:\\Program Files\\Microsoft Monitoring Agent\\Agent\\(MonitoringHost\.exe|Health Service State\\ICT 2\\(CMF-64|CMF)\\DesiredStateConfiguration\\DscRun\.exe)
   - C:\\WindowsAzure\\GuestAgent.*\\(GuestAgent\\WindowsAzureGuestAgent\.exe|WaAppAgent\.exe|CollectGuestLogs\.exe)
