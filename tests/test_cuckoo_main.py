@@ -31,6 +31,11 @@ samples = [
         min_classification='TLP:WHITE',
         max_files=501,  # TODO: get the actual value
         ttl=3600,
+        safelist_config={
+            "enabled": False,
+            "hash_types": ['sha1', 'sha256'],
+            "enforce_safelist_service": False
+        }
     ),
 ]
 
@@ -456,7 +461,9 @@ class TestCuckooMain:
         cuckoo_class_instance.start()
         assert cuckoo_class_instance.ssdeep_match_pct == int(
             cuckoo_class_instance.config.get('dedup_similar_percent', 40))
-        assert cuckoo_class_instance.connection_timeout_in_seconds == cuckoo_class_instance.config.get('connection_timeout_in_seconds', 30)
+        assert cuckoo_class_instance.connection_timeout_in_seconds == cuckoo_class_instance.config.get(
+            'connection_timeout_in_seconds',
+            30)
         assert cuckoo_class_instance.connection_attempts == cuckoo_class_instance.config.get('connection_attempts', 3)
         assert cuckoo_class_instance.timeout == cuckoo_class_instance.config.get('rest_timeout_in_seconds', 150)
         assert cuckoo_class_instance.max_report_size == cuckoo_class_instance.config.get('max_report_size', 275000000)
