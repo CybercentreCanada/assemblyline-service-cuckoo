@@ -861,24 +861,6 @@ class TestCuckooResult:
         so.add_signature(so_sig)
         assert so_sig.as_primitives() == default_sig
 
-    @staticmethod
-    @pytest.mark.parametrize(
-        "val, expected_return",
-        [
-            (None, False),
-            (b"blah", False),
-            ("127.0.0.1", True),
-            ("http://blah.adobe.com", True),
-            ("play.google.com", True),
-            ("blah.com", False)
-        ]
-    )
-    def test_contains_safelisted_value(val, expected_return):
-        from cuckoo.cuckoo_result import contains_safelisted_value
-        safelist = {"regex": {"network.dynamic.domain": [".*\.adobe\.com$", "play\.google\.com$"],
-                              "network.dynamic.ip": ["(?:127\.|10\.|192\.168|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.).*"]}}
-        assert contains_safelisted_value(val, safelist) == expected_return
-
     # TODO: complete unit tests for process_network
     @staticmethod
     def test_process_network():
@@ -1134,14 +1116,14 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _process_non_http_traffic_over_http
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
         test_parent_section = ResultSection("blah")
-        network_flows = [{"dest_port": 80, "dest_ip": "127.0.0.1", "domain": "blah.blah"},
-                         {"dest_port": 443, "dest_ip": "127.0.0.2", "domain": "blah2.blah"}]
+        network_flows = [{"dest_port": 80, "dest_ip": "127.0.0.1", "domain": "blah.com"},
+                         {"dest_port": 443, "dest_ip": "127.0.0.2", "domain": "blah2.com"}]
         correct_result_section = ResultSection("Non-HTTP Traffic Over HTTP Ports")
         correct_result_section.set_heuristic(1005)
         correct_result_section.add_tag("network.dynamic.ip", "127.0.0.1")
         correct_result_section.add_tag("network.dynamic.ip", "127.0.0.2")
-        correct_result_section.add_tag("network.dynamic.domain", "blah.blah")
-        correct_result_section.add_tag("network.dynamic.domain", "blah2.blah")
+        correct_result_section.add_tag("network.dynamic.domain", "blah.com")
+        correct_result_section.add_tag("network.dynamic.domain", "blah2.com")
         correct_result_section.add_tag("network.port", 80)
         correct_result_section.add_tag("network.port", 443)
         correct_result_section.set_body(dumps(network_flows), BODY_FORMAT.TABLE)
@@ -1531,17 +1513,6 @@ class TestCuckooResult:
             assert check_section_equality(parent_section.subsections[0], correct_result_section)
 
     @staticmethod
-    @pytest.mark.parametrize("val", ["not an ip", "127.0.0.1"])
-    def test_is_ip(val):
-        from ipaddress import ip_address
-        from cuckoo.cuckoo_result import is_ip
-        try:
-            ip_address(val)
-            assert is_ip(val)
-        except ValueError:
-            assert not is_ip(val)
-
-    @staticmethod
     @pytest.mark.parametrize(
         "processes, correct_process_map",
         [
@@ -1592,115 +1563,6 @@ class TestCuckooResult:
     def test_remove_network_http_noise(sigs, correct_sigs):
         from cuckoo.cuckoo_result import _remove_network_http_noise
         assert _remove_network_http_noise(sigs) == correct_sigs
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "blob, correct_tags, expected_iocs",
-        [("", {}, [{}]),
-         ("192.168.100.1", {'network.dynamic.ip': ['192.168.100.1']}, [{"ip": "192.168.100.1"}]),
-         ("blah.ca", {'network.dynamic.domain': ['blah.ca']}, [{"domain": "blah.ca"}]),
-         ("https://blah.ca",
-          {'network.dynamic.domain': ['blah.ca'],
-           'network.dynamic.uri': ['https://blah.ca']}, [{"domain": "blah.ca"}, {"uri": "https://blah.ca"}]),
-         ("https://blah.ca/blah",
-          {'network.dynamic.domain': ['blah.ca'],
-           'network.dynamic.uri': ['https://blah.ca/blah'],
-           "network.dynamic.uri_path": ["/blah"]}, [{"domain": "blah.ca"}, {"uri": "https://blah.ca/blah"}]),
-         ("drive:\\\\path to\\\\microsoft office\\\\officeverion\\\\winword.exe", {}, [{}]),
-         (
-            "DRIVE:\\\\PATH TO\\\\MICROSOFT OFFICE\\\\OFFICEVERION\\\\WINWORD.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.DOC",
-            {}, [{}]),
-         ("DRIVE:\\\\PATH TO\\\\PYTHON27.EXE C:\\\\USERS\\\\BUDDY\\\\APPDATA\\\\LOCAL\\\\TEMP\\\\BLAH.py",
-          {}, [{}]),
-         (
-            "POST /some/thing/bad.exe HTTP/1.0\nUser-Agent: Mozilla\nHost: evil.ca\nAccept: */*\nContent-Type: application/octet-stream\nContent-Encoding: binary\n\nConnection: close",
-            {"network.dynamic.domain": ["evil.ca"]}, [{"domain": "evil.ca"}]),
-         ("evil.ca/some/thing/bad.exe",
-          {"network.dynamic.domain": ["evil.ca"],
-           "network.dynamic.uri": ["evil.ca/some/thing/bad.exe"],
-           "network.dynamic.uri_path": ["/some/thing/bad.exe"]}, [{"domain": "evil.ca"}, {"uri": "evil.ca/some/thing/bad.exe"}]), ])
-    def test_extract_iocs_from_text_blob(blob, correct_tags, expected_iocs):
-        from cuckoo.cuckoo_result import _extract_iocs_from_text_blob
-        from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
-        from assemblyline_v4_service.common.result import ResultTableSection
-        test_result_section = ResultTableSection("blah")
-        so_sig = SandboxOntology.Signature()
-        default_iocs = []
-        _extract_iocs_from_text_blob(blob, test_result_section, so_sig=so_sig)
-        assert test_result_section.tags == correct_tags
-        if correct_tags:
-            for expected_ioc in expected_iocs:
-                default_ioc = SandboxOntology.Signature.Subject().as_primitives()
-                for key, value in expected_ioc.items():
-                    default_ioc[key] = value
-                default_iocs.append(default_ioc)
-            assert so_sig.as_primitives()["subjects"] == default_iocs
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "value, tags, safelist, substring, expected_output",
-        [
-            ("", [], {}, False, False),
-            ("blah", ["network.dynamic.domain"], {}, False, False),
-            ("blah", [], {"match": {"network.dynamic.domain": ["google.com"]}}, False, False),
-            ("google.com", ["network.dynamic.domain"], {"match": {"network.dynamic.domain": ["google.com"]}}, False,
-             True),
-            ("google.com", ["network.dynamic.domain"], {"regex": {"network.dynamic.domain": ["google\.com"]}}, False,
-             True),
-            ("google.com", ["network.dynamic.domain"], {"match": {"network.dynamic.domain": ["www.google.com"]}}, True,
-             False),
-            ("www.google.com", ["network.dynamic.domain"], {"match": {"network.dynamic.domain": ["google.com"]}}, True,
-             True),
-            ("www.google.com", ["network.dynamic.domain"], {"blah": {"network.dynamic.domain": ["google.com"]}}, True,
-             False),
-        ]
-    )
-    def test_is_safelisted(value, tags, safelist, substring, expected_output):
-        from cuckoo.cuckoo_result import is_safelisted
-        assert is_safelisted(value, tags, safelist, substring) == expected_output
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "value, expected_tags, tags_were_added",
-        [
-            ("", {}, False),
-            ("blah", {"blah": ["blah"]}, True),
-            ([], {}, False),
-            (["blah"], {"blah": ["blah"]}, True),
-            (["blah", "blahblah"], {"blah": ["blah", "blahblah"]}, True)
-        ]
-    )
-    def test_add_tag(value, expected_tags, tags_were_added):
-        from assemblyline_v4_service.common.result import ResultSection
-        from cuckoo.cuckoo_result import add_tag
-        res_sec = ResultSection("blah")
-        tag = "blah"
-        assert add_tag(res_sec, tag, value) == tags_were_added
-        assert res_sec.tags == expected_tags
-
-    @staticmethod
-    @pytest.mark.parametrize(
-        "tag, value, inetsim_network, expected_tags, added_tag",
-        [
-            ("", "", None, {}, False),
-            ("blah", "", None, {}, False),
-            ("blah", "blah", None, {"blah": ["blah"]}, True),
-            ("domain", "blah", None, {}, False),
-            ("domain", "blah.blah", None, {"domain": ["blah.blah"]}, True),
-            ("uri_path", "/blah", None, {"uri_path": ["/blah"]}, True),
-            ("uri", "http://blah.blah/blah", None, {"uri": ["http://blah.blah/blah"]}, True),
-            ("ip", "blah", None, {}, False),
-            ("ip", "192.0.2.21", "192.0.2.0/24", {}, False),
-            ("ip", "1.1.1.1", "192.0.2.0/24", {"ip": ["1.1.1.1"]}, True),
-        ]
-    )
-    def test_validate_tag(tag, value, inetsim_network, expected_tags, added_tag):
-        from ipaddress import ip_network
-        from assemblyline_v4_service.common.result import ResultSection
-        from cuckoo.cuckoo_result import add_tag
-        res_sec = ResultSection("blah")
-        assert add_tag(res_sec, tag, value, ip_network(inetsim_network) if inetsim_network else None) == added_tag
-        assert res_sec.tags == expected_tags
 
     @staticmethod
     def test_update_process_map():
