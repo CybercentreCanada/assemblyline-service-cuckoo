@@ -1271,13 +1271,13 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
             if contains_safelisted_value(http_string[1], safelist):
                 fp_count += 1
         elif name == "nolookup_communication" and mark["type"] == "generic":
-            if contains_safelisted_value( mark["host"], safelist) or is_ip_in_network(mark["host"], inetsim_network):
+            if contains_safelisted_value(mark["host"], safelist) or is_ip_in_network(mark["host"], inetsim_network):
                 fp_count += 1
         elif name not in ["network_cnc_http", "nolookup_communication", "suspicious_powershell", "exploit_heapspray"] \
                 and mark["type"] == "generic":
             for item in mark:
                 if item not in SKIPPED_MARK_ITEMS and \
-                        (contains_safelisted_value(mark[item], safelist) or is_ip_in_network(mark[item], inetsim_network)):
+                        (contains_safelisted_value(mark[item], safelist) or (isinstance(mark[item], str) and is_ip_in_network(mark[item], inetsim_network))):
                     fp_count += 1
         elif mark["type"] == "ioc":
             ioc = mark["ioc"]
@@ -1447,7 +1447,7 @@ def _tag_and_describe_generic_signature(
             if item in SKIPPED_MARK_ITEMS:
                 continue
             if not contains_safelisted_value(mark[item], safelist):
-                if not is_valid_ip(mark[item]) or not is_ip_in_network(mark[item], inetsim_network):
+                if not isinstance(mark[item], str) or (isinstance(mark[item], str) and (not is_valid_ip(mark[item]) or not is_ip_in_network(mark[item], inetsim_network))):
                     if item == "description":
                         sig_res.add_line(f'\tFun fact: {safe_str(mark[item])}')
                     else:
