@@ -18,7 +18,7 @@ from assemblyline_v4_service.common.tag_helper import add_tag
 
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
-from assemblyline_v4_service.common.dynamic_service_helper import _extract_iocs_from_text_blob, SandboxOntology, Process, NetworkConnection
+from assemblyline_v4_service.common.dynamic_service_helper import extract_iocs_from_text_blob, SandboxOntology, Process, NetworkConnection
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
@@ -929,7 +929,7 @@ def process_all_events(
             if event.start_time in [float("-inf"), float("inf")]:
                 continue
             _ = add_tag(events_section, "dynamic.process.command_line", event.command_line)
-            _extract_iocs_from_text_blob(event.command_line, event_ioc_table)
+            extract_iocs_from_text_blob(event.command_line, event_ioc_table)
             _ = add_tag(events_section, "dynamic.process.file_name", event.image)
             events_section.add_row(TableRow(time_observed=datetime.datetime.fromtimestamp(event.start_time).strftime(
                 '%Y-%m-%d %H:%M:%S.%f')[: -3],
@@ -1143,7 +1143,7 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
                 buffer = call["OutputDebugStringA"]["string"]
             if not buffer:
                 continue
-            _extract_iocs_from_text_blob(buffer, buffer_ioc_table)
+            extract_iocs_from_text_blob(buffer, buffer_ioc_table)
             if {"Decrypted Buffer": safe_str(buffer)} not in buffer_body:
                 buffer_body.append({"Decrypted Buffer": safe_str(buffer)})
     if len(buffer_body) > 0:
@@ -1396,7 +1396,7 @@ def _extract_iocs_from_encrypted_buffers(process_map: Dict[int, Dict[str, Any]],
             for api_call in BUFFER_API_CALLS:
                 if api_call in network_call:
                     buffer = network_call[api_call]["buffer"]
-                    _extract_iocs_from_text_blob(buffer, encrypted_buffer_ioc_table)
+                    extract_iocs_from_text_blob(buffer, encrypted_buffer_ioc_table)
     if encrypted_buffer_ioc_table.body:
         encrypted_buffer_ioc_table.set_heuristic(1006)
         network_res.add_subsection(encrypted_buffer_ioc_table)
@@ -1523,7 +1523,7 @@ def _tag_and_describe_ioc_signature(
                 sig_ioc_table = next((subsection for subsection in sig_res.subsections if subsection.title_text == command_line_iocs))
             else:
                 sig_ioc_table = ResultTableSection(command_line_iocs)
-            _extract_iocs_from_text_blob(ioc, sig_ioc_table, so_sig)
+            extract_iocs_from_text_blob(ioc, sig_ioc_table, so_sig)
             if sig_ioc_table not in sig_res.subsections and sig_ioc_table.body:
                 sig_res.add_subsection(sig_ioc_table)
     elif mark["category"] == "registry":

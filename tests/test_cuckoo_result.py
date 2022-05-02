@@ -1072,11 +1072,6 @@ class TestCuckooResult:
             nh_as_prim["connection_details"]["objectid"] = nh_as_prim["connection_details"]["objectid"].__dict__
             nh_as_prim["connection_details"]["objectid"].pop("guid")
             actual_req_table.append(nh_as_prim)
-        if not expected_req_table == actual_req_table:
-            print()
-            print(expected_req_table)
-            print(actual_req_table)
-            print()
         assert expected_req_table == actual_req_table
 
     @staticmethod
