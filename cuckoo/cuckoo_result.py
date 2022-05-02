@@ -5,27 +5,26 @@ import os
 import json
 from ipaddress import ip_address, ip_network, IPv4Network
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
-from assemblyline.common.net_static import TLDS_ALPHA_BY_DOMAIN
-from assemblyline.odm.base import DOMAIN_REGEX, IP_REGEX, FULL_URI, URI_PATH, DOMAIN_ONLY_REGEX
+from assemblyline.common.net import is_valid_ip, is_ip_in_network
+from assemblyline.odm.base import IP_REGEX, FULL_URI
 from assemblyline_v4_service.common.result import ResultSection, ResultKeyValueSection, ResultTextSection, ResultTableSection, TableRow
-
+from assemblyline_v4_service.common.safelist_helper import is_tag_safelisted, contains_safelisted_value
+from assemblyline_v4_service.common.tag_helper import add_tag
 
 from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
-from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, Process, NetworkConnection
+from assemblyline_v4_service.common.dynamic_service_helper import _extract_iocs_from_text_blob, SandboxOntology, Process, NetworkConnection
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
 # Global variable used for containing the system safelist
 global_safelist: Optional[Dict[str, Dict[str, List[str]]]] = None
 # Custom regex for finding uris in a text blob
-URL_REGEX = re.compile(
-    "(?:(?:(?:[A-Za-z]*:)?//)?(?:\S+(?::\S*)?@)?(?:(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|(?:(?:[A-Za-z0-9\u00a1-\uffff][A-Za-z0-9\u00a1-\uffff_-]{0,62})?[A-Za-z0-9\u00a1-\uffff]\.)+(?:xn--)?(?:[A-Za-z0-9\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?)(?:[/?#][^\s,\\\\]*)?")
 UNIQUE_IP_LIMIT = 100
 SCORE_TRANSLATION = {
     1: 10,
@@ -59,7 +58,6 @@ SUPPORTED_EXTENSIONS = [
     'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf', 'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt',
     'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
 ]
-FALSE_POSITIVE_DOMAINS_FOUND_IN_PATHS = ["microsoft.net"]
 ANALYSIS_ERRORS = 'Analysis Errors'
 # Substring of Warning Message frm https://github.com/cuckoosandbox/cuckoo/blob/50452a39ff7c3e0c4c94d114bc6317101633b958/cuckoo/core/guest.py#L561
 GUEST_LOSING_CONNNECTIVITY = 'Virtual Machine /status failed. This can indicate the guest losing network connectivity'
@@ -284,8 +282,8 @@ def convert_cuckoo_processes(cuckoo_processes: List[Dict[str, Any]],
             process_path = item.get("process_path")
             command_line = item["command_line"]
             if not process_path or not command_line or \
-                    is_safelisted(process_path, ["dynamic.process.file_name"], safelist) or \
-                    is_safelisted(command_line, ["dynamic.process.command_line"], safelist):
+                    is_tag_safelisted(process_path, ["dynamic.process.file_name"], safelist) or \
+                    is_tag_safelisted(command_line, ["dynamic.process.command_line"], safelist):
                 continue
             so.update_process(
                 pid=item["pid"],
@@ -423,31 +421,6 @@ def process_signatures(
     return is_process_martian
 
 
-def contains_safelisted_value(val: str, safelist: Dict[str, Dict[str, List[str]]]) -> bool:
-    """
-    This method checks if a given value is part of a safelist
-    :param val: The given value
-    :param safelist: A dictionary containing matches and regexes for use in safelisting values
-    :return: A boolean representing if the given value is part of a safelist
-    """
-    if not val or not isinstance(val, str):
-        return False
-    ip = re.search(IP_REGEX, val)
-    url = re.search(URL_REGEX, val)
-    domain = re.search(DOMAIN_REGEX, val)
-    if ip is not None:
-        ip = ip.group()
-        return is_safelisted(ip, ["network.dynamic.ip"], safelist)
-    elif domain is not None:
-        domain = domain.group()
-        return is_safelisted(domain, ["network.dynamic.domain"], safelist)
-    elif url is not None:
-        url_pieces = urlparse(url.group())
-        domain = url_pieces.netloc
-        return is_safelisted(domain, ["network.dynamic.domain"], safelist)
-    return False
-
-
 # TODO: break this up into methods
 def process_network(network: Dict[str, Any], parent_result_section: ResultSection, inetsim_network: IPv4Network,
                     routing: str, process_map: Dict[int, Dict[str, Any]],
@@ -487,10 +460,10 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         dom = network_flow["domain"]
         dest_ip = network_flow["dest_ip"]
         # if domain is safe-listed
-        if is_safelisted(dom, ["network.dynamic.domain"], safelist):
+        if is_tag_safelisted(dom, ["network.dynamic.domain"], safelist):
             network_flows_table.remove(network_flow)
         # if no source ip and destination ip is safe-listed or is the dns server
-        elif (not src and is_safelisted(dest_ip, ["network.dynamic.ip"], safelist)) or dest_ip in dns_servers:
+        elif (not src and is_tag_safelisted(dest_ip, ["network.dynamic.ip"], safelist)) or dest_ip in dns_servers:
             network_flows_table.remove(network_flow)
         # if dest ip is noise
         elif dest_ip not in resolved_ips and ip_address(dest_ip) in inetsim_network:
@@ -768,7 +741,7 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
             dst = network_call["dst"]
             src = network_call["src"]
             src_port: Optional[str] = None
-            if is_safelisted(src, ["network.dynamic.ip"], safelist):
+            if is_tag_safelisted(src, ["network.dynamic.ip"], safelist):
                 src: Optional[str] = None
             if src:
                 src_port = network_call["sport"]
@@ -830,9 +803,9 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                 port = http_call["port"]
                 uri = http_call["uri"]
 
-            if is_safelisted(
+            if is_tag_safelisted(
                     host, ["network.dynamic.ip", "network.dynamic.domain"],
-                    safelist) or is_safelisted(
+                    safelist) or is_tag_safelisted(
                     uri, ["network.dynamic.uri"],
                     safelist) or "/wpad.dat" in uri or not re.match(FULL_URI, uri):
                 continue
@@ -1089,7 +1062,7 @@ def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any]
                 elif name == "ProcessId":
                     dns_query["pid"] = int(text)
                 elif name == "QueryName":
-                    if not is_safelisted(text, ["network.dynamic.domain"], safelist):
+                    if not is_tag_safelisted(text, ["network.dynamic.domain"], safelist):
                         dns_query["request"] = text
                 elif name == "QueryResults":
                     ip = re.search(IP_REGEX, text)
@@ -1181,23 +1154,6 @@ def process_decrypted_buffers(process_map: Dict[int, Dict[str, Any]], parent_res
         parent_result_section.add_subsection(buffer_res)
 
 
-def is_ip(val: str) -> bool:
-    """
-    This method safely handles if a given string represents an IP
-    :param val: the given string
-    :return: a boolean representing if the given string represents an IP
-    """
-    try:
-        ip_address(val)
-        return True
-    except ValueError:
-        # In the occasional circumstance, a sample with make a call
-        # to an explicit IP, which breaks the way that AL handles
-        # domains
-        pass
-    return False
-
-
 def get_process_map(processes: List[Dict[str, Any]],
                     safelist: Dict[str, Dict[str, List[str]]]) -> Dict[int, Dict[str, Any]]:
     """
@@ -1231,7 +1187,7 @@ def get_process_map(processes: List[Dict[str, Any]],
     }
     for process in processes:
         process_name = process["process_path"] if process.get("process_path") else process["process_name"]
-        if is_safelisted(process_name, ["dynamic.process.file_name"], safelist):
+        if is_tag_safelisted(process_name, ["dynamic.process.file_name"], safelist):
             continue
         network_calls = []
         decrypted_buffers = []
@@ -1299,7 +1255,7 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
             if filename in filepath or filename_remainder in filepath:
                 # The submitted file is a "hidden" file because it's in the tmp directory
                 fp_count += 1
-            elif is_safelisted(filepath, ["file.path"], safelist, substring=True):
+            elif is_tag_safelisted(filepath, ["file.path"], safelist, substring=True):
                 fp_count += 1
         elif name in ["creates_exe", "creates_shortcut"]:
             if all(item in mark.get("ioc").lower() for item in [filename.split(".")[0], ".lnk"]):
@@ -1315,17 +1271,13 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
             if contains_safelisted_value(http_string[1], safelist):
                 fp_count += 1
         elif name == "nolookup_communication" and mark["type"] == "generic":
-            if contains_safelisted_value(
-                    mark["host"],
-                    safelist) or (
-                    is_ip(mark["host"]) and ip_address(mark["host"]) in inetsim_network):
+            if contains_safelisted_value( mark["host"], safelist) or is_ip_in_network(mark["host"], inetsim_network):
                 fp_count += 1
         elif name not in ["network_cnc_http", "nolookup_communication", "suspicious_powershell", "exploit_heapspray"] \
                 and mark["type"] == "generic":
             for item in mark:
                 if item not in SKIPPED_MARK_ITEMS and \
-                        (contains_safelisted_value(mark[item], safelist) or
-                         (is_ip(mark[item]) and ip_address(mark[item]) in inetsim_network)):
+                        (contains_safelisted_value(mark[item], safelist) or is_ip_in_network(mark[item], inetsim_network)):
                     fp_count += 1
         elif mark["type"] == "ioc":
             ioc = mark["ioc"]
@@ -1340,10 +1292,10 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
                         fp_count += 1
                 elif name in ["dead_host"]:
                     ip, _ = ioc.split(":")
-                    if is_ip(ip) and ip_address(ip) in inetsim_network:
+                    if is_ip_in_network(ip, inetsim_network):
                         fp_count += 1
                 elif name not in ["persistence_autorun", "network_icmp"] and name not in SILENT_IOCS and \
-                        (is_ip(ioc) and ip_address(ioc) in inetsim_network):
+                        (is_ip_in_network(ioc, inetsim_network)):
                     fp_count += 1
 
     if 0 < len(marks) == fp_count:
@@ -1472,7 +1424,7 @@ def _tag_and_describe_generic_signature(
             if add_tag(sig_res, "network.dynamic.uri", http_string[1]):
                 so_sig.add_subject(uri=http_string[1])
     elif signature_name == "nolookup_communication":
-        if add_tag(sig_res, "network.dynamic.ip", mark["host"], inetsim_network):
+        if not is_ip_in_network(mark["host"], inetsim_network) and add_tag(sig_res, "network.dynamic.ip", mark["host"]):
             sig_res.add_line(f"\tIOC: {mark['host']}")
             so_sig.add_subject(ip=mark["host"])
     elif signature_name == "suspicious_powershell":
@@ -1495,7 +1447,7 @@ def _tag_and_describe_generic_signature(
             if item in SKIPPED_MARK_ITEMS:
                 continue
             if not contains_safelisted_value(mark[item], safelist):
-                if not is_ip(mark[item]) or (is_ip(mark[item]) and ip_address(mark[item]) not in inetsim_network):
+                if not is_valid_ip(mark[item]) or not is_ip_in_network(mark[item], inetsim_network):
                     if item == "description":
                         sig_res.add_line(f'\tFun fact: {safe_str(mark[item])}')
                     else:
@@ -1533,7 +1485,7 @@ def _tag_and_describe_ioc_signature(
     elif signature_name == "process_interest":
         sig_res.add_line(f'\tIOC: {safe_str(ioc)} is a {mark["category"].replace("process: ", "")}.')
     elif signature_name == "network_icmp":
-        if add_tag(sig_res, "network.dynamic.ip", ioc, inetsim_network):
+        if not is_ip_in_network(ioc, inetsim_network) and add_tag(sig_res, "network.dynamic.ip", ioc):
             so_sig.add_subject(ip=ioc)
             sig_res.add_line(f'\tPinged {safe_str(ioc)}.')
         else:
@@ -1544,9 +1496,9 @@ def _tag_and_describe_ioc_signature(
     elif signature_name in SILENT_IOCS:
         # Nothing to see here, just avoiding printing out the IOC line in the result body
         pass
-    elif not is_ip(ioc) or (is_ip(ioc) and ip_address(ioc) not in inetsim_network):
+    elif not is_valid_ip(ioc) or not is_ip_in_network(ioc, inetsim_network):
         if signature_name == "p2p_cnc":
-            if add_tag(sig_res, "network.dynamic.ip", ioc, inetsim_network):
+            if add_tag(sig_res, "network.dynamic.ip", ioc):
                 so_sig.add_subject(ip=ioc)
         elif signature_name == "persistence_autorun":
             _ = add_tag(sig_res, "dynamic.autorun_location", ioc)
@@ -1675,183 +1627,6 @@ def _remove_network_http_noise(sigs: List[Dict[str, Any]]) -> List[Dict[str, Any
         return sigs
 
 
-def _extract_iocs_from_text_blob(
-        blob: str, result_section: ResultTableSection, so_sig: SandboxOntology.Signature = None) -> None:
-    """
-    This method searches for domains, IPs and URIs used in blobs of text and tags them
-    :param blob: The blob of text that we will be searching through
-    :param result_section: The result section that that tags will be added to
-    :param so_sig: The signature for the Sandbox Ontology
-    :return: None
-    """
-    if not blob:
-        return
-    blob = blob.lower()
-    ips = set(re.findall(IP_REGEX, blob))
-    # There is overlap here between regular expressions, so we want to isolate domains that are not ips
-    domains = set(re.findall(DOMAIN_REGEX, blob)) - ips
-    # There is overlap here between regular expressions, so we want to isolate uris that are not domains
-    uris = set(re.findall(URL_REGEX, blob)) - domains - ips
-    for ip in ips:
-        if add_tag(result_section, "network.dynamic.ip", ip):
-            if not result_section.section_body.body:
-                result_section.add_row(TableRow(ioc_type="ip", ioc=ip))
-            elif json.dumps({"ioc_type": "ip", "ioc": ip}) not in result_section.section_body.body:
-                result_section.add_row(TableRow(ioc_type="ip", ioc=ip))
-            if so_sig:
-                so_sig.add_subject(ip=ip)
-    for domain in domains:
-        # File names match the domain and URI regexes, so we need to avoid tagging them
-        # Note that get_tld only takes URLs so we will prepend http:// to the domain to work around this
-        if domain in FALSE_POSITIVE_DOMAINS_FOUND_IN_PATHS:
-            continue
-        tld = next((tld.lower() for tld in TLDS_ALPHA_BY_DOMAIN if domain.lower().endswith(f".{tld}".lower())), None)
-        if tld is None or tld in SUPPORTED_EXTENSIONS:
-            continue
-        if add_tag(result_section, "network.dynamic.domain", domain):
-            if not result_section.section_body.body:
-                result_section.add_row(TableRow(ioc_type="domain", ioc=domain))
-            elif json.dumps({"ioc_type": "domain", "ioc": domain}) not in result_section.section_body.body:
-                result_section.add_row(TableRow(ioc_type="domain", ioc=domain))
-            if so_sig:
-                so_sig.add_subject(domain=domain)
-
-    for uri in uris:
-        if add_tag(result_section, "network.dynamic.uri", uri):
-            if not result_section.section_body.body:
-                result_section.add_row(TableRow(ioc_type="uri", ioc=uri))
-            elif json.dumps({"ioc_type": "uri", "ioc": uri}) not in result_section.section_body.body:
-                result_section.add_row(TableRow(ioc_type="uri", ioc=uri))
-            if so_sig:
-                so_sig.add_subject(uri=uri)
-        if "//" in uri:
-            uri = uri.split("//")[1]
-        for uri_path in re.findall(URI_PATH, uri):
-            if add_tag(result_section, "network.dynamic.uri_path", uri_path):
-                if not result_section.section_body.body:
-                    result_section.add_row(TableRow(ioc_type="uri_path", ioc=uri_path))
-                elif json.dumps({"ioc_type": "uri_path", "ioc": uri_path}) not in result_section.section_body.body:
-                    result_section.add_row(TableRow(ioc_type="uri_path", ioc=uri_path))
-
-
-def is_safelisted(
-        value: str, tags: List[str],
-        safelist: Dict[str, Dict[str, List[str]]],
-        substring: bool = False) -> bool:
-    """
-    Safelists of data that may come up in analysis that is "known good", and we can ignore in the Assemblyline report.
-    This method determines if a given value has any safelisted components
-    See README section on Assemblyline System Safelist on how to integrate the safelist found in al_config/system_safelist.yaml
-    :param value: The value to be checked if it has been safelisted
-    :param tags: The tags which will be used for grabbing specific values from the safelist
-    :param safelist: The safelist containing matches and regexs
-    :param substring: A flag that indicates if we should check if the value is contained within the match
-    :return: A boolean indicating if the value has been safelisted
-    """
-    if not value or not tags or not safelist:
-        return False
-
-    if not any(key in safelist for key in ["match", "regex"]):
-        return False
-
-    safelist_matches = safelist.get("match", {})
-    safelist_regexes = safelist.get("regex", {})
-
-    for tag in tags:
-        if tag in safelist_matches:
-            for safelist_match in safelist_matches[tag]:
-                if value.lower() == safelist_match.lower():
-                    return True
-                elif substring and safelist_match.lower() in value.lower():
-                    return True
-
-        if tag in safelist_regexes:
-            for safelist_regex in safelist_regexes[tag]:
-                if re.match(safelist_regex, value, re.IGNORECASE):
-                    return True
-
-    return False
-
-
-def add_tag(
-        result_section: ResultSection, tag: str, value: Union[Any, List[Any]],
-        inetsim_network: IPv4Network = None) -> bool:
-    """
-    This method adds the value(s) as a tag to the ResultSection. Can take a list of values or a single value.
-    :param result_section: The ResultSection that the tag will be added to
-    :param tag: The tag type that the value will be tagged under
-    :param value: The value, a single item or a list, that will be tagged under the tag type
-    :param inetsim_network: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
-    :return: Tag was successfully added
-    """
-    tags_were_added = False
-    if not value:
-        return tags_were_added
-    if type(value) == list:
-        for item in value:
-            # If one tag is added, then return True
-            tags_were_added = _validate_tag(result_section, tag, item, inetsim_network) or tags_were_added
-    else:
-        tags_were_added = _validate_tag(result_section, tag, value, inetsim_network)
-    return tags_were_added
-
-
-def _validate_tag(result_section: ResultSection, tag: str, value: Any, inetsim_network: IPv4Network = None) -> bool:
-    """
-    This method validates the value relative to the tag type before adding the value as a tag to the ResultSection.
-    :param result_section: The ResultSection that the tag will be added to
-    :param tag: The tag type that the value will be tagged under
-    :param value: The item that will be tagged under the tag type
-    :param inetsim_network: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
-    :return: Tag was successfully added
-    """
-    reg_to_match: Optional[str] = None
-    if "domain" in tag:
-        reg_to_match = DOMAIN_ONLY_REGEX
-    elif "uri_path" in tag:
-        reg_to_match = URI_PATH
-    elif "uri" in tag:
-        reg_to_match = FULL_URI
-    elif "ip" in tag:
-        if not is_ip(value):
-            return False
-        if inetsim_network and ip_address(value) in inetsim_network:
-            return False
-        reg_to_match = IP_REGEX
-    if reg_to_match and not re.match(reg_to_match, value):
-        return False
-
-    if not is_safelisted(value, [tag], global_safelist):
-        # if "uri" is in the tag, let's try to extract its domain/ip and tag it.
-        if "uri" in tag:
-            # First try to get the domain
-            domain = re.search(DOMAIN_REGEX, value)
-            if domain:
-                domain = domain.group()
-                if domain in FALSE_POSITIVE_DOMAINS_FOUND_IN_PATHS:
-                    pass
-                else:
-                    tld = next((tld.lower()
-                                for tld in TLDS_ALPHA_BY_DOMAIN if domain.lower().endswith(f".{tld}".lower())), None)
-                    if tld is None or tld in SUPPORTED_EXTENSIONS:
-                        pass
-                    elif not is_safelisted(value, ["network.dynamic.domain"], global_safelist):
-                        result_section.add_tag("network.dynamic.domain", safe_str(domain))
-            # Then try to get the IP
-            ip = re.search(IP_REGEX, value)
-            if ip:
-                ip = ip.group()
-                if not is_safelisted(value, ["network.dynamic.ip"], global_safelist):
-                    result_section.add_tag("network.dynamic.ip", safe_str(ip))
-
-            if value not in [domain, ip]:
-                result_section.add_tag(tag, safe_str(value))
-        else:
-            result_section.add_tag(tag, safe_str(value))
-
-        return True
-
-
 def convert_sysmon_processes(
         sysmon: List[Dict[str, Any]],
         safelist: Dict[str, Dict[str, List[str]]],
@@ -1892,13 +1667,13 @@ def convert_sysmon_processes(
             elif name in ["sourceimage"]:
                 process["pimage"] = text
             elif name in ["image", "targetimage"]:
-                if not is_safelisted(text, ["dynamic.process.file_name"], safelist):
+                if not is_tag_safelisted(text, ["dynamic.process.file_name"], safelist):
                     process["image"] = text
             elif name in ["parentcommandline"]:
-                if not is_safelisted(text, ["dynamic.process.command_line"], safelist):
+                if not is_tag_safelisted(text, ["dynamic.process.command_line"], safelist):
                     process["pcommand_line"] = text
             elif name in ["commandline"]:
-                if not is_safelisted(text, ["dynamic.process.command_line"], safelist):
+                if not is_tag_safelisted(text, ["dynamic.process.command_line"], safelist):
                     process["command_line"] = text
             elif name == "originalfilename":
                 process["original_file_name"] = text

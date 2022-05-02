@@ -22,6 +22,8 @@ from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
 from assemblyline_v4_service.common.request import ServiceRequest
 from assemblyline_v4_service.common.result import Result, ResultSection, ResultImageSection, ResultTextSection, ResultKeyValueSection
+from assemblyline_v4_service.common.safelist_helper import is_tag_safelisted
+from assemblyline_v4_service.common.tag_helper import add_tag
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify import tag_to_extension
@@ -29,7 +31,7 @@ from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.constants import RECOGNIZED_TYPES
 from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
-from cuckoo.cuckoo_result import add_tag, ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, is_safelisted, \
+from cuckoo.cuckoo_result import ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, \
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 
@@ -856,7 +858,7 @@ class Cuckoo(ServiceBase):
                             dropped_hash = hashlib.sha256(data).hexdigest()
                             if dropped_hash == self.request.sha256:
                                 continue
-                        if not is_safelisted(dropped_name, ["file.path"], self.safelist, substring=True) or \
+                        if not is_tag_safelisted(dropped_name, ["file.path"], self.safelist, substring=True) or \
                                 dropped_name.endswith('_info.txt'):
                             # Resubmit
                             dropped_file_name = f"{cuckoo_task.id}_{dropped_name}"
