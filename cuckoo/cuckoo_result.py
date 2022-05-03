@@ -1125,7 +1125,7 @@ def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: 
     # We care about implanted PEs
     # Process (PID)       Indicator       Description
     for pid, details in hollowshunter.items():
-        implanted_pes = details.get("scanned", {}).get("modified", {}).get("implanted_pe")
+        implanted_pes = details.get("scanned", {}).get("modified", {}).get("implanted_pe", 0)
         if implanted_pes > 0:
             implanted_pe_count = 0
             modules = []
