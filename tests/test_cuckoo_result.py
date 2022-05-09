@@ -837,12 +837,13 @@ class TestCuckooResult:
         from assemblyline_v4_service.common.result import ResultSection
         from cuckoo.cuckoo_result import _tag_and_describe_call_signature
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology, Process
+        safelist = []
         expected_result = ResultSection("blah", body=expected_body, tags=expected_tags)
         actual_result = ResultSection("blah")
         process_map = {1: {"name": "blah"}}
         so_sig = SandboxOntology.Signature()
         default_sig = so_sig.as_primitives()
-        _tag_and_describe_call_signature(signature_name, mark, actual_result, process_map, so_sig)
+        _tag_and_describe_call_signature(signature_name, mark, actual_result, process_map, safelist, so_sig)
         assert check_section_equality(actual_result, expected_result)
         for expected_ioc in expected_iocs:
             so_sig_ioc = SandboxOntology.Signature.Subject().as_primitives()
@@ -872,7 +873,8 @@ class TestCuckooResult:
         from cuckoo.cuckoo_result import _get_dns_sec
         from json import dumps
         resolved_ips = {}
-        assert _get_dns_sec(resolved_ips) is None
+        safelist = []
+        assert _get_dns_sec(resolved_ips, safelist) is None
         resolved_ips = {"1.1.1.1": {"domain": "blah.com"}}
         expected_res_sec = ResultSection(
             "Protocol: DNS",
@@ -883,7 +885,7 @@ class TestCuckooResult:
         expected_res_sec.add_tag("network.protocol", "dns")
         expected_res_sec.add_tag("network.dynamic.ip", "1.1.1.1")
         expected_res_sec.add_tag("network.dynamic.domain", "blah.com")
-        actual_res_sec = _get_dns_sec(resolved_ips)
+        actual_res_sec = _get_dns_sec(resolved_ips, safelist)
         assert check_section_equality(actual_res_sec, expected_res_sec)
 
     @staticmethod
