@@ -134,7 +134,7 @@ def generate_al_result(
     is_process_martian = False
 
     if network:
-        process_network(network, al_result, validated_random_ip_range, routing, process_map, info["id"],
+        process_network(network, al_result, validated_random_ip_range, routing, process_map,
                         safelist, so)
 
     if sigs:
@@ -394,7 +394,7 @@ def process_signatures(
                 elif f'\tProcess Name: {safe_str(process_name)} ({pid})' not in sig_res.body:
                     sig_res.add_line(f'\tProcess Name: {safe_str(process_name)} ({pid})')
 
-                _tag_and_describe_call_signature(sig_name, mark, sig_res, process_map, so_sig)
+                _tag_and_describe_call_signature(sig_name, mark, sig_res, process_map, safelist, so_sig)
                 # Displaying the injected process
                 if get_signature_category(sig_name) == "Injection":
                     injected_process = mark["call"].get("arguments", {}).get("process_identifier")
@@ -423,8 +423,8 @@ def process_signatures(
 
 # TODO: break this up into methods
 def process_network(network: Dict[str, Any], parent_result_section: ResultSection, inetsim_network: IPv4Network,
-                    routing: str, process_map: Dict[int, Dict[str, Any]],
-                    task_id: int, safelist: Dict[str, Dict[str, List[str]]], so: SandboxOntology) -> None:
+                    routing: str, process_map: Dict[int, Dict[str, Any]], safelist: Dict[str, Dict[str, List[str]]],
+                    so: SandboxOntology) -> None:
     """
     This method processes the network section of the Cuckoo report, adding anything noteworthy to the
     Assemblyline report
@@ -444,7 +444,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     dns_servers: List[str] = network.get("dns_servers", [])
     dns_calls: List[Dict[str, Any]] = network.get("dns", [])
     resolved_ips: Dict[str, Dict[str, Any]] = _get_dns_map(dns_calls, process_map, routing, dns_servers)
-    dns_res_sec: Optional[ResultTableSection] = _get_dns_sec(resolved_ips)
+    dns_res_sec: Optional[ResultTableSection] = _get_dns_sec(resolved_ips, safelist)
 
     low_level_flows = {
         "udp": network.get("udp", []),
@@ -493,8 +493,8 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
 
             # If the record has not been removed then it should be tagged for protocol, domain, ip, and port
             _ = add_tag(netflows_sec, "network.protocol", network_flow["protocol"])
-            _ = add_tag(netflows_sec, "network.dynamic.ip", network_flow["dest_ip"], inetsim_network)
-            _ = add_tag(netflows_sec, "network.dynamic.ip", network_flow["src_ip"], inetsim_network)
+            _ = add_tag(netflows_sec, "network.dynamic.ip", network_flow["dest_ip"], safelist)
+            _ = add_tag(netflows_sec, "network.dynamic.ip", network_flow["src_ip"], safelist)
             _ = add_tag(netflows_sec, "network.port", network_flow["dest_port"])
             _ = add_tag(netflows_sec, "network.port", network_flow["src_port"])
 
@@ -553,12 +553,12 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         _ = add_tag(http_sec, "network.protocol", "http")
 
         for http_call in http_calls:
-            if not add_tag(http_sec, "network.dynamic.ip", http_call.connection_details.destination_ip) or http_call.connection_details.destination_ip in dns_servers:
+            if not add_tag(http_sec, "network.dynamic.ip", http_call.connection_details.destination_ip, safelist) or http_call.connection_details.destination_ip in dns_servers:
                 continue
             _ = add_tag(http_sec, "network.port", http_call.connection_details.destination_port)
             _ = add_tag(http_sec, "network.dynamic.domain", so.get_domain_by_destination_ip(
-                http_call.connection_details.destination_ip))
-            _ = add_tag(http_sec, "network.dynamic.uri", http_call.request_uri)
+                http_call.connection_details.destination_ip), safelist)
+            _ = add_tag(http_sec, "network.dynamic.uri", http_call.request_uri, safelist)
 
             # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
             if http_call.request_method == "GET":
@@ -570,7 +570,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                         remote_file_access_sec.add_line(f"\t{http_call.request_uri}")
                     if not remote_file_access_sec.heuristic:
                         remote_file_access_sec.set_heuristic(1003)
-                    _ = add_tag(remote_file_access_sec, "network.dynamic.uri", http_call.request_uri)
+                    _ = add_tag(remote_file_access_sec, "network.dynamic.uri", http_call.request_uri, safelist)
 
             user_agent = http_call.request_headers.get("UserAgent")
             if user_agent:
@@ -581,7 +581,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                     sus_user_agent_used = next((sus_user_agent for sus_user_agent in SUSPICIOUS_USER_AGENTS
                                                 if (sus_user_agent in user_agent)), None)
                     if sus_user_agent_used not in sus_user_agents_used:
-                        _ = add_tag(suspicious_user_agent_sec, "network.user_agent", sus_user_agent_used)
+                        _ = add_tag(suspicious_user_agent_sec, "network.user_agent", sus_user_agent_used, safelist)
                         suspicious_user_agent_sec.add_line(f"\t{sus_user_agent_used}")
                         sus_user_agents_used.append(sus_user_agent_used)
 
@@ -607,10 +607,12 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         parent_result_section.add_subsection(network_res)
 
 
-def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]]) -> ResultTableSection:
+def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]],
+                 safelist: Dict[str, Dict[str, List[str]]]) -> ResultTableSection:
     """
     This method creates the result section for DNS traffic
     :param resolved_ips: the mapping of resolved IPs and their corresponding domains
+    :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :return: the result section containing details that we care about
     """
     if len(resolved_ips.keys()) == 0:
@@ -621,8 +623,8 @@ def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]]) -> ResultTableSection:
     _ = add_tag(dns_res_sec, "network.protocol", "dns")
     for answer, request_dict in resolved_ips.items():
         request = request_dict["domain"]
-        _ = add_tag(dns_res_sec, "network.dynamic.ip", answer)
-        if add_tag(dns_res_sec, "network.dynamic.domain", request):
+        _ = add_tag(dns_res_sec, "network.dynamic.ip", answer, safelist)
+        if add_tag(dns_res_sec, "network.dynamic.domain", request, safelist):
             # If there is only UDP and no TCP traffic, then we need to tag the domains here:
             dns_request = {
                 "domain": request,
@@ -1421,10 +1423,10 @@ def _tag_and_describe_generic_signature(
         if "/wpad.dat" not in http_string[1] and not contains_safelisted_value(http_string[1], safelist):
             sig_res.add_line(
                 f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
-            if add_tag(sig_res, "network.dynamic.uri", http_string[1]):
+            if add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
                 so_sig.add_subject(uri=http_string[1])
     elif signature_name == "nolookup_communication":
-        if not is_ip_in_network(mark["host"], inetsim_network) and add_tag(sig_res, "network.dynamic.ip", mark["host"]):
+        if not is_ip_in_network(mark["host"], inetsim_network) and add_tag(sig_res, "network.dynamic.ip", mark["host"], safelist):
             sig_res.add_line(f"\tIOC: {mark['host']}")
             so_sig.add_subject(ip=mark["host"])
     elif signature_name == "suspicious_powershell":
@@ -1480,17 +1482,17 @@ def _tag_and_describe_ioc_signature(
         url_pieces = urlparse(http_string[1])
         if url_pieces.path not in SKIPPED_PATHS and re.match(FULL_URI, http_string[1]):
             sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
-            if add_tag(sig_res, "network.dynamic.uri", http_string[1]):
+            if add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
                 so_sig.add_subject(uri=http_string[1])
     elif signature_name == "process_interest":
         sig_res.add_line(f'\tIOC: {safe_str(ioc)} is a {mark["category"].replace("process: ", "")}.')
     elif signature_name == "network_icmp":
-        if not is_ip_in_network(ioc, inetsim_network) and add_tag(sig_res, "network.dynamic.ip", ioc):
+        if not is_ip_in_network(ioc, inetsim_network) and add_tag(sig_res, "network.dynamic.ip", ioc, safelist):
             so_sig.add_subject(ip=ioc)
             sig_res.add_line(f'\tPinged {safe_str(ioc)}.')
         else:
             domain = so.get_domain_by_destination_ip(ioc)
-            if add_tag(sig_res, "network.dynamic.domain", domain):
+            if add_tag(sig_res, "network.dynamic.domain", domain, safelist):
                 so_sig.add_subject(domain=domain)
                 sig_res.add_line(f'\tPinged {safe_str(domain)}.')
     elif signature_name in SILENT_IOCS:
@@ -1498,10 +1500,10 @@ def _tag_and_describe_ioc_signature(
         pass
     elif not is_valid_ip(ioc) or not is_ip_in_network(ioc, inetsim_network):
         if signature_name == "p2p_cnc":
-            if add_tag(sig_res, "network.dynamic.ip", ioc):
+            if add_tag(sig_res, "network.dynamic.ip", ioc, safelist):
                 so_sig.add_subject(ip=ioc)
         elif signature_name == "persistence_autorun":
-            _ = add_tag(sig_res, "dynamic.autorun_location", ioc)
+            _ = add_tag(sig_res, "dynamic.autorun_location", ioc, safelist)
         else:
             # If process ID in ioc, replace with process name
             for key in process_map:
@@ -1510,11 +1512,11 @@ def _tag_and_describe_ioc_signature(
         sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
 
     if mark["category"] in ["file", "dll"] and signature_name != "ransomware_mass_file_delete":
-        if add_tag(sig_res, "dynamic.process.file_name", ioc):
+        if add_tag(sig_res, "dynamic.process.file_name", ioc, safelist):
             so_sig.add_subject(file=ioc)
     elif mark["category"] == "cmdline":
         ioc = ioc.strip()
-        if add_tag(sig_res, "dynamic.process.command_line", ioc):
+        if add_tag(sig_res, "dynamic.process.command_line", ioc, safelist):
             process = so.get_process_by_command_line(ioc)
             if process:
                 so_sig.add_process_subject(**process.as_primitives())
@@ -1529,18 +1531,20 @@ def _tag_and_describe_ioc_signature(
     elif mark["category"] == "registry":
         so_sig.add_subject(registry=ioc)
     elif mark["category"] == "request":
-        if add_tag(sig_res, "network.dynamic.uri", ioc):
+        if add_tag(sig_res, "network.dynamic.uri", ioc, safelist):
             so_sig.add_subject(uri=ioc)
 
 
 def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultTextSection,
-                                     process_map: Dict[int, Dict[str, Any]], so_sig: SandboxOntology.Signature) -> None:
+                                     process_map: Dict[int, Dict[str, Any]], safelist: Dict[str, Dict[str, List[str]]],
+                                     so_sig: SandboxOntology.Signature) -> None:
     """
     This method adds the appropriate tags and descriptions for "call" signatures
     :param signature_name: The name of the signature
     :param mark: The indicator that Cuckoo has returned for why the signature has been raised
     :param sig_res: A ResultTextSection containing details about the signature
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
+    :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :param so_sig: The signature for the Sandbox Ontology
     :return: None
     """
@@ -1550,7 +1554,7 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
     so_sig.update_process(start_time=mark["call"].get("time"))
     if signature_name == "creates_hidden_file":
         file_path = mark["call"].get("arguments", {}).get("filepath")
-        if add_tag(sig_res, "dynamic.process.file_name", file_path):
+        if add_tag(sig_res, "dynamic.process.file_name", file_path, safelist):
             sig_res.add_line(f"IOC: {file_path}")
             so_sig.add_subject(file=file_path)
     elif signature_name == "moves_self":
@@ -1558,13 +1562,13 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         newfilepath = mark["call"].get("arguments", {}).get("newfilepath")
         if oldfilepath and newfilepath:
             sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}\n\tNew file path: {safe_str(newfilepath)}')
-            if add_tag(sig_res, "dynamic.process.file_name", oldfilepath):
+            if add_tag(sig_res, "dynamic.process.file_name", oldfilepath, safelist):
                 so_sig.add_subject(file=oldfilepath)
-            if add_tag(sig_res, "dynamic.process.file_name", newfilepath):
+            if add_tag(sig_res, "dynamic.process.file_name", newfilepath, safelist):
                 so_sig.add_subject(file=newfilepath)
         elif oldfilepath and newfilepath == "":
             sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}\n\tNew file path: File deleted itself')
-            if add_tag(sig_res, "dynamic.process.file_name", oldfilepath):
+            if add_tag(sig_res, "dynamic.process.file_name", oldfilepath, safelist):
                 so_sig.add_subject(file=oldfilepath)
     elif signature_name == "creates_service":
         service_name = mark["call"].get("arguments", {}).get("service_name")
@@ -1583,9 +1587,9 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         download_path = mark["call"].get("arguments", {}).get("filepath")
         url = mark["call"].get("arguments", {}).get("url")
         if download_path:
-            if add_tag(sig_res, "dynamic.process.file_name", download_path):
+            if add_tag(sig_res, "dynamic.process.file_name", download_path, safelist):
                 so_sig.add_subject(file=download_path)
-        if url and add_tag(sig_res, "network.dynamic.uri", url):
+        if url and add_tag(sig_res, "network.dynamic.uri", url, safelist):
             so_sig.add_subject(uri=url)
         if download_path and url:
             sig_res.add_line(f'\tThe file at {safe_str(url)} was attempted to be downloaded to {download_path}')
