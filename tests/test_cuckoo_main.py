@@ -1328,7 +1328,7 @@ class TestCuckooMain:
     def test_assign_file_extension(
             file_type, test_file_name, correct_file_extension, correct_file_name, cuckoo_class_instance,
             dummy_request_class):
-        from assemblyline.common.identify import tag_to_extension
+        from assemblyline.common.identify_defaults import type_to_extension
         from cuckoo.cuckoo_main import SUPPORTED_EXTENSIONS
         kwargs = dict()
         is_bin = False
@@ -1338,7 +1338,7 @@ class TestCuckooMain:
         cuckoo_class_instance.request.file_type = file_type
 
         original_ext = cuckoo_class_instance.file_name.rsplit('.', 1)
-        tag_extension = tag_to_extension.get(file_type)
+        tag_extension = type_to_extension.get(file_type)
         if tag_extension is not None and 'unknown' not in file_type:
             file_ext = tag_extension
         elif len(original_ext) == 2:
