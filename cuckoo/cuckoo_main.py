@@ -21,23 +21,23 @@ from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
 from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
 from assemblyline_v4_service.common.request import ServiceRequest
-from assemblyline_v4_service.common.result import Result, ResultSection, ResultImageSection, ResultTextSection, ResultKeyValueSection
+from assemblyline_v4_service.common.result import Result, ResultSection, ResultImageSection, ResultTextSection, \
+    ResultKeyValueSection
 from assemblyline_v4_service.common.safelist_helper import is_tag_safelisted
 from assemblyline_v4_service.common.tag_helper import add_tag
 
 from assemblyline.common.str_utils import safe_str
-from assemblyline.common.identify import tag_to_extension
+from assemblyline.common.identify_defaults import type_to_extension, trusted_mimes, magic_patterns
 from assemblyline.common.exceptions import RecoverableError, ChainException
-from assemblyline.common.constants import RECOGNIZED_TYPES
 from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
 from cuckoo.cuckoo_result import ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, \
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 
-HOLLOWSHUNTER_REPORT_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
-HOLLOWSHUNTER_DUMP_REGEX = "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
-INJECTED_EXE_REGEX = "^\/tmp\/%s_injected_memory_[0-9]{1,2}\.exe$"
+HOLLOWSHUNTER_REPORT_REGEX = r"hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
+HOLLOWSHUNTER_DUMP_REGEX = r"hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
+INJECTED_EXE_REGEX = r"^\/tmp\/%s_injected_memory_[0-9]{1,2}\.exe$"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
@@ -69,11 +69,17 @@ LINUX_PLATFORM = "linux"
 MACHINE_NAME_REGEX = f"(?:{'|'.join([LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX])})(.*)" \
                      f"(?:{'|'.join([x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX])})"
 
+# TODO: RECOGNIZED_TYPES does not exist anymore and there a no static ways we can generate this because it can be
+#       modified on the fly by administrators. I will fake a RECOGNIZED_TYPES variable but this code should be removed
+#       and the checks to determine the architecture should be self contained in the _determine_relevant_images function
+RECOGNIZED_TYPES = set(trusted_mimes.values())
+RECOGNIZED_TYPES = RECOGNIZED_TYPES.union(set([x['al_type'] for x in magic_patterns]))
+
 LINUX_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["linux", "32"])]
 LINUX_x64_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["linux", "64"])]
 WINDOWS_x86_FILES = [file_type for file_type in RECOGNIZED_TYPES if all(val in file_type for val in ["windows", "32"])]
 
-ILLEGAL_FILENAME_CHARS = set('<>:"/\|?*')
+ILLEGAL_FILENAME_CHARS = set('<>:"/\\|?*')
 
 # Enumeration for statuses
 TASK_MISSING = "missing"
@@ -220,7 +226,8 @@ class Cuckoo(ServiceBase):
             del host["api_key"]
         self.hosts = self.config["remote_host_details"]["hosts"]
         self.ssdeep_match_pct = int(self.config.get("dedup_similar_percent", 40))
-        self.connection_timeout_in_seconds = self.config.get("connection_timeout_in_seconds", DEFAULT_CONNECTION_TIMEOUT)
+        self.connection_timeout_in_seconds = self.config.get(
+            "connection_timeout_in_seconds", DEFAULT_CONNECTION_TIMEOUT)
         self.timeout = self.config.get("rest_timeout_in_seconds", DEFAULT_REST_TIMEOUT)
         self.connection_attempts = self.config.get("connection_attempts", DEFAULT_CONNECTION_ATTEMPTS)
         self.max_report_size = self.config.get('max_report_size', 275000000)
@@ -237,7 +244,7 @@ class Cuckoo(ServiceBase):
     def execute(self, request: ServiceRequest) -> None:
         if not len(self.hosts):
             raise CuckooHostsUnavailable(
-                f"All hosts are unavailable at the moment, as determined by a previous execution.")
+                "All hosts are unavailable at the moment, as determined by a previous execution.")
 
         self.request = request
         self.session = requests.Session()
@@ -496,7 +503,8 @@ class Cuckoo(ServiceBase):
             task_timeout_sec.add_line(
                 f"The Cuckoo task {cuckoo_task.id} took longer than the Assemblyline's task timeout would allow.")
             task_timeout_sec.add_line(
-                "This is usually due to an issue on Cuckoo's machinery end. Contact the Cuckoo administrator for details.")
+                "This is usually due to an issue on Cuckoo's machinery end."
+                " Contact the Cuckoo administrator for details.")
             parent_section.add_subsection(task_timeout_sec)
             cuckoo_task.id = None
             raise AnalysisTimeoutExceeded()
@@ -509,7 +517,8 @@ class Cuckoo(ServiceBase):
             # Add a subsection detailing what's happening and then moving on
             analysis_failed_sec = ResultTextSection("Cuckoo Analysis Failed.")
             analysis_failed_sec.add_line(
-                f"The analysis of Cuckoo task {cuckoo_task.id} has failed. Contact the Cuckoo administrator for details.")
+                f"The analysis of Cuckoo task {cuckoo_task.id} has failed."
+                " Contact the Cuckoo administrator for details.")
             parent_section.add_subsection(analysis_failed_sec)
             raise AnalysisFailed()
 
@@ -789,10 +798,13 @@ class Cuckoo(ServiceBase):
             for attempt in range(self.connection_attempts):
                 query_machines_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_MACHINES}"
                 try:
-                    resp = self.session.get(query_machines_url, headers=host["auth_header"], timeout=self.connection_timeout_in_seconds)
+                    resp = self.session.get(
+                        query_machines_url, headers=host["auth_header"],
+                        timeout=self.connection_timeout_in_seconds)
                 except requests.exceptions.Timeout:
                     self.log.error(
-                        f"{query_machines_url} timed out after {self.connection_timeout_in_seconds}s while trying to query machines")
+                        f"{query_machines_url} timed out after {self.connection_timeout_in_seconds}s"
+                        " while trying to query machines")
                     if attempt == self.connection_attempts - 1:
                         number_of_unavailable_hosts += 1
                         self.hosts.remove(host)
@@ -981,7 +993,8 @@ class Cuckoo(ServiceBase):
     def _add_operating_system_tags(
             machine_name: str, platform: str, machine_section: ResultKeyValueSection, so: SandboxOntology) -> None:
         """
-        This method adds tags to the ResultKeyValueSection related to the operating system of the machine that a task was ran on
+        This method adds tags to the ResultKeyValueSection related
+        to the operating system of the machine that a task was ran on
         :param machine_name: The name of the machine that the task was ran on
         :param platform: The platform of the machine that the task was ran on
         :param machine_section: The ResultKeyValueSection containing details about the machine
@@ -1045,7 +1058,7 @@ class Cuckoo(ServiceBase):
         """
         # Check the file extension
         original_ext = self.file_name.rsplit('.', 1)
-        tag_extension = tag_to_extension.get(self.request.file_type)
+        tag_extension = type_to_extension.get(self.request.file_type)
 
         # NOTE: Cuckoo still tries to identify files itself, so we only force the extension/package
         # if the user specifies one. However, we go through the trouble of renaming the file because
@@ -1765,7 +1778,8 @@ class Cuckoo(ServiceBase):
             no_platform_sec.add_line(f"The requested platform '{specific_platform}' is currently unavailable.")
             no_platform_sec.add_line("General Information:")
             no_platform_sec.add_line(
-                f"At the moment, the current platform options for this Cuckoo deployment include {sorted(machine_platform_set)}.")
+                "At the moment, the current platform options for "
+                f"this Cuckoo deployment include {sorted(machine_platform_set)}.")
             self.file_res.add_section(no_platform_sec)
         else:
             kwargs["platform"] = specific_platform
