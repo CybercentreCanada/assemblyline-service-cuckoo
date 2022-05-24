@@ -516,7 +516,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     for answer, request in resolved_ips.items():
         nd = so.create_network_dns(domain=request["domain"], resolved_ips=[answer], lookup_type=request["type"])
         nd.update_connection_details(
-            destination_ip=dns_servers[0],
+            destination_ip=dns_servers[0] if dns_servers else None,
             destination_port=53, transport_layer_protocol="udp", direction="outbound")
         nd.update_process(pid=request["process_id"], image=request["process_name"], guid=request["guid"])
         so.add_network_dns(nd)
