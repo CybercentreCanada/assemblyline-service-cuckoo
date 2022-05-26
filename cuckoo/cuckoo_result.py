@@ -790,6 +790,8 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                 host = host.split(":")[0]
             if not host:
                 continue
+            if is_valid_ip(host) and "dst" not in http_call:
+                http_call["dst"] = host
 
             if "ex" in protocol:
                 path = http_call["uri"]

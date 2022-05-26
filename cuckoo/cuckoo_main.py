@@ -10,7 +10,7 @@ from ssdeep import hash as ssdeep_hash, compare as ssdeep_compare
 from sys import maxsize, setrecursionlimit
 import requests
 from retrying import retry, RetryError
-from tarfile import open, TarFile
+from tarfile import open as tarfile_open, TarFile
 from tempfile import SpooledTemporaryFile
 from time import time
 from threading import Thread
@@ -833,7 +833,7 @@ class Cuckoo(ServiceBase):
         task_dir = os.path.join(self.working_directory, f"{cuckoo_task.id}")
         if dropped_tar_bytes is not None:
             try:
-                dropped_tar = open(fileobj=BytesIO(dropped_tar_bytes))
+                dropped_tar = tarfile_open(fileobj=BytesIO(dropped_tar_bytes))
                 for tarobj in dropped_tar:
                     if tarobj.isfile() and not tarobj.isdir():  # a file, not a dir
                         # A dropped file found
@@ -1342,7 +1342,7 @@ class Cuckoo(ServiceBase):
         tar_report_path = os.path.join(self.working_directory, tar_file_name)
 
         self._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
-        tar_obj = open(tar_report_path)
+        tar_obj = tarfile_open(tar_report_path)
 
         try:
             report_json_path = self._add_json_as_supplementary_file(tar_obj, cuckoo_task)
@@ -1444,10 +1444,10 @@ class Cuckoo(ServiceBase):
         except JSONDecodeError as e:
             self.log.exception(f"Failed to decode the json: {str(e)}")
             raise e
-        except Exception:
+        except Exception as e:
             url = cuckoo_task.query_report_url % cuckoo_task.id + '/' + "all"
             raise Exception(f"Exception converting extracted cuckoo report into json from tar ball: "
-                            f"report url: {url}, file_name: {self.file_name}")
+                            f"report url: {url}, file_name: {self.file_name} due to {e}")
         try:
             machine_name: Optional[str] = None
             report_info = cuckoo_task.report.get('info', {})

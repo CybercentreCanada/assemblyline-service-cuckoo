@@ -1127,7 +1127,7 @@ class TestCuckooMain:
 
         mocker.patch.object(Cuckoo, "query_report", return_value=s.getvalue())
         cuckoo_class_instance.check_dropped(cuckoo_task)
-        assert cuckoo_class_instance.artifact_list[0]["name"] == f"1_blah.txt"
+        assert cuckoo_class_instance.artifact_list[0]["name"] == "1_blah.txt"
         assert cuckoo_class_instance.artifact_list[0]["description"] == 'Dropped file during Cuckoo analysis.'
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
@@ -1617,7 +1617,7 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, "_build_report")
         mocker.patch.object(Cuckoo, "_extract_hollowshunter")
         mocker.patch.object(Cuckoo, "_extract_artifacts")
-        mocker.patch("cuckoo.cuckoo_main.tarfile.open", return_value=dummy_tar_class())
+        mocker.patch("cuckoo.cuckoo_main.tarfile_open", return_value=dummy_tar_class())
 
         cuckoo_class_instance._unpack_tar(tar_report, file_ext, cuckoo_task, parent_section, so)
         assert True
@@ -1712,7 +1712,7 @@ class TestCuckooMain:
         report_json = report_info
 
         mocker.patch("builtins.open")
-        mocker.patch("json.loads", return_value=report_json)
+        mocker.patch("cuckoo.cuckoo_main.loads", return_value=report_json)
         mocker.patch.object(Cuckoo, "report_machine_info")
         mocker.patch("cuckoo.cuckoo_main.generate_al_result")
         mocker.patch.object(Cuckoo, "delete_task")
@@ -1743,11 +1743,11 @@ class TestCuckooMain:
             cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section, so)
 
         # Exception tests for json.loads
-        mocker.patch("json.loads", side_effect=JSONDecodeError("blah", dummy_json_doc_class_instance, 1))
+        mocker.patch("cuckoo.cuckoo_main.loads", side_effect=JSONDecodeError("blah", dummy_json_doc_class_instance, 1))
         with pytest.raises(JSONDecodeError):
             cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section, so)
 
-        mocker.patch("json.loads", side_effect=Exception("blah"))
+        mocker.patch("cuckoo.cuckoo_main.loads", side_effect=Exception("blah"))
         with pytest.raises(Exception):
             cuckoo_class_instance._build_report(report_json_path, file_ext, cuckoo_task, parent_section, so)
 
