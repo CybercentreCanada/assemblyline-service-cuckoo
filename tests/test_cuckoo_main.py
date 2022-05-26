@@ -364,8 +364,8 @@ class TestModule:
     @staticmethod
     def test_file_constants():
         from cuckoo.cuckoo_main import LINUX_x86_FILES, LINUX_x64_FILES, WINDOWS_x86_FILES
-        assert set(LINUX_x86_FILES) == {"executable/linux/elf32", "executable/linux/so32"}
-        assert set(LINUX_x64_FILES) == {"executable/linux/elf64", "executable/linux/so64"}
+        assert set(LINUX_x86_FILES) == {"executable/linux/elf32", "executable/linux/so32", "executable/linux/coff32"}
+        assert set(LINUX_x64_FILES) == {"executable/linux/elf64", "executable/linux/so64", "executable/linux/ia/coff64", "executable/linux/coff64"}
         assert set(WINDOWS_x86_FILES) == {'executable/windows/pe32', 'executable/windows/dll32'}
 
     @staticmethod
