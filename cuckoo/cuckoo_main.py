@@ -1,21 +1,20 @@
-import io
-import json
+from email.header import decode_header
+from hashlib import sha256
+from io import BytesIO
+from json import JSONDecodeError, loads
 import os
-import tarfile
-import random
-from json import JSONDecodeError
-import ssdeep
-import hashlib
 from pefile import PE, PEFormatError
-import re
-import email.header
-import sys
+from random import choice, random
+from re import compile, match
+from ssdeep import hash as ssdeep_hash, compare as ssdeep_compare
+from sys import maxsize, setrecursionlimit
 import requests
-import tempfile
+from retrying import retry, RetryError
+from tarfile import open, TarFile
+from tempfile import SpooledTemporaryFile
+from time import time
 from threading import Thread
 from typing import Optional, Dict, List, Any, Set, Tuple
-
-from retrying import retry, RetryError
 
 from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
@@ -400,6 +399,7 @@ class Cuckoo(ServiceBase):
             cuckoo_task.id = parent_task_id
 
         try:
+            start_time = time()
             self.submit(self.request.file_contents, cuckoo_task, parent_section, reboot)
 
             if cuckoo_task.id:
@@ -408,10 +408,11 @@ class Cuckoo(ServiceBase):
                 raise Exception(f"Task ID is None. File failed to be submitted to the Cuckoo nest at "
                                 f"{host_to_use['ip']}.")
         except AnalysisTimeoutExceeded:
-            pass
+            so.update_analysis_metadata(start_time=start_time, end_time=time())
         except AnalysisFailed:
-            pass
+            so.update_analysis_metadata(start_time=start_time, end_time=time())
         except Exception as e:
+            so.update_analysis_metadata(start_time=start_time, end_time=time())
             self.log.error(repr(e))
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
@@ -646,7 +647,7 @@ class Cuckoo(ServiceBase):
         self.log.debug(f"Querying report for task {cuckoo_task.id} - format: {fmt}")
         try:
             # There are edge cases that require us to stream the report to disk
-            temp_report = tempfile.SpooledTemporaryFile()
+            temp_report = SpooledTemporaryFile()
             with self.session.get(cuckoo_task.query_report_url % cuckoo_task.id + '/' + fmt, params=params or {},
                                   headers=cuckoo_task.auth_header, timeout=self.timeout, stream=True) as resp:
                 if int(resp.headers["Content-Length"]) > self.max_report_size:
@@ -766,7 +767,7 @@ class Cuckoo(ServiceBase):
         except requests.ConnectionError:
             raise Exception(f"Unable to reach the Cuckoo nest while trying to delete task {cuckoo_task.id}")
         if resp.status_code == 500 and \
-                json.loads(resp.text).get("message") == "The task is currently being processed, cannot delete":
+                loads(resp.text).get("message") == "The task is currently being processed, cannot delete":
             raise Exception(f"The task {cuckoo_task.id} is currently being processed, cannot delete")
         elif resp.status_code != 200:
             self.log.error(f"Failed to delete task {cuckoo_task.id}. Status code: {resp.status_code}")
@@ -832,7 +833,7 @@ class Cuckoo(ServiceBase):
         task_dir = os.path.join(self.working_directory, f"{cuckoo_task.id}")
         if dropped_tar_bytes is not None:
             try:
-                dropped_tar = tarfile.open(fileobj=io.BytesIO(dropped_tar_bytes))
+                dropped_tar = open(fileobj=BytesIO(dropped_tar_bytes))
                 for tarobj in dropped_tar:
                     if tarobj.isfile() and not tarobj.isdir():  # a file, not a dir
                         # A dropped file found
@@ -845,17 +846,17 @@ class Cuckoo(ServiceBase):
                         with open(dropped_file_path, 'rb') as f:
                             data = f.read()
                             if not self.request.task.deep_scan:
-                                ssdeep_hash = ssdeep.hash(data)
+                                ssd_hash = ssdeep_hash(data)
                                 skip_file = False
                                 for seen_hash in added_hashes:
-                                    if ssdeep.compare(ssdeep_hash, seen_hash) >= self.ssdeep_match_pct:
+                                    if ssdeep_compare(ssd_hash, seen_hash) >= self.ssdeep_match_pct:
                                         skip_file = True
                                         break
                                 if skip_file is True:
                                     continue
                                 else:
-                                    added_hashes.add(ssdeep_hash)
-                            dropped_hash = hashlib.sha256(data).hexdigest()
+                                    added_hashes.add(ssd_hash)
+                            dropped_hash = sha256(data).hexdigest()
                             if dropped_hash == self.request.sha256:
                                 continue
                         if not is_tag_safelisted(dropped_name, ["file.path"], self.safelist, substring=True) or \
@@ -888,7 +889,7 @@ class Cuckoo(ServiceBase):
                 ps1_file_name = f"{task_id}_powershell_logging.ps1"
                 ps1_path = os.path.join(self.working_directory, ps1_file_name)
                 with open(ps1_path, "a") as fh:
-                    for item in json.loads(section.body):
+                    for item in loads(section.body):
                         fh.write(item["original"] + "\n")
                 fh.close()
                 self.log.debug(f"Adding extracted file for task {task_id}: {ps1_file_name}")
@@ -1001,7 +1002,7 @@ class Cuckoo(ServiceBase):
 
         # The assumption here is that a machine's name will contain somewhere in it the
         # pattern: <platform prefix><version><processor>
-        m = re.compile(MACHINE_NAME_REGEX).search(machine_name)
+        m = compile(MACHINE_NAME_REGEX).search(machine_name)
         if m and len(m.groups()) == 1:
             version = m.group(1)
             if add_tag(machine_section, "dynamic.operating_system.version", version):
@@ -1013,11 +1014,11 @@ class Cuckoo(ServiceBase):
         :return: None
         """
         # Check the filename to see if it's mime encoded
-        mime_re = re.compile(r"^=\?.*\?=$")
+        mime_re = compile(r"^=\?.*\?=$")
         if mime_re.match(self.file_name):
             self.log.debug("Found a mime encoded filename, will try and decode")
             try:
-                decoded_filename = email.header.decode_header(self.file_name)
+                decoded_filename = decode_header(self.file_name)
                 new_filename = decoded_filename[0][0].decode(decoded_filename[0][1])
                 self.log.debug(f"Using decoded filename {new_filename}")
                 self.file_name = new_filename
@@ -1341,7 +1342,7 @@ class Cuckoo(ServiceBase):
         tar_report_path = os.path.join(self.working_directory, tar_file_name)
 
         self._add_tar_ball_as_supplementary_file(tar_file_name, tar_report_path, tar_report, cuckoo_task)
-        tar_obj = tarfile.open(tar_report_path)
+        tar_obj = open(tar_report_path)
 
         try:
             report_json_path = self._add_json_as_supplementary_file(tar_obj, cuckoo_task)
@@ -1390,7 +1391,7 @@ class Cuckoo(ServiceBase):
             self.log.exception(f"Unable to add tar of complete report for "
                                f"task {cuckoo_task.id} due to {e}")
 
-    def _add_json_as_supplementary_file(self, tar_obj: tarfile.TarFile, cuckoo_task: CuckooTask) -> str:
+    def _add_json_as_supplementary_file(self, tar_obj: TarFile, cuckoo_task: CuckooTask) -> str:
         """
         This method adds the JSON report as a supplementary file to Assemblyline
         :param tar_obj: The tarball object, containing the analysis artifacts for the task
@@ -1437,9 +1438,9 @@ class Cuckoo(ServiceBase):
         """
         try:
             # Setting environment recursion limit for large JSONs
-            sys.setrecursionlimit(int(self.config['recursion_limit']))
+            setrecursionlimit(int(self.config['recursion_limit']))
             # Reading, decoding and converting to JSON
-            cuckoo_task.report = json.loads(open(report_json_path, "rb").read().decode('utf-8'))
+            cuckoo_task.report = loads(open(report_json_path, "rb").read().decode('utf-8'))
         except JSONDecodeError as e:
             self.log.exception(f"Failed to decode the json: {str(e)}")
             raise e
@@ -1509,7 +1510,7 @@ class Cuckoo(ServiceBase):
         injected_exes: List[str] = []
         for f in os.listdir(temp_dir):
             file_path = os.path.join(temp_dir, f)
-            if os.path.isfile(file_path) and re.match(INJECTED_EXE_REGEX % task_id, file_path):
+            if os.path.isfile(file_path) and match(INJECTED_EXE_REGEX % task_id, file_path):
                 injected_exes.append(file_path)
 
         for injected_exe in injected_exes:
@@ -1522,7 +1523,7 @@ class Cuckoo(ServiceBase):
             self.artifact_list.append(artifact)
             self.log.debug(f"Adding extracted file for task {task_id}: {injected_exe}")
 
-    def _extract_artifacts(self, tar_obj: tarfile.TarFile, task_id: int, parent_section: ResultSection,
+    def _extract_artifacts(self, tar_obj: TarFile, task_id: int, parent_section: ResultSection,
                            so: SandboxOntology) -> None:
         """
         This method extracts certain artifacts from that tarball
@@ -1600,7 +1601,7 @@ class Cuckoo(ServiceBase):
         if image_section.body:
             parent_section.add_subsection(image_section)
 
-    def _extract_hollowshunter(self, tar_obj: tarfile.TarFile, task_id: int) -> None:
+    def _extract_hollowshunter(self, tar_obj: TarFile, task_id: int) -> None:
         """
         This method extracts HollowsHunter dumps from the tarball
         :param tar_obj: The tarball object, containing the analysis artifacts for the task
@@ -1608,8 +1609,8 @@ class Cuckoo(ServiceBase):
         :return: None
         """
         task_dir = os.path.join(self.working_directory, f"{task_id}")
-        report_pattern = re.compile(HOLLOWSHUNTER_REPORT_REGEX)
-        dump_pattern = re.compile(HOLLOWSHUNTER_DUMP_REGEX)
+        report_pattern = compile(HOLLOWSHUNTER_REPORT_REGEX)
+        dump_pattern = compile(HOLLOWSHUNTER_DUMP_REGEX)
         report_list = list(filter(report_pattern.match, tar_obj.getnames()))
         dump_list = list(filter(dump_pattern.match, tar_obj.getnames()))
 
@@ -1817,7 +1818,7 @@ class Cuckoo(ServiceBase):
         # This method will be used to determine the host to use for a submission
         # Key aspect that we are using to make a decision is the # of pending tasks, aka the queue size
         host_details: List[Dict[str, Any], int] = []
-        min_queue_size = sys.maxsize
+        min_queue_size = maxsize
         for host in hosts:
             host_status_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_HOST}"
             try:
@@ -1841,7 +1842,7 @@ class Cuckoo(ServiceBase):
         min_queue_hosts = [host_detail["host"] for host_detail in host_details
                            if host_detail["queue_size"] == min_queue_size]
         if len(min_queue_hosts) > 0:
-            return random.choice(min_queue_hosts)
+            return choice(min_queue_hosts)
         else:
             raise CuckooVMBusyException(f"No host available for submission between {[host['ip'] for host in hosts]}")
 
@@ -1945,6 +1946,6 @@ def generate_random_words(num_words: int) -> str:
     :return: A bunch of random words
     """
     alpha_nums = [chr(x + 65) for x in range(26)] + [chr(x + 97) for x in range(26)] + [str(x) for x in range(10)]
-    return " ".join(["".join([random.choice(alpha_nums)
-                              for _ in range(int(random.random() * 10) + 2)])
+    return " ".join(["".join([choice(alpha_nums)
+                              for _ in range(int(random() * 10) + 2)])
                      for _ in range(num_words)])
