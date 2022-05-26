@@ -1,11 +1,11 @@
-import datetime
-from logging import getLogger
-import re
-import os
-import json
+from datetime import datetime
 from ipaddress import ip_address, ip_network, IPv4Network
-from urllib.parse import urlparse
+from json import dumps
+from logging import getLogger
+import os
+from re import match as re_match, search
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
@@ -173,9 +173,9 @@ def process_info(info: Dict[str, Any], routing: str, parent_result_section: Resu
     duration = info['duration']
     analysis_time = -1  # Default error time
     try:
-        start_time_str = datetime.datetime.fromtimestamp(int(start_time)).strftime('%Y-%m-%d %H:%M:%S')
-        end_time_str = datetime.datetime.fromtimestamp(int(end_time)).strftime('%Y-%m-%d %H:%M:%S')
-        duration_str = datetime.datetime.fromtimestamp(int(duration)).strftime('%Hh %Mm %Ss')
+        start_time_str = datetime.fromtimestamp(int(start_time)).strftime('%Y-%m-%d %H:%M:%S')
+        end_time_str = datetime.fromtimestamp(int(end_time)).strftime('%Y-%m-%d %H:%M:%S')
+        duration_str = datetime.fromtimestamp(int(duration)).strftime('%Hh %Mm %Ss')
         analysis_time = duration_str + "\t(" + start_time_str + " to " + end_time_str + ")"
     except Exception:
         pass
@@ -563,7 +563,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
             if http_call.request_method == "GET":
                 split_path = http_call.request_uri.rsplit("/", 1)
-                if len(split_path) > 1 and re.search(r'[^\\]*\.(\w+)$', split_path[-1]):
+                if len(split_path) > 1 and search(r'[^\\]*\.(\w+)$', split_path[-1]):
                     if not remote_file_access_sec.body:
                         remote_file_access_sec.add_line(f"\t{http_call.request_uri}")
                     elif f"\t{http_call.request_uri}" not in remote_file_access_sec.body:
@@ -735,8 +735,8 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
                                                      f"in the supplementary PCAP file included with the analysis.")
                     netflows_sec.add_subsection(too_many_unique_ips_sec)
                     break
-                dst_port_pair = json.dumps({network_call["dst"]: network_call["dport"]})
-                if dst_port_pair not in [json.dumps({x["dst"]: x["dport"]}) for x in network_calls_made_to_unique_ips]:
+                dst_port_pair = dumps({network_call["dst"]: network_call["dport"]})
+                if dst_port_pair not in [dumps({x["dst"]: x["dport"]}) for x in network_calls_made_to_unique_ips]:
                     network_calls_made_to_unique_ips.append(network_call)
             network_calls = network_calls_made_to_unique_ips
         for network_call in network_calls:
@@ -790,6 +790,8 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                 host = host.split(":")[0]
             if not host:
                 continue
+            if is_valid_ip(host) and "dst" not in http_call:
+                http_call["dst"] = host
 
             if "ex" in protocol:
                 path = http_call["uri"]
@@ -809,7 +811,7 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                     host, ["network.dynamic.ip", "network.dynamic.domain"],
                     safelist) or is_tag_safelisted(
                     uri, ["network.dynamic.uri"],
-                    safelist) or "/wpad.dat" in uri or not re.match(FULL_URI, uri):
+                    safelist) or "/wpad.dat" in uri or not re_match(FULL_URI, uri):
                 continue
 
             request_body_path = http_call.get("req", {}).get("path")
@@ -921,7 +923,7 @@ def process_all_events(
                 continue
             events_section.add_row(
                 TableRow(
-                    time_observed=datetime.datetime.fromtimestamp(event.objectid.time_observed).strftime(
+                    time_observed=datetime.fromtimestamp(event.objectid.time_observed).strftime(
                         '%Y-%m-%d %H:%M:%S.%f')[: -3],
                     process_name=f"{getattr(event.process, 'image', None)} ({getattr(event.process, 'pid', None)})",
                     details={"protocol": event.transport_layer_protocol, "domain": so.get_domain_by_destination_ip(
@@ -933,7 +935,7 @@ def process_all_events(
             _ = add_tag(events_section, "dynamic.process.command_line", event.command_line)
             extract_iocs_from_text_blob(event.command_line, event_ioc_table)
             _ = add_tag(events_section, "dynamic.process.file_name", event.image)
-            events_section.add_row(TableRow(time_observed=datetime.datetime.fromtimestamp(event.start_time).strftime(
+            events_section.add_row(TableRow(time_observed=datetime.fromtimestamp(event.start_time).strftime(
                 '%Y-%m-%d %H:%M:%S.%f')[: -3],
                 process_name=f"{event.image} ({event.pid})",
                 details={"command_line": event.command_line, }))
@@ -1006,7 +1008,7 @@ def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any]
                 name = data["@Name"]
                 text = data.get("#text")
                 if name == "UtcTime":
-                    network_conn["time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                    network_conn["time"] = datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
                 elif name == "ProcessGuid":
                     network_conn["guid"] = text
                 elif name == "ProcessId":
@@ -1058,7 +1060,7 @@ def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any]
                 if text is None:
                     continue
                 if name == "UtcTime":
-                    dns_query["time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                    dns_query["time"] = datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
                 elif name == "ProcessGuid":
                     dns_query["guid"] = text
                 elif name == "ProcessId":
@@ -1067,7 +1069,7 @@ def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any]
                     if not is_tag_safelisted(text, ["network.dynamic.domain"], safelist):
                         dns_query["request"] = text
                 elif name == "QueryResults":
-                    ip = re.search(IP_REGEX, text)
+                    ip = search(IP_REGEX, text)
                     if ip:
                         ip = ip.group(0)
                         dns_query["answers"].append({"data": ip, "type": "A"})
@@ -1290,7 +1292,7 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
                 elif name in ["network_http", "network_http_post"]:
                     http_string = ioc.split()
                     url_pieces = urlparse(http_string[1])
-                    if url_pieces.path in SKIPPED_PATHS or not re.match(FULL_URI, http_string[1]):
+                    if url_pieces.path in SKIPPED_PATHS or not re_match(FULL_URI, http_string[1]):
                         fp_count += 1
                 elif name in ["dead_host"]:
                     ip, _ = ioc.split(":")
@@ -1480,7 +1482,7 @@ def _tag_and_describe_ioc_signature(
     if signature_name in ["network_http", "network_http_post"]:
         http_string = ioc.split()
         url_pieces = urlparse(http_string[1])
-        if url_pieces.path not in SKIPPED_PATHS and re.match(FULL_URI, http_string[1]):
+        if url_pieces.path not in SKIPPED_PATHS and re_match(FULL_URI, http_string[1]):
             sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
             if add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
                 so_sig.add_subject(uri=http_string[1])
@@ -1653,13 +1655,13 @@ def convert_sysmon_processes(
             # Process Create and Terminate
             if name == "utctime" and event_id in [1, 5]:
                 if event_id == 1:
-                    process["start_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                    process["start_time"] = datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
                 else:
-                    process["end_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                    process["end_time"] = datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
             elif name == "utctime" and event_id in [10]:
-                process["start_time"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                process["start_time"] = datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
             elif name == "utctime":
-                process["time_observed"] = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+                process["time_observed"] = datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
             elif name in ["sourceprocessguid", "parentprocessguid"]:
                 process["pguid"] = text
             elif name in ["processguid", "targetprocessguid"]:
@@ -1748,5 +1750,5 @@ if __name__ == "__main__":
         so)
 
     so.preprocess_ontology(SAFE_PROCESS_TREE_LEAF_HASHES.keys())
-    print(json.dumps(so.as_primitives(), indent=4))
+    print(dumps(so.as_primitives(), indent=4))
     Sandbox(data=so.as_primitives())
