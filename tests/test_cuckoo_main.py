@@ -364,8 +364,8 @@ class TestModule:
     @staticmethod
     def test_file_constants():
         from cuckoo.cuckoo_main import LINUX_x86_FILES, LINUX_x64_FILES, WINDOWS_x86_FILES
-        assert set(LINUX_x86_FILES) == {"executable/linux/elf32", "executable/linux/so32"}
-        assert set(LINUX_x64_FILES) == {"executable/linux/elf64", "executable/linux/so64"}
+        assert set(LINUX_x86_FILES) == {"executable/linux/elf32", "executable/linux/so32", "executable/linux/coff32"}
+        assert set(LINUX_x64_FILES) == {"executable/linux/elf64", "executable/linux/so64", "executable/linux/ia/coff64", "executable/linux/coff64"}
         assert set(WINDOWS_x86_FILES) == {'executable/windows/pe32', 'executable/windows/dll32'}
 
     @staticmethod
@@ -1328,7 +1328,7 @@ class TestCuckooMain:
     def test_assign_file_extension(
             file_type, test_file_name, correct_file_extension, correct_file_name, cuckoo_class_instance,
             dummy_request_class):
-        from assemblyline.common.identify import tag_to_extension
+        from assemblyline.common.identify_defaults import type_to_extension
         from cuckoo.cuckoo_main import SUPPORTED_EXTENSIONS
         kwargs = dict()
         is_bin = False
@@ -1338,7 +1338,7 @@ class TestCuckooMain:
         cuckoo_class_instance.request.file_type = file_type
 
         original_ext = cuckoo_class_instance.file_name.rsplit('.', 1)
-        tag_extension = tag_to_extension.get(file_type)
+        tag_extension = type_to_extension.get(file_type)
         if tag_extension is not None and 'unknown' not in file_type:
             file_ext = tag_extension
         elif len(original_ext) == 2:
