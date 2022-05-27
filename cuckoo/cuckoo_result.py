@@ -1272,7 +1272,7 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
             http_string = mark["suspicious_request"].split()
             if "/wpad.dat" in http_string[1]:
                 fp_count += 1
-            if contains_safelisted_value(http_string[1], safelist):
+            elif contains_safelisted_value(http_string[1], safelist):
                 fp_count += 1
         elif name == "nolookup_communication" and mark["type"] == "generic":
             if contains_safelisted_value(mark["host"], safelist) or is_ip_in_network(mark["host"], inetsim_network):
