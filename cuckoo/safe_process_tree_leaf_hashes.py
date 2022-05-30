@@ -427,4 +427,37 @@ SAFE_PROCESS_TREE_LEAF_HASHES = {
         "command_line": None,
         "children": []
     },
+    '1851240177eab8d1db9cae2a230ba8f46f660b99de4324457bfad2b51346bef5': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\searchfilterhost.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    '444f02be8905f4dc7be2ab190159644baebab2bd8ed351ceb6474ce317440f0c': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\searchprotocolhost.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    },
+    '8c173d9b81725561674d18ec4e7c77d21f93b19384b342fbdf1592f5fc6300f3': {
+        "image": '?sys32\\svchost.exe',
+        "command_line": None,
+        "children": [
+            {
+                "image": '?sys32\\taskhost.exe',
+                "command_line": None,
+                "children": []
+            }
+        ]
+    }
 }
