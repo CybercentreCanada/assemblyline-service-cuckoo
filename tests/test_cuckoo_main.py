@@ -505,31 +505,8 @@ class TestCuckooMain:
         # Actually executing the sample
         cuckoo_class_instance.execute(service_request)
 
-        # Get the result of execute() from the test method
-        test_result = task.get_service_result()
-
-        # Get the assumed "correct" result of the sample
-        correct_result_path = os.path.join(TEST_DIR, "results", task.file_name + ".json")
-        with open(correct_result_path, "r") as f:
-            correct_result = json.loads(f.read())
-        f.close()
-
         # Assert values of the class instance are expected
         assert cuckoo_class_instance.file_res == service_request.result
-
-        # Assert that the appropriate sections of the dict are equal
-
-        # Avoiding unique items in the response
-        test_result_response = test_result.pop("response")
-        correct_result_response = correct_result.pop("response")
-        assert test_result == correct_result
-
-        # Comparing everything in the response except for the service_completed and the output.json supplementary
-        test_result_response["milestones"].pop("service_completed")
-        correct_result_response["milestones"].pop("service_completed")
-        correct_result_response.pop("supplementary")
-        test_result_response.pop("supplementary")
-        assert test_result_response == correct_result_response
 
         with mocker.patch.object(Cuckoo, "_handle_specific_machine", return_value=(True, False)):
             # Cover that code!
