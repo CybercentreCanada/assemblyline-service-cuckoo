@@ -1422,11 +1422,9 @@ def _tag_and_describe_generic_signature(
     """
     if signature_name == "network_cnc_http":
         http_string = mark["suspicious_request"].split()
-        if "/wpad.dat" not in http_string[1] and not contains_safelisted_value(http_string[1], safelist):
-            sig_res.add_line(
-                f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
-            if add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
-                so_sig.add_subject(uri=http_string[1])
+        if "/wpad.dat" not in http_string[1] and add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
+            sig_res.add_line(f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
+            so_sig.add_subject(uri=http_string[1])
     elif signature_name == "nolookup_communication":
         if not is_ip_in_network(mark["host"], inetsim_network) and add_tag(sig_res, "network.dynamic.ip", mark["host"], safelist):
             sig_res.add_line(f"\tIOC: {mark['host']}")
