@@ -1117,8 +1117,7 @@ class Cuckoo(ServiceBase):
         dump_memory = self.request.get_param("dump_memory")
         no_monitor = self.request.get_param("no_monitor")
 
-        # If the user didn't select no_monitor, but at the service level we don't want the monitor to run on
-        # Windows 10x64, then:
+        # If the user didn't select no_monitor, but at the service level we want no_monitor on Windows 10x64, then:
         if not no_monitor and self.config.get("no_monitor_for_win10x64", False) and kwargs.get("tags", {}) == "win10x64":
             no_monitor = True
 
