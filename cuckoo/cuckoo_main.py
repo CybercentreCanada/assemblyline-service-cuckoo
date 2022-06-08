@@ -1116,6 +1116,12 @@ class Cuckoo(ServiceBase):
         arguments = self.request.get_param("arguments")
         dump_memory = self.request.get_param("dump_memory")
         no_monitor = self.request.get_param("no_monitor")
+
+        # If the user didn't select no_monitor, but at the service level we don't want the monitor to run on
+        # Windows 10x64, then:
+        if not no_monitor and self.config.get("no_monitor_for_win10x64", False) and kwargs.get("tags", {}) == "win10x64":
+            no_monitor = True
+
         custom_options = self.request.get_param("custom_options")
         kwargs["clock"] = self.request.get_param("clock")
         max_total_size_of_uploaded_files = self.request.get_param("max_total_size_of_uploaded_files")
@@ -1139,7 +1145,6 @@ class Cuckoo(ServiceBase):
         elif dump_memory:
             parent_section.add_subsection(ResultSection("Cuckoo Machinery Cannot Generate Memory Dumps."))
 
-        # TODO: This should be a boolean
         if no_monitor:
             task_options.append("free=yes")
 
