@@ -58,6 +58,11 @@ config:
   # Assemblyline service specifications
   dedup_similar_percent: 40
 
+  # Since Windows 10x64 is not supported by the Cuckoo monitor, but a lot of malware samples only run on Windows 10x64,
+  # we want a service-level variable that will submit files to Windows 10x64 without the Cuckoo monitor, in
+  # order to still catch network IOCs
+  no_monitor_for_win10x64: false
+
 submission_params:
   - default: 0
     name: analysis_timeout_in_seconds
