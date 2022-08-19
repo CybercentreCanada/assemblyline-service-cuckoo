@@ -1,5 +1,9 @@
 # Cuckoo Service
 
+***THIS SERVICE IS DEPRECATED SINCE THE CUCKOO PROJECT IS DEAD***
+
+***USE THE [CAPE SERVICE](https://github.com/CybercentreCanada/assemblyline-service-cape) INSTEAD***
+
 This Assemblyline service interfaces with the open-source project [Cuckoo Sandbox](https://cuckoosandbox.org), which provides the ability to perform live dynamic analysis on submitted files.
 
 **NOTE**: This service **requires extensive additional installation outside of Assemblyline** before being functional. It is **not** preinstalled during a default installation.
