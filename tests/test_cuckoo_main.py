@@ -485,7 +485,6 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(False, {}))
         mocker.patch.object(Cuckoo, "_handle_specific_platform", return_value=(False, {}))
         mocker.patch.object(Cuckoo, "_general_flow")
-        mocker.patch.object(Cuckoo, "attach_ontological_result")
 
         service_task = ServiceTask(sample)
         task = Task(service_task)

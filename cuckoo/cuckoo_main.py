@@ -366,12 +366,6 @@ class Cuckoo(ServiceBase):
             for section in self.file_res.sections:
                 self._get_subsection_heuristic_map(section.subsections, section_heur_map)
 
-        # for so in self.sandbox_ontologies:
-        #     self.log.debug("Preprocessing the ontology")
-        #     so.preprocess_ontology(safelist=SAFE_PROCESS_TREE_LEAF_HASHES.keys())
-        #     self.log.debug("Attaching the ontological result")
-        #     self.attach_ontological_result(Sandbox, so.as_primitives())
-
     def _general_flow(self, kwargs: Dict[str, Any], file_ext: str, parent_section: ResultSection,
                       hosts: List[Dict[str, Any]], so: SandboxOntology, reboot: bool = False, parent_task_id: int = 0,
                       resubmit: bool = False) -> None:

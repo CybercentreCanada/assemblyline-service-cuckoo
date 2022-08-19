@@ -179,7 +179,7 @@ class TestCuckooResult:
            {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'time_observed': 1.0,
             'processtree': None},
            'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'processtree': None},
-           'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 0, 'image': 'blah', 'command_line': 'blah',
+           'pimage': None, 'pcommand_line': None, 'ppid': 1, 'pid': 0, 'image': 'blah', 'command_line': 'blah',
            'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
          ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1,
             "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
