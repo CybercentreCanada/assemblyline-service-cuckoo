@@ -28,7 +28,7 @@ from assemblyline_v4_service.common.tag_helper import add_tag
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify_defaults import type_to_extension, trusted_mimes, magic_patterns
 from assemblyline.common.exceptions import RecoverableError, ChainException
-from assemblyline.odm.models.ontology.types.sandbox import Sandbox
+# from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
 from cuckoo.cuckoo_result import ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, \
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
@@ -217,7 +217,7 @@ class Cuckoo(ServiceBase):
         self.hosts: List[Dict[str, Any]] = []
         self.routing = ""
         self.safelist: Dict[str, Dict[str, List[str]]] = {}
-        self.sandbox_ontologies: List[SandboxOntology] = None
+        # self.sandbox_ontologies: List[SandboxOntology] = None
 
     def start(self) -> None:
         for host in self.config["remote_host_details"]["hosts"]:
@@ -248,7 +248,7 @@ class Cuckoo(ServiceBase):
         self.request = request
         self.session = requests.Session()
         self.artifact_list = []
-        self.sandbox_ontologies = []
+        # self.sandbox_ontologies = []
         request.result = Result()
 
         # Setting working directory for request
@@ -305,7 +305,7 @@ class Cuckoo(ServiceBase):
                 parent_section = ResultSection(f"Analysis Environment Target: {relevant_image}")
                 self.file_res.add_section(parent_section)
                 so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
-                self.sandbox_ontologies.append(so)
+                # self.sandbox_ontologies.append(so)
                 submission_specific_kwargs["tags"] = relevant_image
                 thr = SubmissionThread(
                     target=self._general_flow,
@@ -321,7 +321,7 @@ class Cuckoo(ServiceBase):
                 f"Analysis Environment Target: {relevant_images_keys[0]}")
             self.file_res.add_section(parent_section)
             so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
-            self.sandbox_ontologies.append(so)
+            # self.sandbox_ontologies.append(so)
             kwargs["tags"] = relevant_images_keys[0]
             hosts = [host for host in self.hosts if host["ip"] in relevant_images[relevant_images_keys[0]]]
             self._general_flow(kwargs, file_ext, parent_section, hosts, so)
@@ -330,7 +330,7 @@ class Cuckoo(ServiceBase):
                 f"Analysis Environment Target: {next(iter(hosts_with_platform))}")
             self.file_res.add_section(parent_section)
             so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
-            self.sandbox_ontologies.append(so)
+            # self.sandbox_ontologies.append(so)
             hosts = [host for host in self.hosts if host["ip"] in hosts_with_platform[next(iter(hosts_with_platform))]]
             self._general_flow(kwargs, file_ext, parent_section, hosts, so)
         else:
@@ -348,7 +348,7 @@ class Cuckoo(ServiceBase):
                 hosts = self.hosts
             self.file_res.add_section(parent_section)
             so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
-            self.sandbox_ontologies.append(so)
+            # self.sandbox_ontologies.append(so)
             self._general_flow(kwargs, file_ext, parent_section, hosts, so)
 
         # Adding sandbox artifacts using the SandboxOntology helper class
@@ -365,12 +365,6 @@ class Cuckoo(ServiceBase):
             section_heur_map = {}
             for section in self.file_res.sections:
                 self._get_subsection_heuristic_map(section.subsections, section_heur_map)
-
-        for so in self.sandbox_ontologies:
-            self.log.debug("Preprocessing the ontology")
-            so.preprocess_ontology(safelist=SAFE_PROCESS_TREE_LEAF_HASHES.keys())
-            self.log.debug("Attaching the ontological result")
-            self.attach_ontological_result(Sandbox, so.as_primitives())
 
     def _general_flow(self, kwargs: Dict[str, Any], file_ext: str, parent_section: ResultSection,
                       hosts: List[Dict[str, Any]], so: SandboxOntology, reboot: bool = False, parent_task_id: int = 0,
@@ -1116,6 +1110,11 @@ class Cuckoo(ServiceBase):
         arguments = self.request.get_param("arguments")
         dump_memory = self.request.get_param("dump_memory")
         no_monitor = self.request.get_param("no_monitor")
+
+        # If the user didn't select no_monitor, but at the service level we want no_monitor on Windows 10x64, then:
+        if not no_monitor and self.config.get("no_monitor_for_win10x64", False) and kwargs.get("tags", {}) == "win10x64":
+            no_monitor = True
+
         custom_options = self.request.get_param("custom_options")
         kwargs["clock"] = self.request.get_param("clock")
         max_total_size_of_uploaded_files = self.request.get_param("max_total_size_of_uploaded_files")
@@ -1139,7 +1138,6 @@ class Cuckoo(ServiceBase):
         elif dump_memory:
             parent_section.add_subsection(ResultSection("Cuckoo Machinery Cannot Generate Memory Dumps."))
 
-        # TODO: This should be a boolean
         if no_monitor:
             task_options.append("free=yes")
 

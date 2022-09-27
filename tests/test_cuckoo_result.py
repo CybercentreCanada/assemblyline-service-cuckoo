@@ -179,7 +179,7 @@ class TestCuckooResult:
            {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None, 'time_observed': 1.0,
             'processtree': None},
            'pobjectid': {'guid': None, 'tag': None, 'treeid': None, 'time_observed': None, 'processtree': None},
-           'pimage': None, 'pcommand_line': None, 'ppid': None, 'pid': 0, 'image': 'blah', 'command_line': 'blah',
+           'pimage': None, 'pcommand_line': None, 'ppid': 1, 'pid': 0, 'image': 'blah', 'command_line': 'blah',
            'integrity_level': None, 'image_hash': None, 'original_file_name': None}),
          ([{"pid": 0, "process_path": "", "command_line": "blah", "ppid": 1,
             "guid": "{12345678-1234-5678-1234-567812345678}", "first_seen": 1.0}],
@@ -338,16 +338,15 @@ class TestCuckooResult:
             "marks": [{"pid": 1, "type": "generic", "suspicious_request": "blah 127.0.0.1"}]}],
           "192.0.2.0/24", "", {},
           None, False,
-          {"name": "network_cnc_http", "description": "No description for signature.", "iocs":
-           [{"uri": "11.11.11.11"}]}),
+          {"name": "network_cnc_http", "description": "No description for signature."}),
          ("network_cnc_http",
           [{"name": "network_cnc_http", "severity": 1, "markcount": 1,
             "marks":
-            [{"pid": 1, "type": "generic", "suspicious_request": "blah 11.11.11.11", "suspicious_features": "blah"}]}],
+            [{"pid": 1, "type": "generic", "suspicious_request": "blah http://11.11.11.11", "suspicious_features": "blah"}]}],
           "192.0.2.0/24", "", {},
-          'No description for signature.\n\t"blah 11.11.11.11" is suspicious because "blah"', False,
+          'No description for signature.\n\t"blah http://11.11.11.11" is suspicious because "blah"', False,
           {"name": "network_cnc_http", "description": "No description for signature.", "process.pid": 1,
-           "iocs": [{"uri": "11.11.11.11"}], "attack": [{'attack_id': 'T1071', 'categories': ['command-and-control'],
+           "iocs": [{"uri": "http://11.11.11.11"}], "attack": [{'attack_id': 'T1071', 'categories': ['command-and-control'],
                                                          'pattern': 'Application Layer Protocol'}]}),
          ("nolookup_communication",
           [{"name": "nolookup_communication", "severity": 1, "markcount": 1,
@@ -478,6 +477,7 @@ class TestCuckooResult:
                 correct_subsection.heuristic.add_signature_id(sig_name, 10)
                 if sig_name == "network_cnc_http":
                     correct_subsection.add_tag('network.dynamic.ip', '11.11.11.11')
+                    correct_subsection.add_tag('network.dynamic.uri', 'http://11.11.11.11')
                 elif sig_name == "nolookup_communication":
                     correct_subsection.add_tag("network.dynamic.ip", "11.11.11.11")
                 correct_result_section.add_subsection(correct_subsection)

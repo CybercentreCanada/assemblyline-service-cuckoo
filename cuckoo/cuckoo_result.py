@@ -3,7 +3,7 @@ from ipaddress import ip_address, ip_network, IPv4Network
 from json import dumps
 from logging import getLogger
 import os
-from re import match as re_match, search
+from re import findall, match as re_match, search
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -11,7 +11,7 @@ from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
 from assemblyline.common.net import is_valid_ip, is_ip_in_network
-from assemblyline.odm.base import IP_REGEX, FULL_URI
+from assemblyline.odm.base import IPV4_REGEX, FULL_URI
 from assemblyline_v4_service.common.result import ResultSection, ResultKeyValueSection, ResultTextSection, ResultTableSection, TableRow
 from assemblyline_v4_service.common.safelist_helper import is_tag_safelisted, contains_safelisted_value
 from assemblyline_v4_service.common.tag_helper import add_tag
@@ -1069,10 +1069,9 @@ def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any]
                     if not is_tag_safelisted(text, ["network.dynamic.domain"], safelist):
                         dns_query["request"] = text
                 elif name == "QueryResults":
-                    ip = search(IP_REGEX, text)
-                    if ip:
-                        ip = ip.group(0)
-                        dns_query["answers"].append({"data": ip, "type": "A"})
+                    ip = findall(IPV4_REGEX, text)
+                    for item in ip:
+                        dns_query["answers"].append({"data": item, "type": "A"})
                 elif name == "Image":
                     dns_query["image"] = text
             if any(dns_query[key] is None for key in dns_query.keys()):
@@ -1422,11 +1421,9 @@ def _tag_and_describe_generic_signature(
     """
     if signature_name == "network_cnc_http":
         http_string = mark["suspicious_request"].split()
-        if "/wpad.dat" not in http_string[1] and not contains_safelisted_value(http_string[1], safelist):
-            sig_res.add_line(
-                f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
-            if add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
-                so_sig.add_subject(uri=http_string[1])
+        if "/wpad.dat" not in http_string[1] and add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
+            sig_res.add_line(f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
+            so_sig.add_subject(uri=http_string[1])
     elif signature_name == "nolookup_communication":
         if not is_ip_in_network(mark["host"], inetsim_network) and add_tag(sig_res, "network.dynamic.ip", mark["host"], safelist):
             sig_res.add_line(f"\tIOC: {mark['host']}")
