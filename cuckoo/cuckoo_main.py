@@ -28,6 +28,7 @@ from assemblyline_v4_service.common.tag_helper import add_tag
 from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify_defaults import type_to_extension, trusted_mimes, magic_patterns
 from assemblyline.common.exceptions import RecoverableError, ChainException
+from assemblyline.common.forge import get_identify
 # from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
 from cuckoo.cuckoo_result import ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, \
@@ -217,6 +218,7 @@ class Cuckoo(ServiceBase):
         self.hosts: List[Dict[str, Any]] = []
         self.routing = ""
         self.safelist: Dict[str, Dict[str, List[str]]] = {}
+        self.identify = get_identify(use_cache=os.environ.get('PRIVILEGED', 'false').lower() == 'true')
         # self.sandbox_ontologies: List[SandboxOntology] = None
 
     def start(self) -> None:
@@ -1597,6 +1599,14 @@ class Cuckoo(ServiceBase):
                     if "_small" not in f:
                         image_section.add_image(destination_file_path, file_name, value)
                     continue
+
+                if key in ["buffer"]:
+                    file_type_details = self.identify.fileinfo(destination_file_path)
+                    if file_type_details["type"] == "unknown":
+                        self.log.debug(
+                            f"We are not extracting {destination_file_path} for task {task_id} "
+                            "because we suspect it is garbage.")
+                        continue
 
                 if key not in ["supplementary"]:
                     to_be_extracted = True
