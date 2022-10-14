@@ -1756,6 +1756,7 @@ class TestCuckooMain:
     def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
         from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
         from assemblyline_v4_service.common.result import ResultSection, ResultImageSection
+        from os import remove, makedirs, path
         default_so = SandboxOntology()
         tarball_file_map = {
             "buffer": "Extracted buffer",
@@ -1781,6 +1782,9 @@ class TestCuckooMain:
                 continue
             val = tarball_file_map[key]
             correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{f}"
+            makedirs(f"{cuckoo_class_instance.working_directory}/{task_id}/{key}", exist_ok=True)
+            with open(correct_path, "wb") as fd:
+                fd.write(b"blah")
             dummy_tar_member = dummy_tar_member_class(f, 1)
             tar_obj.members.append(dummy_tar_member)
             if key in ["shots"]:
@@ -1812,6 +1816,10 @@ class TestCuckooMain:
         assert all_supplementary
 
         check_section_equality(parent_section.subsections[0], correct_image_section)
+        for f in tar_obj.getnames():
+            correct_path = f"{cuckoo_class_instance.working_directory}/{task_id}/{f}"
+            if path.exists(correct_path):
+                remove(correct_path)
 
     @staticmethod
     def test_extract_hollowshunter(cuckoo_class_instance, dummy_request_class, dummy_tar_class):
