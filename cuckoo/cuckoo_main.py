@@ -243,10 +243,6 @@ class Cuckoo(ServiceBase):
 
     # noinspection PyTypeChecker
     def execute(self, request: ServiceRequest) -> None:
-        if not len(self.hosts):
-            raise CuckooHostsUnavailable(
-                "All hosts are unavailable at the moment, as determined by a previous execution.")
-
         self.request = request
         self.session = requests.Session()
         self.artifact_list = []
@@ -804,7 +800,6 @@ class Cuckoo(ServiceBase):
                         " while trying to query machines")
                     if attempt == self.connection_attempts - 1:
                         number_of_unavailable_hosts += 1
-                        self.hosts.remove(host)
                     continue
                 except requests.ConnectionError:
                     self.log.error(
@@ -813,13 +808,11 @@ class Cuckoo(ServiceBase):
                         f"of Assemblyline first before running the service.")
                     if attempt == self.connection_attempts - 1:
                         number_of_unavailable_hosts += 1
-                        self.hosts.remove(host)
                     continue
                 if resp.status_code != 200:
                     self.log.error(f"Failed to query machines for {host['ip']}:{host['port']}. "
                                    f"Status code: {resp.status_code}")
                     number_of_unavailable_hosts += 1
-                    self.hosts.remove(host)
                     break
                 else:
                     resp_json = resp.json()
