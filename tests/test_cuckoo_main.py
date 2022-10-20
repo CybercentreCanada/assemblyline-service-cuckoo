@@ -493,8 +493,6 @@ class TestCuckooMain:
 
         # Coverage test
         mocker.patch.object(Cuckoo, "_assign_file_extension", return_value=None)
-        with pytest.raises(CuckooHostsUnavailable):
-            cuckoo_class_instance.execute(service_request)
         cuckoo_class_instance.hosts = [{"ip": "1.1.1.1"}]
         cuckoo_class_instance.execute(service_request)
         assert True
