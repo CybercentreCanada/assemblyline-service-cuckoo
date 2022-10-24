@@ -788,6 +788,7 @@ class Cuckoo(ServiceBase):
         hosts_copy = self.hosts[:]
 
         for host in hosts_copy:
+            host["machines"]: List[Dict[str, Any]] = []
             for attempt in range(self.connection_attempts):
                 query_machines_url = f"http://{host['ip']}:{host['port']}/{CUCKOO_API_QUERY_MACHINES}"
                 try:
@@ -1191,7 +1192,7 @@ class Cuckoo(ServiceBase):
         :param allowed_images: A list of images that are allowed to be selected on Assemblyline
         :return: A boolean representing if the image exists
         """
-        if specific_image not in allowed_images:
+        if specific_image not in allowed_images or not machines:
             return False
 
         machine_names = [machine["name"] for machine in machines]
