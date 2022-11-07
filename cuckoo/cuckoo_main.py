@@ -18,7 +18,7 @@ from typing import Optional, Dict, List, Any, Set, Tuple
 
 from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
-from assemblyline_v4_service.common.dynamic_service_helper import SandboxOntology
+from assemblyline_v4_service.common.dynamic_service_helper import attach_dynamic_ontology, OntologyResults
 from assemblyline_v4_service.common.request import ServiceRequest
 from assemblyline_v4_service.common.result import Result, ResultSection, ResultImageSection, ResultTextSection, \
     ResultKeyValueSection
@@ -29,7 +29,6 @@ from assemblyline.common.str_utils import safe_str
 from assemblyline.common.identify_defaults import type_to_extension, trusted_mimes, magic_patterns
 from assemblyline.common.exceptions import RecoverableError, ChainException
 from assemblyline.common.forge import get_identify
-# from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
 from cuckoo.cuckoo_result import ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, \
     SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
@@ -219,7 +218,7 @@ class Cuckoo(ServiceBase):
         self.routing = ""
         self.safelist: Dict[str, Dict[str, List[str]]] = {}
         self.identify = get_identify(use_cache=os.environ.get('PRIVILEGED', 'false').lower() == 'true')
-        # self.sandbox_ontologies: List[SandboxOntology] = None
+        # self.sandbox_ontologies: List[OntologyResults] = None
 
     def start(self) -> None:
         for host in self.config["remote_host_details"]["hosts"]:
@@ -302,7 +301,7 @@ class Cuckoo(ServiceBase):
                 submission_specific_kwargs = kwargs.copy()
                 parent_section = ResultSection(f"Analysis Environment Target: {relevant_image}")
                 self.file_res.add_section(parent_section)
-                so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
+                so = OntologyResults(service_name="Cuckoo")
                 # self.sandbox_ontologies.append(so)
                 submission_specific_kwargs["tags"] = relevant_image
                 thr = SubmissionThread(
@@ -318,7 +317,7 @@ class Cuckoo(ServiceBase):
             parent_section = ResultSection(
                 f"Analysis Environment Target: {relevant_images_keys[0]}")
             self.file_res.add_section(parent_section)
-            so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
+            so = OntologyResults(service_name="Cuckoo")
             # self.sandbox_ontologies.append(so)
             kwargs["tags"] = relevant_images_keys[0]
             hosts = [host for host in self.hosts if host["ip"] in relevant_images[relevant_images_keys[0]]]
@@ -327,7 +326,7 @@ class Cuckoo(ServiceBase):
             parent_section = ResultSection(
                 f"Analysis Environment Target: {next(iter(hosts_with_platform))}")
             self.file_res.add_section(parent_section)
-            so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
+            so = OntologyResults(service_name="Cuckoo")
             # self.sandbox_ontologies.append(so)
             hosts = [host for host in self.hosts if host["ip"] in hosts_with_platform[next(iter(hosts_with_platform))]]
             self._general_flow(kwargs, file_ext, parent_section, hosts, so)
@@ -345,12 +344,12 @@ class Cuckoo(ServiceBase):
                     "Analysis Environment Target: First Machine Available")
                 hosts = self.hosts
             self.file_res.add_section(parent_section)
-            so = SandboxOntology(sandbox_name="Cuckoo Sandbox")
+            so = OntologyResults(service_name="Cuckoo")
             # self.sandbox_ontologies.append(so)
             self._general_flow(kwargs, file_ext, parent_section, hosts, so)
 
-        # Adding sandbox artifacts using the SandboxOntology helper class
-        artifact_section = SandboxOntology.handle_artifacts(self.artifact_list, self.request, collapsed=True)
+        # Adding sandbox artifacts using the OntologyResults helper class
+        artifact_section = OntologyResults.handle_artifacts(self.artifact_list, self.request, collapsed=True)
         if artifact_section:
             self.file_res.add_section(artifact_section)
 
@@ -364,8 +363,13 @@ class Cuckoo(ServiceBase):
             for section in self.file_res.sections:
                 self._get_subsection_heuristic_map(section.subsections, section_heur_map)
 
+        self.log.debug("Preprocessing the ontology")
+        so.preprocess_ontology(safelist=SAFE_PROCESS_TREE_LEAF_HASHES.keys())
+        self.log.debug("Attaching the ontological result")
+        attach_dynamic_ontology(self, so)
+
     def _general_flow(self, kwargs: Dict[str, Any], file_ext: str, parent_section: ResultSection,
-                      hosts: List[Dict[str, Any]], so: SandboxOntology, reboot: bool = False, parent_task_id: int = 0,
+                      hosts: List[Dict[str, Any]], so: OntologyResults, reboot: bool = False, parent_task_id: int = 0,
                       resubmit: bool = False) -> None:
         """
         This method contains the general flow of a task: submitting a file to Cuckoo and generating an Assemblyline
@@ -407,11 +411,10 @@ class Cuckoo(ServiceBase):
                 raise Exception(f"Task ID is None. File failed to be submitted to the Cuckoo nest at "
                                 f"{host_to_use['ip']}.")
         except AnalysisTimeoutExceeded:
-            so.update_analysis_metadata(start_time=start_time, end_time=time())
+            pass
         except AnalysisFailed:
-            so.update_analysis_metadata(start_time=start_time, end_time=time())
+            pass
         except Exception as e:
-            so.update_analysis_metadata(start_time=start_time, end_time=time())
             self.log.error(repr(e))
             if cuckoo_task and cuckoo_task.id is not None:
                 self.delete_task(cuckoo_task)
@@ -940,14 +943,12 @@ class Cuckoo(ServiceBase):
             self.artifact_list.append(artifact)
             self.log.debug(f"Adding extracted file for task {cuckoo_task.id}: {pcap_file_name}")
 
-    def report_machine_info(self, machine_name: str, cuckoo_task: CuckooTask, parent_section: ResultSection,
-                            so: SandboxOntology) -> None:
+    def report_machine_info(self, machine_name: str, cuckoo_task: CuckooTask, parent_section: ResultSection) -> None:
         """
         This method reports details about the machine that was used for detonation.
         :param machine_name: The name of the machine that the task ran on.
         :param cuckoo_task: The CuckooTask class instance, which contains details about the specific task
         :param parent_section: The overarching result section detailing what image this task is being sent to
-        :param so: The sandbox ontology class object
         :return: None
         """
         # The machines here are the machines that were loaded prior to the file being submitted.
@@ -976,40 +977,51 @@ class Cuckoo(ServiceBase):
         machine_section = ResultKeyValueSection(MACHINE_INFORMATION_SECTION_TITLE)
         machine_section.update_items(body)
 
-        self._add_operating_system_tags(machine_name, platform, machine_section, so)
+        self._add_operating_system_tags(machine_name, platform, machine_section)
+        m = compile(MACHINE_NAME_REGEX).search(machine_name)
+        if m and len(m.groups()) == 1:
+            version = m.group(1)
+            _ = add_tag(machine_section, "dynamic.operating_system.version", version)
+
         parent_section.add_subsection(machine_section)
-        so.update_machine_metadata(ip=machine["ip"], hypervisor=manager, hostname=machine_name)
+        return body
 
     @staticmethod
     def _add_operating_system_tags(
-            machine_name: str, platform: str, machine_section: ResultKeyValueSection, so: SandboxOntology) -> None:
+        machine_name: str,
+        platform: str,
+        machine_section: ResultKeyValueSection,
+    ) -> None:
         """
         This method adds tags to the ResultKeyValueSection related
         to the operating system of the machine that a task was ran on
         :param machine_name: The name of the machine that the task was ran on
         :param platform: The platform of the machine that the task was ran on
         :param machine_section: The ResultKeyValueSection containing details about the machine
-        :param so: The sandbox ontology class object
         :return: None
         """
         if platform:
-            if add_tag(machine_section, "dynamic.operating_system.platform", platform.capitalize()):
-                so.update_machine_metadata(platform=platform.capitalize())
-        if any(processor_tag in machine_name for processor_tag in [x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX]):
+            _ = add_tag(
+                machine_section,
+                "dynamic.operating_system.platform",
+                platform.capitalize(),
+            )
+        if any(
+            processor_tag in machine_name
+            for processor_tag in [x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX]
+        ):
             if x86_IMAGE_SUFFIX in machine_name:
-                if add_tag(machine_section, "dynamic.operating_system.processor", x86_IMAGE_SUFFIX):
-                    so.update_machine_metadata(architecture=x86_IMAGE_SUFFIX)
+                _ = add_tag(
+                    machine_section,
+                    "dynamic.operating_system.processor",
+                    x86_IMAGE_SUFFIX,
+                )
             elif x64_IMAGE_SUFFIX in machine_name:
-                if add_tag(machine_section, "dynamic.operating_system.processor", x64_IMAGE_SUFFIX):
-                    so.update_machine_metadata(architecture=x64_IMAGE_SUFFIX)
-
-        # The assumption here is that a machine's name will contain somewhere in it the
-        # pattern: <platform prefix><version><processor>
-        m = compile(MACHINE_NAME_REGEX).search(machine_name)
-        if m and len(m.groups()) == 1:
-            version = m.group(1)
-            if add_tag(machine_section, "dynamic.operating_system.version", version):
-                so.update_machine_metadata(version=version)
+                _ = add_tag(
+                    machine_section,
+                    "dynamic.operating_system.processor",
+                    x64_IMAGE_SUFFIX,
+                )
 
     def _decode_mime_encoded_file_name(self) -> None:
         """
@@ -1308,7 +1320,7 @@ class Cuckoo(ServiceBase):
         return dll_parsed
 
     def _generate_report(
-            self, file_ext: str, cuckoo_task: CuckooTask, parent_section: ResultSection, so: SandboxOntology) -> None:
+            self, file_ext: str, cuckoo_task: CuckooTask, parent_section: ResultSection, so: OntologyResults) -> None:
         """
         This method generates the report for the task
         :param file_ext: The file extension of the file to be submitted
@@ -1335,7 +1347,7 @@ class Cuckoo(ServiceBase):
         # self.check_pcap(cuckoo_task)
 
     def _unpack_tar(self, tar_report: bytes, file_ext: str, cuckoo_task: CuckooTask,
-                    parent_section: ResultSection, so: SandboxOntology) -> None:
+                    parent_section: ResultSection, so: OntologyResults) -> None:
         """
         This method unpacks the tarball, which contains the report for the task
         :param tar_report: The tarball in bytes which contains all artifacts from the analysis
@@ -1433,7 +1445,7 @@ class Cuckoo(ServiceBase):
         return report_json_path
 
     def _build_report(self, report_json_path: str, file_ext: str, cuckoo_task: CuckooTask,
-                      parent_section: ResultSection, so: SandboxOntology) -> None:
+                      parent_section: ResultSection, so: OntologyResults) -> None:
         """
         This method loads the JSON report into JSON and generates the Assemblyline result from this JSON
         :param report_json_path: A string representing the path of the report in JSON format
@@ -1466,7 +1478,7 @@ class Cuckoo(ServiceBase):
             if machine_name is None:
                 self.log.warning('Unable to retrieve machine name from result.')
             else:
-                self.report_machine_info(machine_name, cuckoo_task, parent_section, so)
+                self.report_machine_info(machine_name, cuckoo_task, parent_section)
             self.log.debug(f"Generating AL Result from Cuckoo results for task {cuckoo_task.id}.")
             generate_al_result(cuckoo_task.report, parent_section, file_ext, self.config.get("random_ip_range"),
                                self.routing, self.safelist, so)
@@ -1531,7 +1543,7 @@ class Cuckoo(ServiceBase):
             self.log.debug(f"Adding extracted file for task {task_id}: {injected_exe}")
 
     def _extract_artifacts(self, tar_obj: TarFile, task_id: int, parent_section: ResultSection,
-                           so: SandboxOntology) -> None:
+                           so: OntologyResults) -> None:
         """
         This method extracts certain artifacts from that tarball
         :param tar_obj: The tarball object, containing the analysis artifacts for the task
