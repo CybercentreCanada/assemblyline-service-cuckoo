@@ -520,8 +520,6 @@ def process_signatures(
                             sig_res.add_line(
                                 f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})')
 
-                    so_sig.add_process_subject(pid=injected_process, image=injected_process_name,
-                                               start_time=mark["call"].get("time"))
         if attributes:
             [so_sig.add_attribute(attribute) for attribute in attributes]
 
@@ -1735,8 +1733,6 @@ def _tag_and_describe_ioc_signature(
         ioc = ioc.strip()
         if add_tag(sig_res, "dynamic.process.command_line", ioc, safelist):
             process = so.get_process_by_command_line(ioc)
-            if process:
-                so_sig.add_process_subject(**process.as_primitives())
             command_line_iocs = "Command line IOCs"
             if any(subsection.title_text == command_line_iocs for subsection in sig_res.subsections):
                 sig_ioc_table = next((subsection for subsection in sig_res.subsections if subsection.title_text == command_line_iocs))
@@ -1781,7 +1777,6 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
     elif signature_name == "terminates_remote_process":
         terminated_pid = mark["call"].get("arguments", {}).get("process_identifier")
         terminated_process_name = process_map.get(terminated_pid, {}).get("name")
-        so_sig.add_process_subject(pid=terminated_pid, image=terminated_process_name)
         if terminated_process_name:
             if not sig_res.body:
                 sig_res.add_line(f'\tTerminated Remote Process: {terminated_process_name} ({terminated_pid})')
