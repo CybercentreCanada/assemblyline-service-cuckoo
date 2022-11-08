@@ -77,13 +77,13 @@ class TestCuckooResult:
         "info, correct_body, expected_am",
         [({"started": "blah", "ended": "blah", "duration": "blah", "id": 1, "route": "blah", "version": "blah"},
           '{"Cuckoo Task ID": 1, "Duration": -1, "Routing": "blah", "Cuckoo Version": "blah"}',
-          {"routing": "blah", "start_time": "blah", "end_time": "blah", "task_id": 1}),
+          {"routing": "blah", "start_time": "1-01-01 00:00:00", "end_time": "9999-12-31 23:59:59", "task_id": 1}),
          ({"started": "1", "ended": "1", "duration": "1", "id": 1, "route": "blah", "version": "blah"},
           '{"Cuckoo Task ID": 1, "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}',
-          {"routing": "blah", "start_time": "1", "end_time": "1", "task_id": 1}),
+          {"routing": "blah", "start_time": "1970-01-01 00:00:01", "end_time": "1970-01-01 00:00:01", "task_id": 1}),
          ({"id": 1, "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"},
           '{"Cuckoo Task ID": 1, "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}',
-          {"routing": "blah", "start_time": "1", "end_time": "1", "task_id": 1}), ])
+          {"routing": "blah", "start_time": "1970-01-01 00:00:01", "end_time": "1970-01-01 00:00:01", "task_id": 1}), ])
     def test_process_info(info, correct_body, expected_am):
         from cuckoo.cuckoo_result import process_info
         from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT

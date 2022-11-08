@@ -16,15 +16,18 @@ from assemblyline.odm.base import IPV4_REGEX, FULL_URI
 from assemblyline.odm.models.ontology.results import (
     NetworkConnection as NetworkConnectionModel,
     Process as ProcessModel,
-    Sandbox as SandboxModel
+    Sandbox as SandboxModel,
+    Signature as SignatureModel
 )
 from assemblyline_v4_service.common.result import ResultSection, ResultKeyValueSection, ResultTextSection, ResultTableSection, TableRow
 from assemblyline_v4_service.common.safelist_helper import is_tag_safelisted, contains_safelisted_value
 from assemblyline_v4_service.common.tag_helper import add_tag
 
-from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES
+from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES, SIGNATURE_TO_ATTRIBUTE_ACTION_MAP
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 from assemblyline_v4_service.common.dynamic_service_helper import (
+    attach_dynamic_ontology,
+    Attribute,
     extract_iocs_from_text_blob,
     OntologyResults,
     Process,
@@ -187,13 +190,16 @@ def process_info(info: Dict[str, Any], routing: str, parent_result_section: Resu
     end_time = info['ended']
     duration = info['duration']
     analysis_time = -1  # Default error time
+    start_time_str = ""
+    end_time_str = ""
     try:
         start_time_str = datetime.fromtimestamp(int(start_time)).strftime('%Y-%m-%d %H:%M:%S')
         end_time_str = datetime.fromtimestamp(int(end_time)).strftime('%Y-%m-%d %H:%M:%S')
         duration_str = datetime.fromtimestamp(int(duration)).strftime('%Hh %Mm %Ss')
         analysis_time = duration_str + "\t(" + start_time_str + " to " + end_time_str + ")"
     except Exception:
-        pass
+        start_time_str = MIN_TIME
+        end_time_str = MAX_TIME
     body = {
         'Cuckoo Task ID': info['id'],
         'Duration': analysis_time,
@@ -210,8 +216,8 @@ def process_info(info: Dict[str, Any], routing: str, parent_result_section: Resu
             "sandbox_name": so.service_name,
             "sandbox_version": info['version'],
             "analysis_metadata": {
-                "start_time": start_time,
-                "end_time": end_time,
+                "start_time": start_time_str,
+                "end_time": end_time_str,
                 "task_id": info['id'],
             },
         }
@@ -223,9 +229,9 @@ def process_info(info: Dict[str, Any], routing: str, parent_result_section: Resu
             session=OntologyResults.create_session(),
         ),
         analysis_metadata=Sandbox.AnalysisMetadata(
-            start_time=start_time,
+            start_time=start_time_str,
             task_id=info['id'],
-            end_time=end_time,
+            end_time=end_time_str,
             routing=routing,
             # To be updated later
             machine_metadata=None,
@@ -329,13 +335,16 @@ def convert_cuckoo_processes(cuckoo_processes: List[Dict[str, Any]],
                 is_tag_safelisted(command_line, ["dynamic.process.command_line"], safelist):
             continue
 
+        first_seen = datetime.fromtimestamp(item["first_seen"]).strftime(
+                    LOCAL_FMT
+                )
         if not item.get("guid"):
-            guid = so.get_guid_by_pid_and_time(item["pid"], item["first_seen"])
+            guid = so.get_guid_by_pid_and_time(item["pid"], first_seen)
         else:
             guid = item.get("guid")
 
         if not item.get("pguid"):
-            pguid = so.get_pguid_by_pid_and_time(item["pid"], item["first_seen"])
+            pguid = so.get_pguid_by_pid_and_time(item["pid"], first_seen)
         else:
             pguid = item.get("pguid")
 
@@ -358,7 +367,7 @@ def convert_cuckoo_processes(cuckoo_processes: List[Dict[str, Any]],
             ppid=item["ppid"],
             image=process_path,
             command_line=command_line,
-            start_time=datetime.fromtimestamp(item["first_seen"]).strftime(LOCAL_FMT),
+            start_time=first_seen,
             guid=guid,
             pguid=pguid,
         )
@@ -408,6 +417,7 @@ def process_signatures(
     if len(sigs) <= 0:
         return False
 
+    session = so.sandboxes[-1].objectid.session
     # Flag used to indicate if process_martian signature should be used in process_behaviour
     is_process_martian = False
     sigs_res = ResultSection(SIGNATURES_SECTION_TITLE)
@@ -435,7 +445,22 @@ def process_signatures(
         # Used for detecting if signature is a false positive
 
         translated_score = SCORE_TRANSLATION[sig["severity"]]
-        so_sig = so.create_signature()
+        data = {
+            "name": sig_name,
+            "type": "CUCKOO",
+        }
+        s_tag = SignatureModel.get_tag(data)
+        s_oid = SignatureModel.get_oid(data)
+        so_sig = so.create_signature(
+            objectid=so.create_objectid(
+                tag=s_tag,
+                ontology_id=s_oid,
+                session=session,
+            ),
+            name=sig_name,
+            type="CUCKOO",
+            score=translated_score,
+        )
         sig_res = _create_signature_result_section(sig_name, sig, translated_score, so_sig)
 
         if sig_name == "console_output":
@@ -443,11 +468,26 @@ def process_signatures(
         elif sig_name == "injection_write_memory_exe":
             _write_injected_exe_to_file(task_id, sig_marks)
 
+        attributes: List[Attribute] = list()
+        action = SIGNATURE_TO_ATTRIBUTE_ACTION_MAP.get(sig_name)
         # Find any indicators of compromise from the signature marks
         for mark in sig_marks:
             pid = mark.get("pid")
             process_name = process_map.get(pid, {}).get("name")
-            so_sig.update_process(pid=pid, image=process_name)
+
+            # Check if the mark is a call
+            if all(k in ["type", "pid", "cid", "call"] for k in mark.keys()):
+                pid = mark.get("pid")
+                # The way that this would work is that the marks of the signature contain a call followed by a non-call
+                source = so.get_process_by_pid(pid)
+                # If the source is the same as a previous attribute for the same signature, skip
+                if source and all(attribute.action != action and attribute.source.as_primitives() != source.as_primitives() for attribute in attributes):
+                    attribute = so_sig.create_attribute(
+                        source=source.objectid,
+                        action=action,
+                    )
+
+                    attributes.append(attribute)
 
             # Adding tags and descriptions to the signature section, based on the type of mark
             if mark["type"] == "generic":
@@ -482,6 +522,8 @@ def process_signatures(
 
                     so_sig.add_process_subject(pid=injected_process, image=injected_process_name,
                                                start_time=mark["call"].get("time"))
+        if attributes:
+            [so_sig.add_attribute(attribute) for attribute in attributes]
 
         sigs_res.add_subsection(sig_res)
         so.add_signature(so_sig)
@@ -507,6 +549,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     :param so: The sandbox ontology class object
     :return: None
     """
+    session = so.sandboxes[-1].objectid.session
     network_res = ResultSection("Network Activity")
 
     # DNS
@@ -567,27 +610,87 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
             _ = add_tag(netflows_sec, "network.port", network_flow["dest_port"])
             _ = add_tag(netflows_sec, "network.port", network_flow["src_port"])
 
+            nc_oid = NetworkConnectionModel.get_oid(
+                {
+                    "source_ip": network_flow["src_ip"],
+                    "source_port": network_flow["src_port"],
+                    "destination_ip": network_flow["dest_ip"],
+                    "destination_port": network_flow["dest_port"],
+                    "transport_layer_protocol": network_flow["protocol"],
+                    "connection_type": None,  # TODO: HTTP or DNS
+                }
+            )
+            objectid = so.create_objectid(
+                tag=NetworkConnectionModel.get_tag(
+                    {
+                        "destination_ip": network_flow["dest_ip"],
+                        "destination_port": network_flow["dest_port"],
+                    }
+                ),
+                ontology_id=nc_oid,
+                session=session,
+                time_observed=datetime.fromtimestamp(network_flow["timestamp"]).strftime(LOCAL_FMT)
+            )
+            objectid.assign_guid()
             nc = so.create_network_connection(
+                objectid=objectid,
                 source_ip=network_flow["src_ip"],
                 source_port=network_flow["src_port"],
                 destination_ip=network_flow["dest_ip"],
                 destination_port=network_flow["dest_port"],
-                time_observed=network_flow["timestamp"],
+                time_observed=datetime.fromtimestamp(network_flow["timestamp"]).strftime(LOCAL_FMT),
                 transport_layer_protocol=network_flow["protocol"],
-                direction="outbound")
+                direction=NetworkConnection.OUTBOUND)
             nc.update_process(pid=network_flow["pid"], image=process_details.get(
-                "name"), start_time=network_flow["timestamp"])
+                "name"), start_time=datetime.fromtimestamp(network_flow["timestamp"]).strftime(LOCAL_FMT))
             so.add_network_connection(nc)
 
             # We want all key values for all network flows except for timestamps and event_type
             del network_flow["timestamp"]
 
     for answer, request in resolved_ips.items():
-        nd = so.create_network_dns(domain=request["domain"], resolved_ips=[answer], lookup_type=request["type"])
-        nd.update_connection_details(
-            destination_ip=dns_servers[0] if dns_servers else None,
-            destination_port=53, transport_layer_protocol="udp", direction="outbound")
-        nd.update_process(pid=request["process_id"], image=request["process_name"], guid=request["guid"])
+        nd = so.create_network_dns(
+            domain=request["domain"], resolved_ips=[answer], lookup_type=request["type"]
+        )
+
+        destination_ip = dns_servers[0] if dns_servers else None
+        destination_port = 53
+        transport_layer_protocol = NetworkConnection.UDP
+
+        nc_oid = NetworkConnectionModel.get_oid(
+            {
+                "destination_ip": destination_ip,
+                "destination_port": destination_port,
+                "transport_layer_protocol": transport_layer_protocol,
+                "connection_type": NetworkConnection.DNS,
+            }
+        )
+        objectid = so.create_objectid(
+            tag=NetworkConnectionModel.get_tag(
+                {
+                    "destination_ip": destination_ip,
+                    "destination_port": destination_port,
+                }
+            ),
+            ontology_id=nc_oid,
+            session=session,
+        )
+        objectid.assign_guid()
+        nc = so.create_network_connection(
+            objectid=objectid,
+            destination_ip=destination_ip,
+            destination_port=destination_port,
+            transport_layer_protocol=transport_layer_protocol,
+            direction=NetworkConnection.OUTBOUND,
+            dns_details=nd,
+            connection_type=NetworkConnection.DNS,
+        )
+        nc.update_process(
+            pid=request["process_id"],
+            image=request["process_name"],
+            guid=request["guid"],
+        )
+        so.add_network_connection(nc)
         so.add_network_dns(nd)
 
     if dns_res_sec and len(dns_res_sec.tags.get("network.dynamic.domain", [])) > 0:
@@ -622,11 +725,6 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         _ = add_tag(http_sec, "network.protocol", "http")
 
         for http_call in http_calls:
-            if not add_tag(http_sec, "network.dynamic.ip", http_call.connection_details.destination_ip, safelist) or http_call.connection_details.destination_ip in dns_servers:
-                continue
-            _ = add_tag(http_sec, "network.port", http_call.connection_details.destination_port)
-            _ = add_tag(http_sec, "network.dynamic.domain", so.get_domain_by_destination_ip(
-                http_call.connection_details.destination_ip), safelist)
             _ = add_tag(http_sec, "network.dynamic.uri", http_call.request_uri, safelist)
 
             # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
@@ -654,10 +752,14 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                         suspicious_user_agent_sec.add_line(f"\t{sus_user_agent_used}")
                         sus_user_agents_used.append(sus_user_agent_used)
 
+            process = so.get_network_connection_by_network_http(http_call).process
             http_sec.add_row(
                 TableRow(
-                    process_name=f"{http_call.get_process_image()} ({http_call.get_process_pid()})",
-                    request=http_call.request_headers
+                    process_name=f"{process.image} ({process.pid})"
+                    if process
+                    else "None (None)",
+                    request=http_call.request_headers,
+                    uri=http_call.request_uri,
                 )
             )
         if remote_file_access_sec.heuristic:
@@ -941,17 +1043,19 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                             "connection_type": NetworkConnection.HTTP,
                         }
                     )
-                    nc = so.create_network_connection(
-                        objectid=so.create_objectid(
-                            tag=NetworkConnectionModel.get_tag(
-                                {
-                                    "destination_ip": destination_ip,
-                                    "destination_port": destination_port,
-                                }
-                            ),
-                            ontology_id=nc_oid,
-                            session=session,
+                    objectid = so.create_objectid(
+                        tag=NetworkConnectionModel.get_tag(
+                            {
+                                "destination_ip": destination_ip,
+                                "destination_port": destination_port,
+                            }
                         ),
+                        ontology_id=nc_oid,
+                        session=session,
+                    )
+                    objectid.assign_guid()
+                    nc = so.create_network_connection(
+                        objectid=objectid,
                         destination_ip=destination_ip,
                         destination_port=destination_port,
                         transport_layer_protocol=NetworkConnection.TCP,
@@ -1550,11 +1654,9 @@ def _tag_and_describe_generic_signature(
         http_string = mark["suspicious_request"].split()
         if "/wpad.dat" not in http_string[1] and add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
             sig_res.add_line(f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
-            so_sig.add_subject(uri=http_string[1])
     elif signature_name == "nolookup_communication":
         if not is_ip_in_network(mark["host"], inetsim_network) and add_tag(sig_res, "network.dynamic.ip", mark["host"], safelist):
             sig_res.add_line(f"\tIOC: {mark['host']}")
-            so_sig.add_subject(ip=mark["host"])
     elif signature_name == "suspicious_powershell":
         if not sig_res.body or (sig_res.body and safe_str(mark["value"]) not in sig_res.body):
             if mark.get("options"):
@@ -1569,7 +1671,6 @@ def _tag_and_describe_generic_signature(
         reg_value = mark.get("reg_value")
         if reg_key and reg_value:
             sig_res.add_line(f"\tThe registry key {reg_key} was set to {reg_value}")
-            so_sig.add_subject(registry=reg_key)
     else:
         for item in mark:
             if item in SKIPPED_MARK_ITEMS:
@@ -1608,27 +1709,20 @@ def _tag_and_describe_ioc_signature(
         url_pieces = urlparse(http_string[1])
         if url_pieces.path not in SKIPPED_PATHS and re_match(FULL_URI, http_string[1]):
             sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
-            if add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
-                so_sig.add_subject(uri=http_string[1])
     elif signature_name == "process_interest":
         sig_res.add_line(f'\tIOC: {safe_str(ioc)} is a {mark["category"].replace("process: ", "")}.')
     elif signature_name == "network_icmp":
         if not is_ip_in_network(ioc, inetsim_network) and add_tag(sig_res, "network.dynamic.ip", ioc, safelist):
-            so_sig.add_subject(ip=ioc)
             sig_res.add_line(f'\tPinged {safe_str(ioc)}.')
         else:
             domain = so.get_domain_by_destination_ip(ioc)
             if add_tag(sig_res, "network.dynamic.domain", domain, safelist):
-                so_sig.add_subject(domain=domain)
                 sig_res.add_line(f'\tPinged {safe_str(domain)}.')
     elif signature_name in SILENT_IOCS:
         # Nothing to see here, just avoiding printing out the IOC line in the result body
         pass
     elif not is_valid_ip(ioc) or not is_ip_in_network(ioc, inetsim_network):
-        if signature_name == "p2p_cnc":
-            if add_tag(sig_res, "network.dynamic.ip", ioc, safelist):
-                so_sig.add_subject(ip=ioc)
-        elif signature_name == "persistence_autorun":
+        if signature_name == "persistence_autorun":
             _ = add_tag(sig_res, "dynamic.autorun_location", ioc, safelist)
         else:
             # If process ID in ioc, replace with process name
@@ -1637,10 +1731,7 @@ def _tag_and_describe_ioc_signature(
                     ioc = ioc.replace(f" {key}", f" {process_map[key]['name']} ({key})")
         sig_res.add_line(f'\tIOC: {safe_str(ioc)}')
 
-    if mark["category"] in ["file", "dll"] and signature_name != "ransomware_mass_file_delete":
-        if add_tag(sig_res, "dynamic.process.file_name", ioc, safelist):
-            so_sig.add_subject(file=ioc)
-    elif mark["category"] == "cmdline":
+    if mark["category"] == "cmdline":
         ioc = ioc.strip()
         if add_tag(sig_res, "dynamic.process.command_line", ioc, safelist):
             process = so.get_process_by_command_line(ioc)
@@ -1654,11 +1745,6 @@ def _tag_and_describe_ioc_signature(
             extract_iocs_from_text_blob(ioc, sig_ioc_table, so_sig)
             if sig_ioc_table not in sig_res.subsections and sig_ioc_table.body:
                 sig_res.add_subsection(sig_ioc_table)
-    elif mark["category"] == "registry":
-        so_sig.add_subject(registry=ioc)
-    elif mark["category"] == "request":
-        if add_tag(sig_res, "network.dynamic.uri", ioc, safelist):
-            so_sig.add_subject(uri=ioc)
 
 
 def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], sig_res: ResultTextSection,
@@ -1677,25 +1763,17 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
     if "call" not in mark:
         return
 
-    so_sig.update_process(start_time=mark["call"].get("time"))
     if signature_name == "creates_hidden_file":
         file_path = mark["call"].get("arguments", {}).get("filepath")
         if add_tag(sig_res, "dynamic.process.file_name", file_path, safelist):
             sig_res.add_line(f"IOC: {file_path}")
-            so_sig.add_subject(file=file_path)
     elif signature_name == "moves_self":
         oldfilepath = mark["call"].get("arguments", {}).get("oldfilepath")
         newfilepath = mark["call"].get("arguments", {}).get("newfilepath")
         if oldfilepath and newfilepath:
             sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}\n\tNew file path: {safe_str(newfilepath)}')
-            if add_tag(sig_res, "dynamic.process.file_name", oldfilepath, safelist):
-                so_sig.add_subject(file=oldfilepath)
-            if add_tag(sig_res, "dynamic.process.file_name", newfilepath, safelist):
-                so_sig.add_subject(file=newfilepath)
         elif oldfilepath and newfilepath == "":
             sig_res.add_line(f'\tOld file path: {safe_str(oldfilepath)}\n\tNew file path: File deleted itself')
-            if add_tag(sig_res, "dynamic.process.file_name", oldfilepath, safelist):
-                so_sig.add_subject(file=oldfilepath)
     elif signature_name == "creates_service":
         service_name = mark["call"].get("arguments", {}).get("service_name")
         if service_name:
@@ -1712,11 +1790,6 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
     elif signature_name == "network_document_file":
         download_path = mark["call"].get("arguments", {}).get("filepath")
         url = mark["call"].get("arguments", {}).get("url")
-        if download_path:
-            if add_tag(sig_res, "dynamic.process.file_name", download_path, safelist):
-                so_sig.add_subject(file=download_path)
-        if url and add_tag(sig_res, "network.dynamic.uri", url, safelist):
-            so_sig.add_subject(uri=url)
         if download_path and url:
             sig_res.add_line(f'\tThe file at {safe_str(url)} was attempted to be downloaded to {download_path}')
 
@@ -1881,10 +1954,11 @@ def _update_process_map(process_map: Dict[int, Dict[str, Any]], processes: List[
 if __name__ == "__main__":
     from sys import argv
     from json import loads
+    from assemblyline_v4_service.common.base import ServiceBase
+
     # pip install PyYAML
     import yaml
     from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
-    from assemblyline.odm.models.ontology.types.sandbox import Sandbox
 
     report_path = argv[1]
     file_ext = argv[2]
@@ -1894,6 +1968,9 @@ if __name__ == "__main__":
 
     with open(safelist_path, "r") as f:
         safelist = yaml.safe_load(f)
+    safelist["regex"]["network.dynamic.ip"].append(
+        random_ip_range.replace(".", "\\.").replace("0/24", ".*")
+    )
 
     so = OntologyResults(service_name="Cuckoo")
 
@@ -1908,6 +1985,7 @@ if __name__ == "__main__":
         safelist,
         so)
 
+    service = ServiceBase()
     so.preprocess_ontology(SAFE_PROCESS_TREE_LEAF_HASHES.keys())
     print(dumps(so.as_primitives(), indent=4))
-    Sandbox(data=so.as_primitives())
+    attach_dynamic_ontology(service, so)

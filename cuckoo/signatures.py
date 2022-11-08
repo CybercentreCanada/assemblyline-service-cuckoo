@@ -748,3 +748,16 @@ def get_signature_category(sig: str) -> str:
     :return: The category name
     """
     return CUCKOO_SIGNATURES.get(sig, "unknown")
+
+
+SIGNATURE_TO_ATTRIBUTE_ACTION_MAP = {
+    # Signature Name : attribute action that is relevant
+    "dead_connect": "network_connection",
+    "antidebug_setunhandledexceptionfilter": "process_tampering",
+    "dynamic_function_loading": "driver_loaded",
+    "process_needed": "process_access",
+    "injection_network_traffic": "network_connection",
+    "explorer_http": "network_connection",
+    "deletes_self": "file_delete",
+    "removes_zoneid_ads": "registry_delete",
+}
