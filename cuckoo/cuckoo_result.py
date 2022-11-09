@@ -1021,7 +1021,7 @@ def _process_http_calls(http_level_flows: Dict[str, List[Dict[str, Any]]],
                 nh_to_add = True
 
                 nc = so.get_network_connection_by_details(
-                    destination_ip=http_call["dst"],
+                    destination_ip=destination_ip,
                     destination_port=port,
                     direction=NetworkConnection.OUTBOUND,
                     transport_layer_protocol=NetworkConnection.TCP,
