@@ -41,6 +41,11 @@ stages:
             inputs:
               command: login
               containerRegistry: dockerhub
+          - task: Docker@2
+            displayName: Login to chimera
+            inputs:
+              command: login
+              containerRegistry: CHIMERA-U-ACR
           - checkout: self
             fetchDepth: 1
             path: $(self_location)
@@ -61,5 +66,14 @@ stages:
               docker run -e FULL_SELF_LOCATION=/opt/al_service -e FULL_SAMPLES_LOCATION=/opt/samples -v /usr/share/ca-certificates/mozilla:/usr/share/ca-certificates/mozilla -v $(pwd)/tests/:/opt/al_service/tests/ -v ${FULL_SAMPLES_LOCATION}:/opt/samples cccs/${BUILD_REPOSITORY_NAME##*/}:$BUILD_TYPE bash -c 'pytest -p no:cacheprovider -vv'
             workingDirectory: $(full_self_location)
             displayName: Test containers
-          - script: docker push cccs/${BUILD_REPOSITORY_NAME##*/} --all-tags
-            displayName: Deploy to Docker Hub
+          - script: |
+              export TAG=${BUILD_SOURCEBRANCH#"refs/tags/v"}
+              if [[ "$TAG" == *stable* ]]; then export BUILD_TYPE=stable; else export BUILD_TYPE=latest; fi
+
+              for IMAGE in "cccs/" "uchimera.azurecr.io/cccs/"
+              do
+                docker tag cccs/${BUILD_REPOSITORY_NAME##*/}:$BUILD_TYPE ${IMAGE}${BUILD_REPOSITORY_NAME##*/}:$TAG
+                docker tag cccs/${BUILD_REPOSITORY_NAME##*/}:$BUILD_TYPE ${IMAGE}${BUILD_REPOSITORY_NAME##*/}:$BUILD_TYPE
+                docker push ${IMAGE}${BUILD_REPOSITORY_NAME##*/} --all-tags
+              done
+            displayName: Deploy to container repositories
