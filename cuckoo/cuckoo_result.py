@@ -1582,7 +1582,7 @@ def _create_signature_result_section(
         sig_res.add_line('\tFamilies: ' + ','.join([safe_str(x) for x in sig_families]))
         _ = add_tag(sig_res, "dynamic.signature.family", [family for family in sig_families])
 
-    so_sig.update(name=name, description=description, score=translated_score)
+    so_sig.update(name=name, score=translated_score)
     return sig_res
 
 
