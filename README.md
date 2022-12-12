@@ -157,12 +157,21 @@ version of the upstream `dll.py` package that is able to launch multiple DLL
 exports in a single run by passing the export names to execute using the
 function option, separated by pipe character. ie. `function=export1|export2`
 
-#### INetSim - Random DNS Resolution
+#### INetSim
+
+##### Random DNS Resolution
 `DNS.pm, Config.pm, inetsim_patch.conf`
 
 These files are located at `inetsim/random_dns_patch/`. They allow an INetSim installation's DNS service to return a random IP from a given range for DNS lookups.
-In order to implement this patch, replace the `DNS.pm` and `Config.pm` found wherever you're running INetSim with the files found in this repo. If on a Linux box, then they
+In order to implement this patch, replace the `DNS.pm` and `Config.pm` found wherever you're running INetSim with the files found in this directory. If on a Linux box, then they
 could be at `/usr/share/perl5/INetSim/`. Then append the contents from `inetsim_patch.conf` to `/etc/inetsim/inetsim.conf`. Restart INetSim with `sudo systemctl restart inetsim.service`.
+
+##### Geo-IP Service Patch
+`HTTP.pm`
+
+This file is located at `inetsim/geo_ip_service_patch/`. It allows an INetSim installation's HTTP service to return a fake response for a geo-IP service lookup.
+In order to implement this patch, replace the `HTTP.pm` found wherever you're running INetSim with the file found in this directory. If on a Linux box, then they
+could be at `/usr/share/perl5/INetSim/`. Restart INetSim with `sudo systemctl restart inetsim.service`.
 
 ### Assemblyline System Safelist
 #### Cuckoo-specific safelisted items
