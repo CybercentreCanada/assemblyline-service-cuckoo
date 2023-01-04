@@ -775,7 +775,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     else:
         _process_non_http_traffic_over_http(network_res, unique_netflows)
 
-    _extract_iocs_from_encrypted_buffers(process_map, network_res)
+    _extract_iocs_from_encrypted_buffers(process_map, network_res, safelist)
 
     if len(network_res.subsections) > 0:
         parent_result_section.add_subsection(network_res)
@@ -1619,11 +1619,12 @@ def _write_injected_exe_to_file(task_id: int, marks: List[Dict[str, Any]]) -> No
 
 
 def _extract_iocs_from_encrypted_buffers(process_map: Dict[int, Dict[str, Any]],
-                                         network_res: ResultSection) -> None:
+                                         network_res: ResultSection, safelist: Dict[str, Dict[str, List[str]]]) -> None:
     """
     Extract IOCs from encrypted buffers observed during network analysis
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param network_res: The result section containing details about the network behaviour
+    :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :return: None
     """
     encrypted_buffer_ioc_table = ResultTableSection(
@@ -1633,7 +1634,7 @@ def _extract_iocs_from_encrypted_buffers(process_map: Dict[int, Dict[str, Any]],
             for api_call in BUFFER_API_CALLS:
                 if api_call in network_call:
                     buffer = network_call[api_call]["buffer"]
-                    extract_iocs_from_text_blob(buffer, encrypted_buffer_ioc_table)
+                    extract_iocs_from_text_blob(buffer, encrypted_buffer_ioc_table, safelist=safelist)
     if encrypted_buffer_ioc_table.body:
         encrypted_buffer_ioc_table.set_heuristic(1006)
         network_res.add_subsection(encrypted_buffer_ioc_table)

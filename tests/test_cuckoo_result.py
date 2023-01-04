@@ -630,8 +630,9 @@ class TestCuckooResult:
         correct_result_section.add_row(TableRow({"ioc_type": "domain", "ioc": "blah.ca"}))
         correct_result_section.add_tag("network.dynamic.domain", "blah.com")
         correct_result_section.add_tag("network.dynamic.domain", "blah.ca")
+        safelist = {}
         _extract_iocs_from_encrypted_buffers({1: {"network_calls": [{"send": {"buffer": "blah.com"}}]}, 2: {
-                                         "network_calls": [{"send": {"buffer": "blah.ca"}}]}}, test_parent_section)
+                                         "network_calls": [{"send": {"buffer": "blah.ca"}}]}}, test_parent_section, safelist)
         assert check_section_equality(test_parent_section.subsections[0], correct_result_section)
 
     @staticmethod
