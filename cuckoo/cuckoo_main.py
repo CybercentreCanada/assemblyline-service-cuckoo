@@ -1117,7 +1117,7 @@ class Cuckoo(ServiceBase):
             kwargs['enforce_timeout'] = False
             kwargs['timeout'] = self.config.get("default_analysis_timeout_in_seconds", ANALYSIS_TIMEOUT)
         arguments = self.request.get_param("arguments")
-        dump_memory = self.request.get_param("dump_memory")
+        dump_memory = self._safely_get_param("dump_memory")
         no_monitor = self.request.get_param("no_monitor")
 
         # If the user didn't select no_monitor, but at the service level we want no_monitor on Windows 10x64, then:
