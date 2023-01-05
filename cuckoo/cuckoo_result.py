@@ -1252,11 +1252,13 @@ def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any]
                 elif name == "Protocol":
                     protocol = text.lower()
                 elif name == "SourceIp":
-                    network_conn["src"] = text
+                    if re_match(IPV4_REGEX, text):
+                        network_conn["src"] = text
                 elif name == "SourcePort":
                     network_conn["sport"] = int(text)
                 elif name == "DestinationIp":
-                    network_conn["dst"] = text
+                    if re_match(IPV4_REGEX, text):
+                        network_conn["dst"] = text
                 elif name == "DestinationPort":
                     network_conn["dport"] = int(text)
             if any(network_conn[key] is None for key in network_conn.keys()) or not protocol:

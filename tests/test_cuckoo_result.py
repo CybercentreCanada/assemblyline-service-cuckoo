@@ -903,6 +903,36 @@ class TestCuckooResult:
                                   {'dport': 321, 'dst': '11.11.11.11', 'guid': '{blah}', 'image': 'blah.exe', 'pid': 123, 'sport': 123,
                                    'src': '10.10.10.10', 'time': 1627054921.001}]}),
             ([{
+                "System": {"EventID": '3'},
+                "EventData": {"Data":
+                              [
+                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
+                                  {"@Name": "ProcessId", "#text": "123"},
+                                  {"@Name": "Image", "#text": "blah.exe"},
+                                  {"@Name": "Protocol", "#text": "tcp"},
+                                  {"@Name": "SourceIp", "#text": "::ffff:7f00:1"},
+                                  {"@Name": "SourcePort", "#text": "123"},
+                                  {"@Name": "DestinationIp", "#text": "11.11.11.11"},
+                                  {"@Name": "DestinationPort", "#text": "321"},
+                              ]
+                              }}], {"tcp": []}, {'tcp': []}),
+            ([{
+                "System": {"EventID": '3'},
+                "EventData": {"Data":
+                              [
+                                  {"@Name": "UtcTime", "#text": "2021-07-23 15:42:01.001"},
+                                  {"@Name": "ProcessGuid", "#text": "{blah}"},
+                                  {"@Name": "ProcessId", "#text": "123"},
+                                  {"@Name": "Image", "#text": "blah.exe"},
+                                  {"@Name": "Protocol", "#text": "tcp"},
+                                  {"@Name": "SourceIp", "#text": "10.10.10.10"},
+                                  {"@Name": "SourcePort", "#text": "123"},
+                                  {"@Name": "DestinationIp", "#text": "::ffff:7f00:1"},
+                                  {"@Name": "DestinationPort", "#text": "321"},
+                              ]
+                              }}], {"tcp": []}, {'tcp': []}),
+            ([{
                 "System": {"EventID": '22'},
                 "EventData": {"Data":
                               [
@@ -957,9 +987,10 @@ class TestCuckooResult:
                                   }]}
              ),
 
+
         ]
     )
-    def test_convert_sysmon_network(sysmon, actual_network, correct_network, dummy_result_class_instance, mocker):
+    def test_convert_sysmon_network(sysmon, actual_network, correct_network):
         from cuckoo.cuckoo_result import convert_sysmon_network
         safelist = {}
         convert_sysmon_network(sysmon, actual_network, safelist)
