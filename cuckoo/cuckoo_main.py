@@ -5,7 +5,7 @@ from json import JSONDecodeError, loads
 import os
 from pefile import PE, PEFormatError
 from random import choice, random
-from re import compile, match
+from re import compile as re_compile, match as re_match
 from ssdeep import hash as ssdeep_hash, compare as ssdeep_compare
 from sys import maxsize, setrecursionlimit
 import requests
@@ -37,6 +37,10 @@ from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 HOLLOWSHUNTER_REPORT_REGEX = r"hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = r"hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
 INJECTED_EXE_REGEX = r"^\/tmp\/%s_injected_memory_[0-9]{1,2}\.exe$"
+# This module in Cuckoo extracts batch files based on what command lines were observed:
+# https://github.com/cuckoosandbox/cuckoo/blob/073c5aab0ff1e4065f665045472309fc4064e354/cuckoo/common/scripting.py#L59.
+# We want to assist with the identification, so we need to look for them based on their names.
+BATCH_NAME_REGEX = r"extracted\/[0-9]+\.bat"
 
 CUCKOO_API_SUBMIT = "tasks/create/file"
 CUCKOO_API_QUERY_TASK = "tasks/view/%s"
@@ -979,7 +983,7 @@ class Cuckoo(ServiceBase):
         machine_section.update_items(body)
 
         self._add_operating_system_tags(machine_name, platform, machine_section)
-        m = compile(MACHINE_NAME_REGEX).search(machine_name)
+        m = re_compile(MACHINE_NAME_REGEX).search(machine_name)
         if m and len(m.groups()) == 1:
             version = m.group(1)
             _ = add_tag(machine_section, "dynamic.operating_system.version", version)
@@ -1030,7 +1034,7 @@ class Cuckoo(ServiceBase):
         :return: None
         """
         # Check the filename to see if it's mime encoded
-        mime_re = compile(r"^=\?.*\?=$")
+        mime_re = re_compile(r"^=\?.*\?=$")
         if mime_re.match(self.file_name):
             self.log.debug("Found a mime encoded filename, will try and decode")
             try:
@@ -1530,7 +1534,7 @@ class Cuckoo(ServiceBase):
         injected_exes: List[str] = []
         for f in os.listdir(temp_dir):
             file_path = os.path.join(temp_dir, f)
-            if os.path.isfile(file_path) and match(INJECTED_EXE_REGEX % task_id, file_path):
+            if os.path.isfile(file_path) and re_match(INJECTED_EXE_REGEX % task_id, file_path):
                 injected_exes.append(file_path)
 
         for injected_exe in injected_exes:
@@ -1615,6 +1619,20 @@ class Cuckoo(ServiceBase):
                             "because we suspect it is garbage.")
                         continue
 
+                # These files are created with this Cuckoo module:
+                # https://github.com/cuckoosandbox/cuckoo/blob/073c5aab0ff1e4065f665045472309fc4064e354/cuckoo/common/scripting.py#L59
+                # If there is a match in the file name, then the file existed in the process tree and
+                # may need assistance in identification. Prepend the batch file header to the file contents.
+                if key in ["extracted"] and re_match(BATCH_NAME_REGEX, f):
+                    file_contents = "REM Batch extracted by Assemblyline\n".encode()
+
+                    # Overwrite
+                    with open(destination_file_path, "rb") as fh:
+                        file_contents += fh.read()
+
+                    with open(destination_file_path, "wb") as fh:
+                        fh.write(file_contents)
+
                 if key not in ["supplementary"]:
                     to_be_extracted = True
 
@@ -1637,8 +1655,8 @@ class Cuckoo(ServiceBase):
         :return: None
         """
         task_dir = os.path.join(self.working_directory, f"{task_id}")
-        report_pattern = compile(HOLLOWSHUNTER_REPORT_REGEX)
-        dump_pattern = compile(HOLLOWSHUNTER_DUMP_REGEX)
+        report_pattern = re_compile(HOLLOWSHUNTER_REPORT_REGEX)
+        dump_pattern = re_compile(HOLLOWSHUNTER_DUMP_REGEX)
         report_list = list(filter(report_pattern.match, tar_obj.getnames()))
         dump_list = list(filter(dump_pattern.match, tar_obj.getnames()))
 
