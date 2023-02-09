@@ -133,7 +133,8 @@ regex:
   - C:\\Windows\\system32\\AUDIODG\.EXE 0x6e8
   network.dynamic.domain:
   # Adobe
-  - .*\.adobe\.com$
+  - .+\.adobe\.com$
+  - files\.acrobat\.com$
   # Google
   - play\.google\.com$
   # Android
@@ -321,6 +322,12 @@ regex:
   - https?://www\.w3\.org/.*
   # Google
   - https?://www\.google\.com
+  # Adobe
+  - (?:https?://)?files\.acrobat\.com(?:(?::443)|(?:/.*))
+  - https?://acroipm2?\.adobe\.com/.*
+  network.dynamic.uri_path:
+  # Adobe
+  - \/11\/rdr\/enu\/win\/nooem\/none\/message\.zip
   file.path:
   # Office
   - (?:[a-f0-9]{2}|\~\$)[a-f0-9]{62}\.(doc|xls|ppt)x?$
