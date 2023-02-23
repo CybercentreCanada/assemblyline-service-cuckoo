@@ -1,8 +1,8 @@
-from math import ceil
 from email.header import decode_header
 from hashlib import sha256
 from io import BytesIO
 from json import JSONDecodeError, loads
+from math import ceil
 import os
 from pefile import PE, PEFormatError
 from random import choice, random
