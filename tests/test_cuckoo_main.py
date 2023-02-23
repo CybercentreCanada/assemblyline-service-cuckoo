@@ -1521,12 +1521,12 @@ class TestCuckooMain:
         else:
             PE = FakePE()
             correct_kwargs["package"] = "dll_multi"
-            correct_task_options = ['function=#blah|blah|blah|blah2|blah3']
+            correct_task_options = ['function=DllMain|DllRegisterServer|#blah|blah4|blah2']
             correct_result_section = ResultSection(
                 title_text="Executed Multiple DLL Exports",
-                body="The following exports were executed: #blah, blah, blah, blah2, blah3"
+                body="The following exports were executed: DllMain, DllRegisterServer, #blah, blah4, blah2"
             )
-            correct_result_section.add_line("There were 1 other exports: blah4")
+            correct_result_section.add_line("There were 2 other exports: blah, blah3")
 
         mocker.patch.object(Cuckoo, '_create_pe_from_file_contents', return_value=PE)
         cuckoo_class_instance._parse_dll(kwargs, task_options, parent_section)
