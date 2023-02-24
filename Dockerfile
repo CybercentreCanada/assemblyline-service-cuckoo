@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y qemu-utils && rm -rf /var/lib/apt/lists
 # Switch to assemblyline user
 USER assemblyline
 
-# Install pip packages
-RUN pip install --no-cache-dir --user retrying pefile && rm -rf ~/.cache/pip
+# Install python dependencies
+COPY requirements.txt requirements.txt
+RUN pip install --no-cache-dir --user --requirement requirements.txt && rm -rf ~/.cache/pip
 
 # Copy Cuckoo service code
 WORKDIR /opt/al_service

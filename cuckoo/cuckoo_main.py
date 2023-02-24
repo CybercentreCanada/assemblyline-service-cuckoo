@@ -1339,7 +1339,7 @@ class Cuckoo(ServiceBase):
                 else:
                     break
         else:
-            exports_to_run = exports_available[:max_dll_exports]
+            exports_to_run = exports_available
 
         task_options.append(f"function={'|'.join(exports_to_run)}")
 
@@ -1353,7 +1353,7 @@ class Cuckoo(ServiceBase):
                 f"The following exports were executed: {', '.join(exports_to_run)}")
             remaining_exports = set(exports_available) - set(exports_to_run)
             if len(remaining_exports) > 0:
-                available_exports_str = (", ").join(sorted(list(remaining_exports)))
+                available_exports_str = ", ".join(sorted(list(remaining_exports)))
                 dll_multi_section.add_line(f"There were {len(remaining_exports)} other exports: {available_exports_str}")
 
             parent_section.add_subsection(dll_multi_section)
