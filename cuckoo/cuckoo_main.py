@@ -2,6 +2,7 @@ from email.header import decode_header
 from hashlib import sha256
 from io import BytesIO
 from json import JSONDecodeError, loads
+from math import ceil
 import os
 from pefile import PE, PEFormatError
 from random import choice, random
@@ -10,6 +11,7 @@ from ssdeep import hash as ssdeep_hash, compare as ssdeep_compare
 from sys import maxsize, setrecursionlimit
 import requests
 from retrying import retry, RetryError
+from SetSimilaritySearch import SearchIndex
 from tarfile import open as tarfile_open, TarFile
 from tempfile import SpooledTemporaryFile
 from time import time
@@ -1281,10 +1283,8 @@ class Cuckoo(ServiceBase):
         :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: None
         """
-        # TODO: check if dll_multi package exists
-        # TODO: dedup exports available
         exports_available: List[str] = []
-        # only proceed if it looks like we have dll_multi
+        exports_to_run: List[str] = []
         # We have a DLL file, but no user specified function(s) to run. let's try to pick a few...
         # This is reliant on analyzer/windows/modules/packages/dll_multi.py
         dll_parsed = self._create_pe_from_file_contents()
@@ -1305,19 +1305,56 @@ class Cuckoo(ServiceBase):
             exports_available.append("DllRegisterServer")
 
         max_dll_exports = self.config.get("max_dll_exports_exec", 5)
-        task_options.append(f"function={'|'.join(exports_available[:max_dll_exports])}")
+
+        # If the number of available exports is greater than the maximum number of
+        # exports that we want to run, we will be prioritizing by the following:
+        # 1. well known exports (dllRegisterServer, etc)
+        # 2. first exports (10%)
+        # 3. last exports (10%)
+        # 4. least common exports (80% - 2 exports for DllRegisterServer and DllMain)
+        if len(exports_available) > max_dll_exports:
+            ten_percent_of_exports = ceil(max_dll_exports * 0.1)
+
+            # add well-known exports
+            exports_to_run.extend(["DllMain", "DllRegisterServer"])
+
+            # first exports
+            exports_to_run.extend(exports_available[:ten_percent_of_exports])
+
+            # last exports
+            exports_to_run.extend(exports_available[-1*ten_percent_of_exports:])
+
+            # least common exports
+            index = SearchIndex(exports_available, similarity_func_name='jaccard', similarity_threshold=0.1)
+            similarity_scores=[]
+            for exp in exports_available:
+                res = index.query(exp)
+                avg_sim = sum(x[1] for x in res)/len(res)
+                similarity_scores.append((avg_sim, exp))
+
+            for _, name in sorted(similarity_scores):
+                if len(exports_to_run) < max_dll_exports:
+                    if not name in exports_to_run:
+                        exports_to_run.append(name)
+                else:
+                    break
+        else:
+            exports_to_run = exports_available[:max_dll_exports]
+
+        task_options.append(f"function={'|'.join(exports_to_run)}")
+
         kwargs["package"] = "dll_multi"
         self.log.debug(
-            f"Trying to run DLL with following function(s): {'|'.join(exports_available[:max_dll_exports])}")
+            f"Trying to run DLL with following function(s): {'|'.join(exports_to_run)}")
 
         if len(exports_available) > 0:
             dll_multi_section = ResultTextSection("Executed Multiple DLL Exports")
             dll_multi_section.add_line(
-                f"The following exports were executed: {', '.join(exports_available[:max_dll_exports])}")
-            remaining_exports = len(exports_available) - max_dll_exports
-            if remaining_exports > 0:
-                available_exports_str = ",".join(exports_available[max_dll_exports:])
-                dll_multi_section.add_line(f"There were {remaining_exports} other exports: {available_exports_str}")
+                f"The following exports were executed: {', '.join(exports_to_run)}")
+            remaining_exports = set(exports_available) - set(exports_to_run)
+            if len(remaining_exports) > 0:
+                available_exports_str = (", ").join(sorted(list(remaining_exports)))
+                dll_multi_section.add_line(f"There were {len(remaining_exports)} other exports: {available_exports_str}")
 
             parent_section.add_subsection(dll_multi_section)
 
