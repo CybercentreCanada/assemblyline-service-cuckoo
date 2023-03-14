@@ -1324,20 +1324,29 @@ class Cuckoo(ServiceBase):
             # last exports
             exports_to_run.extend(exports_available[-1*ten_percent_of_exports:])
 
-            # least common exports
-            index = SearchIndex(exports_available, similarity_func_name='jaccard', similarity_threshold=0.1)
-            similarity_scores=[]
-            for exp in exports_available:
-                res = index.query(exp)
-                avg_sim = sum(x[1] for x in res)/len(res)
-                similarity_scores.append((avg_sim, exp))
+            # This code runs at O(n^2), so if there are a lot of exports, don't run
+            if len(exports_available) <= 300:
+                # least common exports
+                index = SearchIndex(exports_available, similarity_func_name='jaccard', similarity_threshold=0.1)
+                similarity_scores = []
+                for exp in exports_available:
+                    res = index.query(exp)
+                    avg_sim = sum(x[1] for x in res)/len(res)
+                    similarity_scores.append((avg_sim, exp))
 
-            for _, name in sorted(similarity_scores):
-                if len(exports_to_run) < max_dll_exports:
-                    if not name in exports_to_run:
-                        exports_to_run.append(name)
-                else:
-                    break
+                for _, name in sorted(similarity_scores):
+                    if len(exports_to_run) < max_dll_exports:
+                        if name not in exports_to_run:
+                            exports_to_run.append(name)
+                    else:
+                        break
+            else:
+                # We'll take the next n after the first 10% of max_dll_exports to fill up the remaining exports to run
+                number_of_middle_exports_to_run = max_dll_exports - len(exports_to_run)
+                exports_to_run.extend(
+                    exports_available[ten_percent_of_exports:ten_percent_of_exports+number_of_middle_exports_to_run]
+                )
+
         else:
             exports_to_run = exports_available
 
