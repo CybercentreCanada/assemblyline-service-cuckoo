@@ -191,6 +191,7 @@ regex:
   - fp-(as-nocache|vp)\.azureedge\.net$
   - outlookmobile-office365-tas\.msedge\.net$
   - config\.messenger\.msn\.com$
+  - microsoftwindows\.client\.cbs$
   # Windows
   - settings(-win)?\.data\.microsoft\.com$
   - .*vortex-win\.data\.microsoft\.com$
