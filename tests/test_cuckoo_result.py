@@ -418,6 +418,21 @@ class TestCuckooResult:
         actual_res_sec = _get_dns_sec(resolved_ips, safelist)
         assert check_section_equality(actual_res_sec, expected_res_sec)
 
+        resolved_ips = {"0": {"domain": "blah.com"}}
+        expected_res_sec = ResultSection(
+            "Protocol: DNS", body_format=BODY_FORMAT.TABLE, body=dumps([{"domain": "blah.com"}])
+        )
+        expected_res_sec.set_heuristic(1000)
+        expected_res_sec.add_tag("network.protocol", "dns")
+        expected_res_sec.add_tag("network.dynamic.domain", "blah.com")
+        expected_res_sec.add_subsection(ResultSection(
+            title_text="DNS services are down!",
+            body="Contact the CAPE administrator for details.",
+        ))
+        actual_res_sec = _get_dns_sec(resolved_ips, safelist)
+        assert check_section_equality(actual_res_sec, expected_res_sec)
+
+
     @staticmethod
     @pytest.mark.parametrize(
         "dns_calls, process_map, routing, expected_return",
@@ -473,6 +488,20 @@ class TestCuckooResult:
             ([{"answers": [{"data": "1.1.1.1"}],
                "request": "request", "type": "dns_type"}],
              {1: {"network_calls": [{"blah": {"hostname": "blah"}}]}}, "", {}),
+            ([{"answers": [],
+               "request": "request", "type": "dns_type"}],
+             {},
+             "",
+             {
+                '0': {
+                    'domain': 'request',
+                    'guid': None,
+                    'process_id': None,
+                    'process_name': None,
+                    'time': None,
+                    'type': 'dns_type'
+                }
+            }),
         ]
     )
     def test_get_dns_map(dns_calls, process_map, routing, expected_return):
