@@ -3,7 +3,7 @@ from ipaddress import ip_address, ip_network, IPv4Network
 from json import dumps
 from logging import getLogger
 import os
-from re import findall, match as re_match, search
+from re import match as re_match, search
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -12,22 +12,35 @@ from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
 from assemblyline.common.isotime import LOCAL_FMT
 from assemblyline.common.net import is_valid_ip, is_ip_in_network
-from assemblyline.odm.base import IPV4_REGEX, FULL_URI
+from assemblyline.odm.base import FULL_URI
 from assemblyline.odm.models.ontology.results import (
     NetworkConnection as NetworkConnectionModel,
     Process as ProcessModel,
     Sandbox as SandboxModel,
     Signature as SignatureModel
 )
-from assemblyline_v4_service.common.result import ResultSection, ResultKeyValueSection, ResultTextSection, ResultTableSection, TableRow
+from assemblyline_v4_service.common.result import (
+    ResultKeyValueSection,
+    ResultSection,
+    ResultTableSection,
+    ResultTextSection,
+    TableRow
+)
 from assemblyline_v4_service.common.safelist_helper import is_tag_safelisted, contains_safelisted_value
 from assemblyline_v4_service.common.tag_helper import add_tag
 
-from cuckoo.signatures import get_category_id, get_signature_category, CUCKOO_DROPPED_SIGNATURES, SIGNATURE_TO_ATTRIBUTE_ACTION_MAP
+from cuckoo.signatures import (
+    get_category_id,
+    get_signature_category,
+    CUCKOO_DROPPED_SIGNATURES,
+    SIGNATURE_TO_ATTRIBUTE_ACTION_MAP
+)
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 from assemblyline_v4_service.common.dynamic_service_helper import (
     attach_dynamic_ontology,
     Attribute,
+    convert_sysmon_network,
+    convert_sysmon_processes,
     extract_iocs_from_text_blob,
     OntologyResults,
     Process,
@@ -77,10 +90,13 @@ SUPPORTED_EXTENSIONS = [
     'pptm', 'pptx', 'ps1', 'pub', 'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx'
 ]
 ANALYSIS_ERRORS = 'Analysis Errors'
-# Substring of Warning Message frm https://github.com/cuckoosandbox/cuckoo/blob/50452a39ff7c3e0c4c94d114bc6317101633b958/cuckoo/core/guest.py#L561
+# Substring of Warning Message from
+# https://github.com/cuckoosandbox/cuckoo/blob/50452a39ff7c3e0c4c94d114bc6317101633b958/cuckoo/core/guest.py#L561
 GUEST_LOSING_CONNNECTIVITY = 'Virtual Machine /status failed. This can indicate the guest losing network connectivity'
-# Substring of Error Message from https://github.com/cuckoosandbox/cuckoo/blob/50452a39ff7c3e0c4c94d114bc6317101633b958/cuckoo/core/scheduler.py#L572
-GUEST_CANNOT_REACH_HOST = "it appears that this Virtual Machine hasn't been configured properly as the Cuckoo Host wasn't able to connect to the Guest."
+# Substring of Error Message from
+# https://github.com/cuckoosandbox/cuckoo/blob/50452a39ff7c3e0c4c94d114bc6317101633b958/cuckoo/core/scheduler.py#L572
+GUEST_CANNOT_REACH_HOST = "it appears that this Virtual Machine hasn't been configured properly as " \
+    "the Cuckoo Host wasn't able to connect to the Guest."
 GUEST_LOST_CONNECTIVITY = 5
 SIGNATURES_SECTION_TITLE = "Signatures"
 ENCRYPTED_BUFFER_LIMIT = 25
@@ -131,7 +147,7 @@ def generate_al_result(
 
     if sysmon:
         convert_sysmon_processes(sysmon, safelist, so)
-        convert_sysmon_network(sysmon, network, safelist)
+        convert_sysmon_network(sysmon, network, safelist, convert_timestamp_to_epoch=True)
 
     if behaviour:
         sample_executed = [len(behaviour.get("processtree", [])),
@@ -481,7 +497,10 @@ def process_signatures(
                 # The way that this would work is that the marks of the signature contain a call followed by a non-call
                 source = so.get_process_by_pid(pid)
                 # If the source is the same as a previous attribute for the same signature, skip
-                if source and all(attribute.action != action and attribute.source.as_primitives() != source.as_primitives() for attribute in attributes):
+                if source and all(
+                    attribute.action != action
+                    and attribute.source.as_primitives() != source.as_primitives() for attribute in attributes
+                ):
                     attribute = so_sig.create_attribute(
                         source=source.objectid,
                         action=action,
@@ -491,7 +510,7 @@ def process_signatures(
 
             # Adding tags and descriptions to the signature section, based on the type of mark
             if mark["type"] == "generic":
-                _tag_and_describe_generic_signature(sig_name, mark, sig_res, inetsim_network, safelist, so_sig)
+                _tag_and_describe_generic_signature(sig_name, mark, sig_res, inetsim_network, safelist)
             elif mark["type"] == "ioc" and mark.get("category") not in SKIPPED_CATEGORY_IOCS:
                 _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network,
                                                 process_map, safelist, so, so_sig)
@@ -516,7 +535,8 @@ def process_signatures(
                         elif not sig_res.body:
                             sig_res.add_line(
                                 f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})')
-                        elif f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})' not in sig_res.body:
+                        elif f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})' \
+                             not in sig_res.body:
                             sig_res.add_line(
                                 f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})')
 
@@ -592,9 +612,12 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                             "WSAConnect", {}) or network_call.get(
                             "InternetOpenUrlA", {})
                         if connect != {} and (
-                                connect.get("ip_address", "") == network_flow["dest_ip"] or connect.get("hostname", "") ==
-                                network_flow["dest_ip"]) and connect["port"] == network_flow["dest_port"] or (
-                                network_flow["domain"] and network_flow["domain"] in connect.get("url", "")):
+                            connect.get("ip_address", "") == network_flow["dest_ip"]
+                            or connect.get("hostname", "") == network_flow["dest_ip"]
+                        ) and connect["port"] == network_flow["dest_port"] or (
+                            network_flow["domain"]
+                            and network_flow["domain"] in connect.get("url", "")
+                        ):
                             network_flow["image"] = process_details["name"] + " (" + str(process) + ")"
                             network_flow["pid"] = process
                             break
@@ -1253,115 +1276,6 @@ def process_curtain(
         parent_result_section.add_subsection(curtain_res)
 
 
-def convert_sysmon_network(sysmon: List[Dict[str, Any]], network: Dict[str, Any],
-                           safelist: Dict[str, Dict[str, List[str]]]) -> None:
-    """
-    This method converts network connections observed by Sysmon to the format supported by Cuckoo
-    :param sysmon: A list of processes observed during the analysis of the task by the Sysmon tool
-    :param network: The JSON of the network section from the report generated by Cuckoo
-    :param safelist: A dictionary containing matches and regexes for use in safelisting values
-    :return: None
-    """
-    for event in sysmon:
-        event_id = int(event["System"]["EventID"])
-
-        # There are two main EventIDs that describe network events: 3 (Network connection) and 22 (DNS query)
-        if event_id == 3:
-            protocol = None
-            network_conn = {
-                "src": None,
-                "dst": None,
-                "time": None,
-                "dport": None,
-                "sport": None,
-                "guid": None,
-                "pid": None,
-                "image": None,
-            }
-            for data in event["EventData"]["Data"]:
-                name = data["@Name"]
-                text = data.get("#text")
-                if name == "UtcTime":
-                    network_conn["time"] = datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
-                elif name == "ProcessGuid":
-                    network_conn["guid"] = text
-                elif name == "ProcessId":
-                    network_conn["pid"] = int(text)
-                elif name == "Image":
-                    network_conn["image"] = text
-                elif name == "Protocol":
-                    protocol = text.lower()
-                elif name == "SourceIp":
-                    if re_match(IPV4_REGEX, text):
-                        network_conn["src"] = text
-                elif name == "SourcePort":
-                    network_conn["sport"] = int(text)
-                elif name == "DestinationIp":
-                    if re_match(IPV4_REGEX, text):
-                        network_conn["dst"] = text
-                elif name == "DestinationPort":
-                    network_conn["dport"] = int(text)
-            if any(network_conn[key] is None for key in network_conn.keys()) or not protocol:
-                continue
-            elif any(
-                    req["dst"] == network_conn["dst"] and
-                    req["dport"] == network_conn["dport"] and
-                    req["src"] == network_conn["src"] and
-                    req["sport"] == network_conn["sport"]
-                    for req in network[protocol]
-            ):
-                # Replace record since we have more info from Sysmon
-                for req in network[protocol][:]:
-                    if req["dst"] == network_conn["dst"] and \
-                            req["dport"] == network_conn["dport"] and \
-                            req["src"] == network_conn["src"] and \
-                            req["sport"] == network_conn["sport"]:
-                        network[protocol].remove(req)
-                        network[protocol].append(network_conn)
-            else:
-                network[protocol].append(network_conn)
-        elif event_id == 22:
-            dns_query = {
-                "type": "A",
-                "request": None,
-                "answers": [],
-                "time": None,
-                "guid": None,
-                "pid": None,
-                "image": None,
-            }
-            for data in event["EventData"]["Data"]:
-                name = data["@Name"]
-                text = data.get("#text")
-                if text is None:
-                    continue
-                if name == "UtcTime":
-                    dns_query["time"] = datetime.strptime(text, "%Y-%m-%d %H:%M:%S.%f").timestamp()
-                elif name == "ProcessGuid":
-                    dns_query["guid"] = text
-                elif name == "ProcessId":
-                    dns_query["pid"] = int(text)
-                elif name == "QueryName":
-                    if not is_tag_safelisted(text, ["network.dynamic.domain"], safelist):
-                        dns_query["request"] = text
-                elif name == "QueryResults":
-                    ip = findall(IPV4_REGEX, text)
-                    for item in ip:
-                        dns_query["answers"].append({"data": item, "type": "A"})
-                elif name == "Image":
-                    dns_query["image"] = text
-            if any(dns_query[key] is None for key in dns_query.keys()):
-                continue
-            elif any(query["request"] == dns_query["request"] for query in network["dns"]):
-                # Replace record since we have more info from Sysmon
-                for query in network["dns"][:]:
-                    if query["request"] == dns_query["request"]:
-                        network["dns"].remove(query)
-                        network["dns"].append(dns_query)
-            else:
-                network["dns"].append(dns_query)
-
-
 def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: ResultSection,
                           process_map: Dict[int, Dict[str, Any]]) -> None:
     """
@@ -1555,8 +1469,15 @@ def _is_signature_a_false_positive(name: str, marks: List[Dict[str, Any]], filen
         elif name not in ["network_cnc_http", "nolookup_communication", "suspicious_powershell", "exploit_heapspray"] \
                 and mark["type"] == "generic":
             for item in mark:
-                if item not in SKIPPED_MARK_ITEMS and \
-                        (contains_safelisted_value(mark[item], safelist) or (isinstance(mark[item], str) and is_ip_in_network(mark[item], inetsim_network))):
+                if (
+                    item not in SKIPPED_MARK_ITEMS
+                    and (
+                        contains_safelisted_value(mark[item], safelist)
+                        or (
+                            isinstance(mark[item], str) and is_ip_in_network(mark[item], inetsim_network)
+                        )
+                    )
+                ):
                     fp_count += 1
         elif mark["type"] == "ioc":
             ioc = mark["ioc"]
@@ -1684,8 +1605,7 @@ def _extract_iocs_from_encrypted_buffers(process_map: Dict[int, Dict[str, Any]],
 
 def _tag_and_describe_generic_signature(
         signature_name: str, mark: Dict[str, Any],
-        sig_res: ResultTextSection, inetsim_network: IPv4Network, safelist: Dict[str, Dict[str, List[str]]],
-        so_sig: Signature) -> None:
+        sig_res: ResultTextSection, inetsim_network: IPv4Network, safelist: Dict[str, Dict[str, List[str]]]) -> None:
     """
     This method adds the appropriate tags and descriptions for "generic" signatures
     :param signature_name: The name of the signature
@@ -1693,15 +1613,20 @@ def _tag_and_describe_generic_signature(
     :param sig_res: A ResultTextSection containing details about the signature
     :param inetsim_network: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
-    :param so_sig: The signature for the Sandbox Ontology
     :return: None
     """
     if signature_name == "network_cnc_http":
         http_string = mark["suspicious_request"].split()
         if "/wpad.dat" not in http_string[1] and add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
-            sig_res.add_line(f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because "{safe_str(mark["suspicious_features"])}"')
+            sig_res.add_line(
+                f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because '
+                f'"{safe_str(mark["suspicious_features"])}"'
+            )
     elif signature_name == "nolookup_communication":
-        if not is_ip_in_network(mark["host"], inetsim_network) and add_tag(sig_res, "network.dynamic.ip", mark["host"], safelist):
+        if (
+            not is_ip_in_network(mark["host"], inetsim_network)
+            and add_tag(sig_res, "network.dynamic.ip", mark["host"], safelist)
+        ):
             sig_res.add_line(f"\tIOC: {mark['host']}")
     elif signature_name == "suspicious_powershell":
         if not sig_res.body or (sig_res.body and safe_str(mark["value"]) not in sig_res.body):
@@ -1722,7 +1647,16 @@ def _tag_and_describe_generic_signature(
             if item in SKIPPED_MARK_ITEMS:
                 continue
             if not contains_safelisted_value(mark[item], safelist):
-                if not isinstance(mark[item], str) or (isinstance(mark[item], str) and (not is_valid_ip(mark[item]) or not is_ip_in_network(mark[item], inetsim_network))):
+                if (
+                    not isinstance(mark[item], str)
+                    or (
+                        isinstance(mark[item], str)
+                        and (
+                            not is_valid_ip(mark[item])
+                            or not is_ip_in_network(mark[item], inetsim_network)
+                        )
+                    )
+                ):
                     if item == "description":
                         sig_res.add_line(f'\tFun fact: {safe_str(mark[item])}')
                     else:
@@ -1780,10 +1714,13 @@ def _tag_and_describe_ioc_signature(
     if mark["category"] == "cmdline":
         ioc = ioc.strip()
         if add_tag(sig_res, "dynamic.process.command_line", ioc, safelist):
-            process = so.get_process_by_command_line(ioc)
             command_line_iocs = "Command line IOCs"
             if any(subsection.title_text == command_line_iocs for subsection in sig_res.subsections):
-                sig_ioc_table = next((subsection for subsection in sig_res.subsections if subsection.title_text == command_line_iocs))
+                sig_ioc_table = next(
+                    (
+                        subsection for subsection in sig_res.subsections if subsection.title_text == command_line_iocs
+                    )
+                )
             else:
                 sig_ioc_table = ResultTableSection(command_line_iocs)
             extract_iocs_from_text_blob(ioc, sig_ioc_table, so_sig)
@@ -1873,109 +1810,6 @@ def _remove_network_http_noise(sigs: List[Dict[str, Any]]) -> List[Dict[str, Any
         return sigs
 
 
-def convert_sysmon_processes(
-        sysmon: List[Dict[str, Any]],
-        safelist: Dict[str, Dict[str, List[str]]],
-        so: OntologyResults):
-    """
-    This method creates the GUID -> Process lookup table
-    :param sysmon: A list of processes observed during the analysis of the task by the Sysmon tool
-    :param safelist: A dictionary containing matches and regexes for use in safelisting values
-    :param so: The sandbox ontology object instance
-    :return: None
-    """
-    session = so.sandboxes[-1].objectid.session
-    for event in sysmon:
-        event_id = int(event["System"]["EventID"])
-        # EventID 10: ProcessAccess causes too many misconfigurations of the process tree
-        if event_id == 10:
-            continue
-        process: Dict[str, str] = {}
-        event_data = event["EventData"]["Data"]
-        for data in event_data:
-            name = data["@Name"].lower()
-            text = data.get("#text")
-
-            # Process Create and Terminate
-            if name == "utctime" and event_id in [1, 5]:
-                if "." in text:
-                    text = text[:text.index(".")]
-                t = str(datetime.strptime(text, LOCAL_FMT))
-                if event_id == 1:
-                    process["start_time"] = t
-                else:
-                    process["start_time"] = MIN_TIME
-                    process["end_time"] = t
-            elif name == "utctime" and event_id in [10]:
-                if "." in text:
-                    text = text[:text.index(".")]
-                t = str(datetime.strptime(text, LOCAL_FMT))
-                process["start_time"] = t
-                process["time_observed"] = t
-            elif name == "utctime":
-                if "." in text:
-                    text = text[:text.index(".")]
-                t = str(datetime.strptime(text, LOCAL_FMT))
-                process["time_observed"] = t
-            elif name in ["sourceprocessguid", "parentprocessguid"]:
-                process["pguid"] = text
-            elif name in ["processguid", "targetprocessguid"]:
-                process["guid"] = text
-            elif name in ["parentprocessid", "sourceprocessid"]:
-                process["ppid"] = int(text)
-            elif name in ["processid", "targetprocessid"]:
-                process["pid"] = int(text)
-            elif name in ["sourceimage"]:
-                process["pimage"] = text
-            elif name in ["image", "targetimage"]:
-                if not is_tag_safelisted(text, ["dynamic.process.file_name"], safelist):
-                    process["image"] = text
-            elif name in ["parentcommandline"]:
-                if not is_tag_safelisted(text, ["dynamic.process.command_line"], safelist):
-                    process["pcommand_line"] = text
-            elif name in ["commandline"]:
-                if not is_tag_safelisted(text, ["dynamic.process.command_line"], safelist):
-                    process["command_line"] = text
-            elif name == "originalfilename":
-                process["original_file_name"] = text
-            elif name == "integritylevel":
-                process["integrity_level"] = text
-            elif name == "hashes":
-                split_hash = text.split("=")
-                if len(split_hash) == 2:
-                    _, hash_value = split_hash
-                    process["image_hash"] = hash_value
-
-        if (
-            not process.get("pid")
-            or not process.get("image")
-            or not process.get("start_time")
-        ):
-            continue
-
-        if so.is_guid_in_gpm(process["guid"]):
-            so.update_process(**process)
-        else:
-            p_oid = ProcessModel.get_oid(
-                {
-                    "pid": process["pid"],
-                    "ppid": process.get("ppid"),
-                    "image": process["image"],
-                    "command_line": process.get("command_line"),
-                }
-            )
-            p = so.create_process(
-                objectid=so.create_objectid(
-                    tag=Process.create_objectid_tag(process["image"]),
-                    ontology_id=p_oid,
-                    guid=process.get("guid"),
-                    session=session,
-                ),
-                **process,
-            )
-            so.add_process(p)
-
-
 def _update_process_map(process_map: Dict[int, Dict[str, Any]], processes: List[Process]) -> None:
     """
     This method updates the process map with the processes added to the sandbox ontology
@@ -2001,7 +1835,6 @@ if __name__ == "__main__":
 
     # pip install PyYAML
     import yaml
-    from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 
     report_path = argv[1]
     file_ext = argv[2]
