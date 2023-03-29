@@ -1,40 +1,47 @@
+import os
 from email.header import decode_header
 from hashlib import sha256
 from io import BytesIO
 from json import JSONDecodeError, loads
 from math import ceil
-import os
-from pefile import PE, PEFormatError
 from random import choice, random
-from re import compile as re_compile, match as re_match
-from ssdeep import hash as ssdeep_hash, compare as ssdeep_compare
+from re import compile as re_compile
+from re import match as re_match
 from sys import maxsize, setrecursionlimit
-import requests
-from retrying import retry, RetryError
-from SetSimilaritySearch import SearchIndex
-from tarfile import open as tarfile_open, TarFile
+from tarfile import TarFile
+from tarfile import open as tarfile_open
 from tempfile import SpooledTemporaryFile
-from time import time
 from threading import Thread
-from typing import Optional, Dict, List, Any, Set, Tuple
+from time import time
+from typing import Any, Dict, List, Optional, Set, Tuple
 
+import requests
+from assemblyline.common.exceptions import ChainException, RecoverableError
+from assemblyline.common.forge import get_identify
+from assemblyline.common.identify_defaults import (magic_patterns,
+                                                   trusted_mimes,
+                                                   type_to_extension)
+from assemblyline.common.str_utils import safe_str
 from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
-from assemblyline_v4_service.common.dynamic_service_helper import attach_dynamic_ontology, OntologyResults
+from assemblyline_v4_service.common.dynamic_service_helper import (
+    OntologyResults, attach_dynamic_ontology)
 from assemblyline_v4_service.common.request import ServiceRequest
-from assemblyline_v4_service.common.result import Result, ResultSection, ResultImageSection, ResultTextSection, \
-    ResultKeyValueSection
+from assemblyline_v4_service.common.result import (Result, ResultImageSection,
+                                                   ResultKeyValueSection,
+                                                   ResultSection,
+                                                   ResultTextSection)
 from assemblyline_v4_service.common.safelist_helper import is_tag_safelisted
 from assemblyline_v4_service.common.tag_helper import add_tag
-
-from assemblyline.common.str_utils import safe_str
-from assemblyline.common.identify_defaults import type_to_extension, trusted_mimes, magic_patterns
-from assemblyline.common.exceptions import RecoverableError, ChainException
-from assemblyline.common.forge import get_identify
-
-from cuckoo.cuckoo_result import ANALYSIS_ERRORS, generate_al_result, GUEST_CANNOT_REACH_HOST, \
-    SIGNATURES_SECTION_TITLE, SUPPORTED_EXTENSIONS
+from cuckoo.cuckoo_result import (ANALYSIS_ERRORS, GUEST_CANNOT_REACH_HOST,
+                                  SIGNATURES_SECTION_TITLE,
+                                  SUPPORTED_EXTENSIONS, generate_al_result)
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
+from pefile import PE, PEFormatError
+from retrying import RetryError, retry
+from SetSimilaritySearch import SearchIndex
+from ssdeep import compare as ssdeep_compare
+from ssdeep import hash as ssdeep_hash
 
 HOLLOWSHUNTER_REPORT_REGEX = r"hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = r"hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
@@ -1330,6 +1337,8 @@ class Cuckoo(ServiceBase):
                 index = SearchIndex(exports_available, similarity_func_name='jaccard', similarity_threshold=0.1)
                 similarity_scores = []
                 for exp in exports_available:
+                    if not exp:
+                        continue
                     res = index.query(exp)
                     avg_sim = sum(x[1] for x in res)/len(res)
                     similarity_scores.append((avg_sim, exp))
