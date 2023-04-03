@@ -1,55 +1,40 @@
+import os
 from datetime import datetime
-from ipaddress import ip_address, ip_network, IPv4Network
+from ipaddress import IPv4Network, ip_address, ip_network
 from json import dumps
 from logging import getLogger
-import os
-from re import match as re_match, search
+from re import match as re_match
+from re import search
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from assemblyline.common.str_utils import safe_str
 from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
 from assemblyline.common.isotime import LOCAL_FMT
-from assemblyline.common.net import is_valid_ip, is_ip_in_network
+from assemblyline.common.net import is_ip_in_network, is_valid_ip
+from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.base import FULL_URI
-from assemblyline.odm.models.ontology.results import (
-    NetworkConnection as NetworkConnectionModel,
-    Process as ProcessModel,
-    Sandbox as SandboxModel,
+from assemblyline.odm.models.ontology.results import \
+    NetworkConnection as NetworkConnectionModel
+from assemblyline.odm.models.ontology.results import Process as ProcessModel
+from assemblyline.odm.models.ontology.results import Sandbox as SandboxModel
+from assemblyline.odm.models.ontology.results import \
     Signature as SignatureModel
-)
-from assemblyline_v4_service.common.result import (
-    ResultKeyValueSection,
-    ResultSection,
-    ResultTableSection,
-    ResultTextSection,
-    TableRow
-)
-from assemblyline_v4_service.common.safelist_helper import is_tag_safelisted, contains_safelisted_value
-from assemblyline_v4_service.common.tag_helper import add_tag
-
-from cuckoo.signatures import (
-    get_category_id,
-    get_signature_category,
-    CUCKOO_DROPPED_SIGNATURES,
-    SIGNATURE_TO_ATTRIBUTE_ACTION_MAP
-)
-from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 from assemblyline_v4_service.common.dynamic_service_helper import (
-    attach_dynamic_ontology,
-    Attribute,
-    convert_sysmon_network,
-    convert_sysmon_processes,
-    extract_iocs_from_text_blob,
-    OntologyResults,
-    Process,
-    NetworkConnection,
-    Sandbox,
-    Signature,
-    MIN_TIME,
-    MAX_TIME
-)
+    MAX_TIME, MIN_TIME, Attribute, NetworkConnection, OntologyResults, Process,
+    Sandbox, Signature, attach_dynamic_ontology, convert_sysmon_network,
+    convert_sysmon_processes, extract_iocs_from_text_blob)
+from assemblyline_v4_service.common.result import (ResultKeyValueSection,
+                                                   ResultSection,
+                                                   ResultTableSection,
+                                                   ResultTextSection, TableRow)
+from assemblyline_v4_service.common.safelist_helper import (
+    contains_safelisted_value, is_tag_safelisted)
+from assemblyline_v4_service.common.tag_helper import add_tag
+from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
+from cuckoo.signatures import (CUCKOO_DROPPED_SIGNATURES,
+                               SIGNATURE_TO_ATTRIBUTE_ACTION_MAP,
+                               get_category_id, get_signature_category)
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
@@ -539,6 +524,17 @@ def process_signatures(
                              not in sig_res.body:
                             sig_res.add_line(
                                 f'\tInjected Process: {safe_str(injected_process_name)} ({injected_process})')
+            elif mark["type"] == "config":
+                if not mark["config"].get("url"):
+                    if not sig_res.body:
+                        sig_res.add_line(f'\tFamily "{mark["config"]["family"]}"')
+                    elif f'\tFamily "{mark["config"]["family"]}"' not in sig_res.body:
+                        sig_res.add_line(f'\tFamily "{mark["config"]["family"]}"')
+                else:
+                    if not sig_res.body:
+                        sig_res.add_line(f'\tFamily "{mark["config"]["family"]}" reached out to {safe_str(mark["config"]["url"])}')
+                    elif f'\tFamily "{mark["config"]["family"]}" reached out to {safe_str(mark["config"]["url"])}' not in sig_res.body:
+                        sig_res.add_line(f'\tFamily "{mark["config"]["family"]}" reached out to {safe_str(mark["config"]["url"])}')
 
         if attributes:
             [so_sig.add_attribute(attribute) for attribute in attributes]
@@ -1772,7 +1768,11 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         url = mark["call"].get("arguments", {}).get("url")
         if download_path and url:
             sig_res.add_line(f'\tThe file at {safe_str(url)} was attempted to be downloaded to {download_path}')
-
+    elif signature_name == "network_wscript_downloader":
+        if mark["call"]["api"] in ["InternetCrackUrlW"]:
+            url = mark["call"].get("arguments", {}).get("url")
+            if url:
+                sig_res.add_line(f'\tWScript was seen downloading from {safe_str(url)}')
 
 def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netflows: List[Dict[str, Any]]) -> None:
     """
@@ -1829,12 +1829,12 @@ def _update_process_map(process_map: Dict[int, Dict[str, Any]], processes: List[
 
 
 if __name__ == "__main__":
-    from sys import argv
     from json import loads
-    from assemblyline_v4_service.common.base import ServiceBase
+    from sys import argv
 
     # pip install PyYAML
     import yaml
+    from assemblyline_v4_service.common.base import ServiceBase
 
     report_path = argv[1]
     file_ext = argv[2]
