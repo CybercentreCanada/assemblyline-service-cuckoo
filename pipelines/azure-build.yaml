@@ -62,8 +62,8 @@ stages:
               [ ! -d "$(pwd)/tests" ] && echo "No tests found" && exit
               export TAG=${BUILD_SOURCEBRANCH#"refs/tags/v"}
               if [[ "$TAG" == *stable* ]]; then export BUILD_TYPE=stable; else export BUILD_TYPE=latest; fi
-              [ -f "$(pwd)/tests/requirements.txt" ] && docker run -e FULL_SELF_LOCATION=/opt/al_service -e FULL_SAMPLES_LOCATION=/opt/samples -v /usr/share/ca-certificates/mozilla:/usr/share/ca-certificates/mozilla -v $(pwd)/tests/:/opt/al_service/tests/ -v ${FULL_SAMPLES_LOCATION}:/opt/samples cccs/${BUILD_REPOSITORY_NAME##*/}:$BUILD_TYPE bash -c 'pip install -U -r tests/requirements.txt; pytest -p no:cacheprovider -vv' && exit
-              docker run -e FULL_SELF_LOCATION=/opt/al_service -e FULL_SAMPLES_LOCATION=/opt/samples -v /usr/share/ca-certificates/mozilla:/usr/share/ca-certificates/mozilla -v $(pwd)/tests/:/opt/al_service/tests/ -v ${FULL_SAMPLES_LOCATION}:/opt/samples cccs/${BUILD_REPOSITORY_NAME##*/}:$BUILD_TYPE bash -c 'pytest -p no:cacheprovider -vv'
+              [ -f "$(pwd)/tests/requirements.txt" ] && docker run -e FULL_SELF_LOCATION=/opt/al_service -e FULL_SAMPLES_LOCATION=/opt/samples -v /usr/share/ca-certificates/mozilla:/usr/share/ca-certificates/mozilla -v $(pwd)/tests/:/opt/al_service/tests/ -v ${FULL_SAMPLES_LOCATION}:/opt/samples cccs/${BUILD_REPOSITORY_NAME##*/}:$BUILD_TYPE bash -c 'pip install -U -r tests/requirements.txt; pytest -p no:cacheprovider -xsvvv' && exit
+              docker run -e FULL_SELF_LOCATION=/opt/al_service -e FULL_SAMPLES_LOCATION=/opt/samples -v /usr/share/ca-certificates/mozilla:/usr/share/ca-certificates/mozilla -v $(pwd)/tests/:/opt/al_service/tests/ -v ${FULL_SAMPLES_LOCATION}:/opt/samples cccs/${BUILD_REPOSITORY_NAME##*/}:$BUILD_TYPE bash -c 'pytest -p no:cacheprovider -xsvvv'
             workingDirectory: $(full_self_location)
             displayName: Test containers
           - script: |
