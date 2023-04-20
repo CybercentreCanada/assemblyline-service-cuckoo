@@ -14,27 +14,22 @@ from assemblyline.common.isotime import LOCAL_FMT
 from assemblyline.common.net import is_ip_in_network, is_valid_ip
 from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.base import FULL_URI
-from assemblyline.odm.models.ontology.results import \
-    NetworkConnection as NetworkConnectionModel
+from assemblyline.odm.models.ontology.results import NetworkConnection as NetworkConnectionModel
 from assemblyline.odm.models.ontology.results import Process as ProcessModel
 from assemblyline.odm.models.ontology.results import Sandbox as SandboxModel
-from assemblyline.odm.models.ontology.results import \
-    Signature as SignatureModel
-from assemblyline_v4_service.common.dynamic_service_helper import (
-    MAX_TIME, MIN_TIME, Attribute, NetworkConnection, OntologyResults, Process,
-    Sandbox, Signature, attach_dynamic_ontology, convert_sysmon_network,
-    convert_sysmon_processes, extract_iocs_from_text_blob)
-from assemblyline_v4_service.common.result import (ResultKeyValueSection,
-                                                   ResultSection,
-                                                   ResultTableSection,
+from assemblyline.odm.models.ontology.results import Signature as SignatureModel
+from assemblyline_v4_service.common.dynamic_service_helper import (MAX_TIME, MIN_TIME, Attribute, NetworkConnection,
+                                                                   OntologyResults, Process, Sandbox, Signature,
+                                                                   attach_dynamic_ontology, convert_sysmon_network,
+                                                                   convert_sysmon_processes,
+                                                                   extract_iocs_from_text_blob)
+from assemblyline_v4_service.common.result import (ResultKeyValueSection, ResultSection, ResultTableSection,
                                                    ResultTextSection, TableRow)
-from assemblyline_v4_service.common.safelist_helper import (
-    contains_safelisted_value, is_tag_safelisted)
+from assemblyline_v4_service.common.safelist_helper import contains_safelisted_value, is_tag_safelisted
 from assemblyline_v4_service.common.tag_helper import add_tag
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
-from cuckoo.signatures import (CUCKOO_DROPPED_SIGNATURES,
-                               SIGNATURE_TO_ATTRIBUTE_ACTION_MAP,
-                               get_category_id, get_signature_category)
+from cuckoo.signatures import (CUCKOO_DROPPED_SIGNATURES, SIGNATURE_TO_ATTRIBUTE_ACTION_MAP, get_category_id,
+                               get_signature_category)
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
@@ -589,7 +584,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         if is_tag_safelisted(dom, ["network.dynamic.domain"], safelist):
             network_flows_table.remove(network_flow)
         # if no source ip and destination ip is safe-listed or is the dns server
-        elif (not src and is_tag_safelisted(dest_ip, ["network.dynamic.ip"], safelist)) or dest_ip in dns_servers:
+        elif (not src and is_tag_safelisted(dest_ip, ["network.dynamic.ip"], safelist)) or (dest_ip in dns_servers and len(dns_servers) == 1):
             network_flows_table.remove(network_flow)
         # if dest ip is noise
         elif dest_ip not in resolved_ips and ip_address(dest_ip) in inetsim_network:
