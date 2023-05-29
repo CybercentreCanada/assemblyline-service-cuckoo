@@ -1,11 +1,10 @@
 import json
-import os
 from ipaddress import ip_network
 from json import dumps
 from os import remove
 
 import pytest
-from assemblyline_service_utilities.common.dynamic_service_helper import OntologyResults, Process, Signature
+from assemblyline_service_utilities.common.dynamic_service_helper import OntologyResults
 from assemblyline_v4_service.common.result import (
     BODY_FORMAT,
     ProcessItem,
