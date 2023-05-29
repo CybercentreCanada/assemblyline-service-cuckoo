@@ -1,3 +1,4 @@
-retrying
+assemblyline-service-utilities
 pefile
+retrying
 SetSimilaritySearch

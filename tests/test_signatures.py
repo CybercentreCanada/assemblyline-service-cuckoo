@@ -4,7 +4,7 @@ import pytest
 class TestSignatures:
     @staticmethod
     def test_constants():
-        from cuckoo.signatures import CUCKOO_SIGNATURES, CUCKOO_SIGNATURE_CATEGORIES, CUCKOO_DROPPED_SIGNATURES
+        from cuckoo.signatures import CUCKOO_DROPPED_SIGNATURES, CUCKOO_SIGNATURE_CATEGORIES, CUCKOO_SIGNATURES
         assert CUCKOO_SIGNATURES == {
             "html_flash": "Exploit",
             "powershell_bitstransfer": "PowerShell",

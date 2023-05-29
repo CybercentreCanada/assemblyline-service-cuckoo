@@ -21,9 +21,11 @@ from assemblyline.common.forge import get_identify
 from assemblyline.common.identify import CUSTOM_BATCH_ID
 from assemblyline.common.identify_defaults import magic_patterns, trusted_mimes, type_to_extension
 from assemblyline.common.str_utils import safe_str
+from assemblyline_service_utilities.common.dynamic_service_helper import OntologyResults, attach_dynamic_ontology
+from assemblyline_service_utilities.common.safelist_helper import is_tag_safelisted
+from assemblyline_service_utilities.common.tag_helper import add_tag
 from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
-from assemblyline_v4_service.common.dynamic_service_helper import OntologyResults, attach_dynamic_ontology
 from assemblyline_v4_service.common.request import ServiceRequest
 from assemblyline_v4_service.common.result import (
     Result,
@@ -32,8 +34,6 @@ from assemblyline_v4_service.common.result import (
     ResultSection,
     ResultTextSection,
 )
-from assemblyline_v4_service.common.safelist_helper import is_tag_safelisted
-from assemblyline_v4_service.common.tag_helper import add_tag
 from cuckoo.cuckoo_result import (
     ANALYSIS_ERRORS,
     GUEST_CANNOT_REACH_HOST,
