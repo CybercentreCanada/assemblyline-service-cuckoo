@@ -1,13 +1,27 @@
-import os
+import io
 import json
-import pytest
+import os
+import re
 import shutil
+import tarfile
+from json import JSONDecodeError
+from os import makedirs, path, remove
+from sys import getrecursionlimit
+
+import pytest
 import requests_mock
-
+from assemblyline.common.exceptions import ChainException, RecoverableError
+from assemblyline.common.identify_defaults import type_to_extension
 from assemblyline.common.str_utils import safe_str
-from assemblyline_v4_service.common.result import ResultSection, BODY_FORMAT
-
+from assemblyline.odm.messages.task import Task as ServiceTask
+from assemblyline_service_utilities.common.dynamic_service_helper import OntologyResults
+from assemblyline_v4_service.common.request import ServiceRequest
+from assemblyline_v4_service.common.result import BODY_FORMAT, ResultImageSection, ResultSection
+from assemblyline_v4_service.common.task import Task
 from cuckoo.cuckoo_main import *
+from cuckoo.cuckoo_main import _exclude_chain_ex, _retry_on_none
+from requests import ConnectionError, Session, exceptions
+from retrying import RetryError
 
 # Getting absolute paths, names and regexes
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -62,7 +76,6 @@ def remove_tmp_manifest():
 def cuckoo_task_class():
     create_tmp_manifest()
     try:
-        from cuckoo.cuckoo_main import CuckooTask
         yield CuckooTask
     finally:
         remove_tmp_manifest()
@@ -72,7 +85,6 @@ def cuckoo_task_class():
 def cuckoo_class_instance():
     create_tmp_manifest()
     try:
-        from cuckoo.cuckoo_main import Cuckoo
         yield Cuckoo()
     finally:
         remove_tmp_manifest()
@@ -187,8 +199,6 @@ def dummy_json_doc_class_instance():
 @pytest.fixture
 def dummy_result_class_instance():
     class DummyResult:
-        from assemblyline_v4_service.common.result import ResultSection
-
         def __init__(self):
             self.sections = []
 
@@ -327,14 +337,11 @@ def check_section_equality(this, that) -> bool:
 class TestModule:
     @staticmethod
     def test_hollowshunter_constants():
-        from cuckoo.cuckoo_main import HOLLOWSHUNTER_REPORT_REGEX, HOLLOWSHUNTER_DUMP_REGEX
         assert HOLLOWSHUNTER_REPORT_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
         assert HOLLOWSHUNTER_DUMP_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
 
     @staticmethod
     def test_cuckoo_api_constants():
-        from cuckoo.cuckoo_main import CUCKOO_API_SUBMIT, CUCKOO_API_QUERY_TASK, CUCKOO_API_DELETE_TASK, \
-            CUCKOO_API_QUERY_REPORT, CUCKOO_API_QUERY_PCAP, CUCKOO_API_QUERY_MACHINES
         assert CUCKOO_API_SUBMIT == "tasks/create/file"
         assert CUCKOO_API_QUERY_TASK == "tasks/view/%s"
         assert CUCKOO_API_DELETE_TASK == "tasks/delete/%s"
@@ -344,20 +351,16 @@ class TestModule:
 
     @staticmethod
     def test_retry_constants():
-        from cuckoo.cuckoo_main import CUCKOO_POLL_DELAY, GUEST_VM_START_TIMEOUT, REPORT_GENERATION_TIMEOUT
         assert CUCKOO_POLL_DELAY == 5
         assert GUEST_VM_START_TIMEOUT == 360
         assert REPORT_GENERATION_TIMEOUT == 420
 
     @staticmethod
     def test_analysis_constants():
-        from cuckoo.cuckoo_main import ANALYSIS_TIMEOUT
         assert ANALYSIS_TIMEOUT == 150
 
     @staticmethod
     def test_image_tag_constants():
-        from cuckoo.cuckoo_main import LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX, x86_IMAGE_SUFFIX, x64_IMAGE_SUFFIX, \
-            RELEVANT_IMAGE_TAG, ALL_IMAGES_TAG, MACHINE_NAME_REGEX
         assert LINUX_IMAGE_PREFIX == "ub"
         assert WINDOWS_IMAGE_PREFIX == "win"
         assert x86_IMAGE_SUFFIX == "x86"
@@ -368,7 +371,6 @@ class TestModule:
 
     @staticmethod
     def test_file_constants():
-        from cuckoo.cuckoo_main import LINUX_x86_FILES, LINUX_x64_FILES, WINDOWS_x86_FILES
         assert set(LINUX_x86_FILES) == {"executable/linux/elf32", "executable/linux/so32", "executable/linux/coff32"}
         assert set(LINUX_x64_FILES) == {"executable/linux/elf64", "executable/linux/so64",
                                         "executable/linux/ia/coff64", "executable/linux/coff64", "code/shell"}
@@ -376,7 +378,6 @@ class TestModule:
 
     @staticmethod
     def test_supported_extensions_constant():
-        from cuckoo.cuckoo_main import SUPPORTED_EXTENSIONS
         assert SUPPORTED_EXTENSIONS == ['bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe',
                                         'hta', 'htm', 'html', 'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf',
                                         'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt', 'pptm', 'pptx', 'ps1', 'pub',
@@ -384,14 +385,10 @@ class TestModule:
 
     @staticmethod
     def test_illegal_filename_chars_constant():
-        from cuckoo.cuckoo_main import ILLEGAL_FILENAME_CHARS
         assert ILLEGAL_FILENAME_CHARS == set('<>:"/\|?*')
 
     @staticmethod
     def test_status_enumeration_constants():
-        from cuckoo.cuckoo_main import TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG, \
-            SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, TASK_STARTED, TASK_STARTING, TASK_COMPLETED, TASK_REPORTED, \
-            ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT
         assert TASK_MISSING == "missing"
         assert TASK_STOPPED == "stopped"
         assert INVALID_JSON == "invalid_json_report"
@@ -407,21 +404,16 @@ class TestModule:
 
     @staticmethod
     def test_exclude_chain_ex():
-        from cuckoo.cuckoo_main import _exclude_chain_ex
-        from assemblyline.common.exceptions import ChainException
         assert _exclude_chain_ex(ChainException("blah")) is False
         assert _exclude_chain_ex(Exception("blah")) is True
 
     @staticmethod
     def test_retry_on_none():
-        from cuckoo.cuckoo_main import _retry_on_none
         assert _retry_on_none(None) is True
         assert _retry_on_none("blah") is False
 
     @staticmethod
     def test_generate_random_words():
-        from cuckoo.cuckoo_main import generate_random_words
-        import re
         pattern = r"[a-zA-Z0-9]+"
         for num_words in [1, 2, 3]:
             test_result = generate_random_words(num_words)
@@ -478,11 +470,6 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_execute(sample, cuckoo_class_instance, mocker):
-        from assemblyline_v4_service.common.task import Task
-        from assemblyline.odm.messages.task import Task as ServiceTask
-        from assemblyline_v4_service.common.request import ServiceRequest
-        from cuckoo.cuckoo_main import Cuckoo, CuckooHostsUnavailable
-
         mocker.patch('cuckoo.cuckoo_main.generate_random_words', return_value="blah")
         mocker.patch.object(Cuckoo, "_decode_mime_encoded_file_name", return_value=None)
         mocker.patch.object(Cuckoo, "_remove_illegal_characters_from_file_name", return_value=None)
@@ -542,11 +529,6 @@ class TestCuckooMain:
 
     @staticmethod
     def test_general_flow(cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
-        from assemblyline_v4_service.common.result import ResultSection
-        from assemblyline.common.exceptions import RecoverableError
-        from cuckoo.cuckoo_main import Cuckoo, AnalysisTimeoutExceeded
-        from assemblyline_v4_service.common.dynamic_service_helper import OntologyResults
-
         so = OntologyResults()
         hosts = []
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
@@ -611,12 +593,6 @@ class TestCuckooMain:
         ]
     )
     def test_submit(task_id, poll_started_status, poll_report_status, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG, \
-            SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT, CuckooTask, \
-            AnalysisTimeoutExceeded, AnalysisFailed
-        from retrying import RetryError
-        from assemblyline.common.exceptions import RecoverableError
-        from assemblyline_v4_service.common.result import ResultSection
         all_statuses = [TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG,
                         SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT]
         file_content = b"blah"
@@ -661,7 +637,6 @@ class TestCuckooMain:
             with pytest.raises(AnalysisFailed):
                 cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
         elif poll_report_status == "reboot":
-            from requests import Session
             cuckoo_class_instance.session = Session()
             with requests_mock.Mocker() as m:
                 m.get(cuckoo_task.reboot_task_url % task_id, status_code=404)
@@ -695,10 +670,6 @@ class TestCuckooMain:
         ]
     )
     def test_poll_started(return_value, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, CuckooTask
-        from retrying import RetryError
-        from cuckoo.cuckoo_main import TASK_MISSING, TASK_STARTED, TASK_STARTING
-
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
@@ -742,11 +713,6 @@ class TestCuckooMain:
         ]
     )
     def test_poll_report(return_value, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, TASK_MISSING, ANALYSIS_FAILED, TASK_COMPLETED, TASK_REPORTED, \
-            CuckooTask, ANALYSIS_ERRORS
-        from retrying import RetryError
-        from assemblyline_v4_service.common.result import ResultSection
-
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
@@ -793,10 +759,6 @@ class TestCuckooMain:
     )
     def test_submit_file(status_code, task_id, task_ids, cuckoo_class_instance, mocker):
         mocker.patch('cuckoo.cuckoo_main.generate_random_words', return_value="blah")
-
-        from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo_main import CuckooTimeoutException, Cuckoo, CuckooTask
-        from assemblyline.common.exceptions import RecoverableError
 
         # Prerequisites before we can mock query_machines response
         cuckoo_class_instance.session = Session()
@@ -854,10 +816,6 @@ class TestCuckooMain:
         ]
     )
     def test_query_report(task_id, fmt, params, status_code, headers, report_data, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, ReportSizeExceeded, MissingCuckooReportException, \
-            CuckooTimeoutException, CuckooTask
-        from requests import Session, exceptions, ConnectionError
-
         # Prerequisites before we can mock query_report response
         cuckoo_class_instance.session = Session()
         cuckoo_class_instance.max_report_size = cuckoo_class_instance.config["max_report_size"]
@@ -908,9 +866,6 @@ class TestCuckooMain:
         ]
     )
     def test_query_pcap(status_code, resp, cuckoo_class_instance, mocker):
-        from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo_main import CuckooTimeoutException, Cuckoo, CuckooTask
-
         # Prerequisites before we can mock query_pcap response
         task_id = 1
         cuckoo_class_instance.session = Session()
@@ -950,9 +905,6 @@ class TestCuckooMain:
         ]
     )
     def test_query_task(status_code, task_dict, cuckoo_class_instance, mocker):
-        from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo_main import CuckooTimeoutException, Cuckoo, TASK_MISSING, CuckooTask
-
         # Prerequisites before we can mock query_machines response
         task_id = 1
         cuckoo_class_instance.session = Session()
@@ -996,9 +948,6 @@ class TestCuckooMain:
         ]
     )
     def test_delete_task(status_code, text, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo_main import CuckooTimeoutException, CuckooTask
-        from requests import Session, exceptions, ConnectionError
-
         # Prerequisites before we can mock query_report response
         cuckoo_class_instance.session = Session()
 
@@ -1038,9 +987,6 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize("status_code", [200, 500, None])
     def test_query_machines(status_code, cuckoo_class_instance):
-        from requests import Session, exceptions, ConnectionError
-        from cuckoo.cuckoo_main import CuckooHostsUnavailable, CUCKOO_API_QUERY_MACHINES
-
         # Prerequisites before we can mock query_machines response
         query_machines_url = f"http://1.1.1.1:8000/{CUCKOO_API_QUERY_MACHINES}"
         cuckoo_class_instance.session = Session()
@@ -1074,13 +1020,6 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_check_dropped(sample, cuckoo_class_instance, mocker):
-        from assemblyline_v4_service.common.task import Task
-        from assemblyline.odm.messages.task import Task as ServiceTask
-        from assemblyline_v4_service.common.request import ServiceRequest
-        from cuckoo.cuckoo_main import Cuckoo, CuckooTask
-        import tarfile
-        import io
-
         s = io.BytesIO()
 
         # Creating the required objects for execution
@@ -1114,11 +1053,6 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_check_powershell(sample, cuckoo_class_instance):
-        from assemblyline_v4_service.common.result import ResultSection
-        from assemblyline_v4_service.common.task import Task
-        from assemblyline.odm.messages.task import Task as ServiceTask
-        from assemblyline_v4_service.common.request import ServiceRequest
-
         task_id = 1
         parent_section = ResultSection("blah")
         correct_subsection = ResultSection("PowerShell Activity")
@@ -1140,12 +1074,6 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_check_pcap(sample, cuckoo_class_instance, mocker):
-        from assemblyline_v4_service.common.result import ResultSection
-        from assemblyline_v4_service.common.task import Task
-        from assemblyline.odm.messages.task import Task as ServiceTask
-        from assemblyline_v4_service.common.request import ServiceRequest
-        from cuckoo.cuckoo_main import Cuckoo, CuckooTask
-
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
@@ -1263,7 +1191,6 @@ class TestCuckooMain:
 
     @staticmethod
     def test_remove_illegal_characters_from_file_name(cuckoo_class_instance):
-        from cuckoo.cuckoo_main import ILLEGAL_FILENAME_CHARS
         test_file_name = ''.join(ch for ch in ILLEGAL_FILENAME_CHARS) + "blah"
         correct_file_name = "blah"
 
@@ -1286,8 +1213,6 @@ class TestCuckooMain:
     def test_assign_file_extension(
             file_type, test_file_name, correct_file_extension, correct_file_name, cuckoo_class_instance,
             dummy_request_class):
-        from assemblyline.common.identify_defaults import type_to_extension
-        from cuckoo.cuckoo_main import SUPPORTED_EXTENSIONS
         kwargs = dict()
         is_bin = False
 
@@ -1379,8 +1304,6 @@ class TestCuckooMain:
         ]
     )
     def test_set_task_parameters(params, cuckoo_class_instance, dummy_request_class, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, ANALYSIS_TIMEOUT
-        from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, '_prepare_dll_submission', return_value=None)
         kwargs = dict()
         correct_task_options = []
@@ -1456,8 +1379,6 @@ class TestCuckooMain:
         ]
     )
     def test_prepare_dll_submission(params, file_ext, cuckoo_class_instance, dummy_request_class, mocker):
-        from cuckoo.cuckoo_main import Cuckoo
-        from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, '_parse_dll', return_value=None)
         kwargs = dict()
         correct_kwargs = dict()
@@ -1479,9 +1400,6 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize("dll_parsed", [None, "blah"])
     def test_parse_dll(dll_parsed, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo
-        from assemblyline_v4_service.common.result import ResultSection
-
         kwargs = dict()
         correct_kwargs = dict()
         task_options = []
@@ -1537,9 +1455,6 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize("tar_report", [None, "blah"])
     def test_generate_report(tar_report, cuckoo_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, CuckooTask
-        from assemblyline_v4_service.common.dynamic_service_helper import OntologyResults
-        from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, 'query_report', return_value=tar_report)
         mocker.patch.object(Cuckoo, '_extract_console_output', return_value=None)
         mocker.patch.object(Cuckoo, '_extract_injected_exes', return_value=None)
@@ -1559,10 +1474,6 @@ class TestCuckooMain:
 
     @staticmethod
     def test_unpack_tar(cuckoo_class_instance, dummy_tar_class, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, CuckooTask, MissingCuckooReportException
-        from assemblyline_v4_service.common.dynamic_service_helper import OntologyResults
-        from assemblyline_v4_service.common.result import ResultSection
-
         so = OntologyResults()
         tar_report = b"blah"
         file_ext = "blah"
@@ -1592,7 +1503,6 @@ class TestCuckooMain:
 
     @staticmethod
     def test_add_tar_ball_as_supplementary_file(cuckoo_class_instance, dummy_request_class, mocker):
-        from cuckoo.cuckoo_main import CuckooTask
         tar_file_name = "blah"
         tar_report_path = f"/tmp/{tar_file_name}"
         tar_report = b"blah"
@@ -1620,8 +1530,6 @@ class TestCuckooMain:
 
     @staticmethod
     def test_add_json_as_supplementary_file(cuckoo_class_instance, dummy_request_class, dummy_tar_class, mocker):
-        from cuckoo.cuckoo_main import CuckooTask, MissingCuckooReportException
-
         json_file_name = "report.json"
         json_report_path = f"{cuckoo_class_instance.working_directory}/1/reports/{json_file_name}"
         tar_obj = dummy_tar_class()
@@ -1657,13 +1565,6 @@ class TestCuckooMain:
         ]
     )
     def test_build_report(report_info, cuckoo_class_instance, dummy_json_doc_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo, CuckooProcessingException, CuckooTask
-        from assemblyline_v4_service.common.dynamic_service_helper import OntologyResults
-        from sys import getrecursionlimit
-        from json import JSONDecodeError
-        from assemblyline.common.exceptions import RecoverableError
-        from assemblyline_v4_service.common.result import ResultSection
-
         so = OntologyResults()
         report_json_path = "blah"
         file_ext = "blah"
@@ -1736,9 +1637,6 @@ class TestCuckooMain:
 
     @staticmethod
     def test_extract_artifacts(cuckoo_class_instance, dummy_request_class, dummy_tar_class, dummy_tar_member_class):
-        from assemblyline_v4_service.common.dynamic_service_helper import OntologyResults
-        from assemblyline_v4_service.common.result import ResultSection, ResultImageSection
-        from os import remove, makedirs, path
         default_so = OntologyResults()
         tarball_file_map = {
             "buffer": "Extracted buffer",
@@ -1912,8 +1810,6 @@ class TestCuckooMain:
     def test_handle_specific_machine(
             machine_requested, hosts, correct_result, correct_body, cuckoo_class_instance, dummy_result_class_instance,
             mocker):
-        from cuckoo.cuckoo_main import Cuckoo
-        from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=machine_requested)
         kwargs = dict()
         cuckoo_class_instance.hosts = hosts
@@ -1943,8 +1839,6 @@ class TestCuckooMain:
     def test_handle_specific_platform(
             platform_requested, expected_return, expected_result_section, cuckoo_class_instance,
             dummy_result_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo
-        from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=platform_requested)
         kwargs = dict()
         cuckoo_class_instance.hosts = [{"ip": "blah", "machines": [{"platform": "windows"}, {"platform": "linux"}]}]
@@ -1997,8 +1891,6 @@ class TestCuckooMain:
     def test_handle_specific_image(
             image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body,
             cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
-        from cuckoo.cuckoo_main import Cuckoo
-        from assemblyline_v4_service.common.result import ResultSection
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=image_requested)
         mocker.patch.object(Cuckoo, "_does_image_exist", return_value=image_exists)
         mocker.patch.object(Cuckoo, "_determine_relevant_images", return_value=relevant_images)
@@ -2016,8 +1908,6 @@ class TestCuckooMain:
 
     @staticmethod
     def test_determine_host_to_use(cuckoo_class_instance):
-        from cuckoo.cuckoo_main import CUCKOO_API_QUERY_HOST, CuckooVMBusyException
-        from requests import Session, exceptions, ConnectionError
         cuckoo_class_instance.session = Session()
         hosts = [
             {"ip": "1.1.1.1", "port": 1111, "auth_header": {"blah": "blah"}},
@@ -2042,7 +1932,6 @@ class TestCuckooMain:
 
     @staticmethod
     def test_is_invalid_analysis_timeout(cuckoo_class_instance, dummy_request_class):
-        from assemblyline_v4_service.common.result import ResultSection
         cuckoo_class_instance.request = dummy_request_class(analysis_timeout_in_seconds=150)
         parent_section = ResultSection("blah")
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is False
@@ -2069,7 +1958,6 @@ class TestCuckooMain:
         ]
     )
     def test_get_subsection_heuristic_map(title_heur_tuples, correct_section_heur_map, cuckoo_class_instance):
-        from assemblyline_v4_service.common.result import ResultSection
         subsections = []
         for title, heur_id in title_heur_tuples:
             subsection = ResultSection(title)
@@ -2086,7 +1974,6 @@ class TestCuckooMain:
 
     @staticmethod
     def test_determine_if_reboot_required(cuckoo_class_instance, dummy_request_class):
-        from assemblyline_v4_service.common.result import ResultSection
         parent_section = ResultSection("blah")
         assert cuckoo_class_instance._determine_if_reboot_required(parent_section) is False
 

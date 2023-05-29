@@ -18,18 +18,36 @@ from assemblyline.odm.models.ontology.results import NetworkConnection as Networ
 from assemblyline.odm.models.ontology.results import Process as ProcessModel
 from assemblyline.odm.models.ontology.results import Sandbox as SandboxModel
 from assemblyline.odm.models.ontology.results import Signature as SignatureModel
-from assemblyline_v4_service.common.dynamic_service_helper import (MAX_TIME, MIN_TIME, Attribute, NetworkConnection,
-                                                                   OntologyResults, Process, Sandbox, Signature,
-                                                                   attach_dynamic_ontology, convert_sysmon_network,
-                                                                   convert_sysmon_processes,
-                                                                   extract_iocs_from_text_blob)
-from assemblyline_v4_service.common.result import (ResultKeyValueSection, ResultSection, ResultTableSection,
-                                                   ResultTextSection, TableRow)
-from assemblyline_v4_service.common.safelist_helper import contains_safelisted_value, is_tag_safelisted
-from assemblyline_v4_service.common.tag_helper import add_tag
+from assemblyline_service_utilities.common.dynamic_service_helper import (
+    MAX_TIME,
+    MIN_TIME,
+    Attribute,
+    NetworkConnection,
+    OntologyResults,
+    Process,
+    Sandbox,
+    Signature,
+    attach_dynamic_ontology,
+    convert_sysmon_network,
+    convert_sysmon_processes,
+    extract_iocs_from_text_blob,
+)
+from assemblyline_service_utilities.common.safelist_helper import contains_safelisted_value, is_tag_safelisted
+from assemblyline_service_utilities.common.tag_helper import add_tag
+from assemblyline_v4_service.common.result import (
+    ResultKeyValueSection,
+    ResultSection,
+    ResultTableSection,
+    ResultTextSection,
+    TableRow,
+)
 from cuckoo.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
-from cuckoo.signatures import (CUCKOO_DROPPED_SIGNATURES, SIGNATURE_TO_ATTRIBUTE_ACTION_MAP, get_category_id,
-                               get_signature_category)
+from cuckoo.signatures import (
+    CUCKOO_DROPPED_SIGNATURES,
+    SIGNATURE_TO_ATTRIBUTE_ACTION_MAP,
+    get_category_id,
+    get_signature_category,
+)
 
 al_log.init_logging('service.cuckoo.cuckoo_result')
 log = getLogger('assemblyline.service.cuckoo.cuckoo_result')
