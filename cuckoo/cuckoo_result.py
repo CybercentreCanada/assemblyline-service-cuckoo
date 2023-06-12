@@ -925,7 +925,7 @@ def _get_dns_map(dns_calls: List[Dict[str, Any]], process_map: Dict[int, Dict[st
                 "domain": request,
                 "process_id": dns_call.get("pid"),
                 "process_name": dns_call.get("image"),
-                "time": dns_call.get("time"),
+                "time": dns_call.get("first_seen"),
                 "guid": dns_call.get("guid"),
                 "type": dns_type,
             }
