@@ -838,6 +838,7 @@ def _get_dns_sec(resolved_ips: Dict[str, Dict[str, Any]],
     if len(resolved_ips.keys()) == 0:
         return None
     dns_res_sec = ResultTableSection("Protocol: DNS")
+    dns_res_sec.set_column_order(["domain", "ip"])
     dns_res_sec.set_heuristic(1000)
     dns_body: List[Dict[str, str]] = []
     _ = add_tag(dns_res_sec, "network.protocol", "dns")
@@ -965,6 +966,9 @@ def _get_low_level_flows(resolved_ips: Dict[str, Dict[str, Any]],
 
     # This result section will contain all of the "flows" from src ip to dest ip
     netflows_sec = ResultTableSection("TCP/UDP Network Traffic")
+    netflows_sec.set_column_order(
+        ["timestamp", "protocol", "src_ip", "src_port", "domain", "dest_ip", "dest_port", "image", "pid"]
+    )
 
     for protocol, network_calls in flows.items():
         if len(network_calls) <= 0:
@@ -1266,6 +1270,7 @@ def process_curtain(
     """
     curtain_body: List[Dict[str, Any]] = []
     curtain_res = ResultTableSection("PowerShell Activity")
+    curtain_res.set_column_order(["process_name", "original", "reformatted"])
     for pid in curtain.keys():
         process_name = process_map[int(pid)]["name"] if process_map.get(int(pid)) else "powershell.exe"
         for event in curtain[pid]["events"]:
@@ -1297,6 +1302,7 @@ def process_hollowshunter(hollowshunter: Dict[str, Any], parent_result_section: 
     """
     hollowshunter_body: List[Any] = []
     hollowshunter_res = ResultTableSection("HollowsHunter Analysis")
+    hollowshunter_res.set_column_order(["Process", "Indicator", "Description"])
     # We care about implanted PEs
     # Process (PID)       Indicator       Description
     for pid, details in hollowshunter.items():
@@ -1795,6 +1801,9 @@ def _process_non_http_traffic_over_http(network_res: ResultSection, unique_netfl
     :return: None
     """
     non_http_traffic_result_section = ResultTableSection("Non-HTTP Traffic Over HTTP Ports")
+    non_http_traffic_result_section.set_column_order(
+        ["timestamp", "protocol", "src_ip", "src_port", "domain", "dest_ip", "dest_port", "image", "pid"]
+    )
     non_http_list: List[Dict[str, Any]] = []
     # If there was no HTTP/HTTPS calls made, then confirm that there was no suspicious
     for netflow in unique_netflows:
