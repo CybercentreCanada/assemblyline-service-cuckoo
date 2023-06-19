@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 from assemblyline.common import log as al_log
 from assemblyline.common.attack_map import revoke_map
-from assemblyline.common.isotime import LOCAL_FMT
+from assemblyline.common.isotime import epoch_to_local_with_ms, format_time
 from assemblyline.common.net import is_ip_in_network, is_valid_ip
 from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.base import FULL_URI
@@ -200,20 +200,19 @@ def process_info(info: Dict[str, Any], routing: str, parent_result_section: Resu
     :param so: An instance of the sandbox ontology class
     :return: None
     """
-    start_time = info['started']
-    end_time = info['ended']
+
     duration = info['duration']
     analysis_time = -1  # Default error time
-    start_time_str = ""
-    end_time_str = ""
     try:
-        start_time_str = datetime.fromtimestamp(int(start_time)).strftime('%Y-%m-%d %H:%M:%S')
-        end_time_str = datetime.fromtimestamp(int(end_time)).strftime('%Y-%m-%d %H:%M:%S')
-        duration_str = datetime.fromtimestamp(int(duration)).strftime('%Hh %Mm %Ss')
-        analysis_time = duration_str + "\t(" + start_time_str + " to " + end_time_str + ")"
-    except Exception:
-        start_time_str = MIN_TIME
-        end_time_str = MAX_TIME
+        duration_str = format_time(datetime.fromtimestamp(int(duration)), '%Hh %Mm %Ss')
+        start_time = epoch_to_local_with_ms(float(info['started']), trunc=3)
+        end_time = epoch_to_local_with_ms(float(info['ended']), trunc=3)
+        analysis_time = duration_str + "\t(" + start_time + " to " + end_time + ")"
+    except Exception as e:
+        print(e)
+        log.debug(e)
+        start_time = MIN_TIME
+        end_time = MAX_TIME
     body = {
         'Cuckoo Task ID': info['id'],
         'Duration': analysis_time,
@@ -230,8 +229,8 @@ def process_info(info: Dict[str, Any], routing: str, parent_result_section: Resu
             "sandbox_name": so.service_name,
             "sandbox_version": info['version'],
             "analysis_metadata": {
-                "start_time": start_time_str,
-                "end_time": end_time_str,
+                "start_time": start_time,
+                "end_time": end_time,
                 "task_id": info['id'],
             },
         }
@@ -243,9 +242,9 @@ def process_info(info: Dict[str, Any], routing: str, parent_result_section: Resu
             session=OntologyResults.create_session(),
         ),
         analysis_metadata=Sandbox.AnalysisMetadata(
-            start_time=start_time_str,
+            start_time=start_time,
             task_id=info['id'],
-            end_time=end_time_str,
+            end_time=end_time,
             routing=routing,
             # To be updated later
             machine_metadata=None,
@@ -349,9 +348,7 @@ def convert_cuckoo_processes(cuckoo_processes: List[Dict[str, Any]],
                 is_tag_safelisted(command_line, ["dynamic.process.command_line"], safelist):
             continue
 
-        first_seen = datetime.fromtimestamp(item["first_seen"]).strftime(
-                    LOCAL_FMT
-                )
+        first_seen = epoch_to_local_with_ms(item["first_seen"], trunc=3)
         if not item.get("guid"):
             guid = so.get_guid_by_pid_and_time(item["pid"], first_seen)
         else:
@@ -659,7 +656,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                 ),
                 ontology_id=nc_oid,
                 session=session,
-                time_observed=datetime.fromtimestamp(network_flow["timestamp"]).strftime(LOCAL_FMT)
+                time_observed=epoch_to_local_with_ms(network_flow["timestamp"])
             )
             objectid.assign_guid()
             nc = so.create_network_connection(
@@ -668,11 +665,11 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                 source_port=network_flow["src_port"],
                 destination_ip=network_flow["dest_ip"],
                 destination_port=network_flow["dest_port"],
-                time_observed=datetime.fromtimestamp(network_flow["timestamp"]).strftime(LOCAL_FMT),
+                time_observed=epoch_to_local_with_ms(network_flow["timestamp"]),
                 transport_layer_protocol=network_flow["protocol"],
                 direction=NetworkConnection.OUTBOUND)
             nc.update_process(pid=network_flow["pid"], image=process_details.get(
-                "name"), start_time=datetime.fromtimestamp(network_flow["timestamp"]).strftime(LOCAL_FMT))
+                "name"), start_time=epoch_to_local_with_ms(network_flow["timestamp"]))
             so.add_network_connection(nc)
 
             # We want all key values for all network flows except for timestamps and event_type
@@ -1235,9 +1232,7 @@ def process_all_events(
             extract_iocs_from_text_blob(event.command_line, event_ioc_table)
             _ = add_tag(events_section, "dynamic.process.file_name", event.image)
             if isinstance(event.objectid.time_observed, float) or isinstance(event.objectid.time_observed, int):
-                time_observed = datetime.fromtimestamp(event.objectid.time_observed).strftime(
-                    LOCAL_FMT
-                )
+                time_observed = epoch_to_local_with_ms(event.objectid.time_observed)
             else:
                 time_observed = event.objectid.time_observed
             events_section.add_row(
