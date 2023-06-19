@@ -98,13 +98,13 @@ class TestCuckooResult:
         "info, correct_body, expected_am",
         [({"started": "blah", "ended": "blah", "duration": "blah", "id": 1, "route": "blah", "version": "blah"},
           '{"Cuckoo Task ID": 1, "Duration": -1, "Routing": "blah", "Cuckoo Version": "blah"}',
-          {"routing": "blah", "start_time": "1-01-01 00:00:00", "end_time": "9999-12-31 23:59:59", "task_id": 1}),
+          {"routing": "blah", "start_time": "1-01-01 00:00:00.000000", "end_time": "9999-12-31 23:59:59.999999", "task_id": 1}),
          ({"started": "1", "ended": "1", "duration": "1", "id": 1, "route": "blah", "version": "blah"},
-          '{"Cuckoo Task ID": 1, "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}',
-          {"routing": "blah", "start_time": "1970-01-01 00:00:01", "end_time": "1970-01-01 00:00:01", "task_id": 1}),
+          '{"Cuckoo Task ID": 1, "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01.000 to 1970-01-01 00:00:01.000)", "Routing": "blah", "Cuckoo Version": "blah"}',
+          {"routing": "blah", "start_time": "1970-01-01 00:00:01.000", "end_time": "1970-01-01 00:00:01.000", "task_id": 1}),
          ({"id": 1, "started": "1", "ended": "1", "duration": "1", "route": "blah", "version": "blah"},
-          '{"Cuckoo Task ID": 1, "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01 to 1970-01-01 00:00:01)", "Routing": "blah", "Cuckoo Version": "blah"}',
-          {"routing": "blah", "start_time": "1970-01-01 00:00:01", "end_time": "1970-01-01 00:00:01", "task_id": 1}), ])
+          '{"Cuckoo Task ID": 1, "Duration": "00h 00m 01s\\t(1970-01-01 00:00:01.000 to 1970-01-01 00:00:01.000)", "Routing": "blah", "Cuckoo Version": "blah"}',
+          {"routing": "blah", "start_time": "1970-01-01 00:00:01.000", "end_time": "1970-01-01 00:00:01.000", "task_id": 1}), ])
     def test_process_info(info, correct_body, expected_am):
         al_result = ResultSection("blah")
         so = OntologyResults(service_name="Cuckoo")
@@ -188,10 +188,10 @@ class TestCuckooResult:
         [([{"pid": 0, "process_path": "blah", "command_line": "blah", "ppid": 1,
             "guid": "{12345678-1234-5678-1234-567812345678}", "pguid": "{12345678-1234-5678-1234-567812345679}",
             "first_seen": 1.0}],
-          {'start_time': "1970-01-01 00:00:01", 'end_time': "9999-12-31 23:59:59",
+          {'start_time': "1970-01-01 00:00:01.000", 'end_time': "9999-12-31 23:59:59.999999",
            'objectid':
            {'guid': '{12345678-1234-5678-1234-567812345678}', 'tag': 'blah', 'treeid': None,
-            'time_observed': "1970-01-01 00:00:01", 'ontology_id': 'process_2YK9t8RtV7Kuz78PASKGw0', 'service_name': 'Cuckoo',
+            'time_observed': "1970-01-01 00:00:01.000", 'ontology_id': 'process_2YK9t8RtV7Kuz78PASKGw0', 'service_name': 'Cuckoo',
             'processtree': None},
            'pobjectid': None,
            'pimage': None, 'pcommand_line': None, 'ppid': 1, 'pid': 0, 'image': 'blah', 'command_line': 'blah',
@@ -225,7 +225,7 @@ class TestCuckooResult:
                         "command_line": "blah",
                         "ppid": 1,
                         "guid": "{12345678-1234-5678-1234-567812345678}",
-                        "start_time": "1970-01-01 00:00:01",
+                        "start_time": "1970-01-01 00:00:01.000",
                         "pguid": "{12345678-1234-5678-1234-567812345678}",
                         "objectid": OntologyResults.create_objectid(tag="blah", ontology_id="blah", service_name="Cuckoo")
                     }
@@ -247,7 +247,7 @@ class TestCuckooResult:
                         "command_line": "blah",
                         "ppid": 1,
                         "guid": "{12345678-1234-5678-1234-567812345678}",
-                        "start_time": "1970-01-01 00:00:01",
+                        "start_time": "1970-01-01 00:00:01.000",
                         "pguid": "{12345678-1234-5678-1234-567812345678}",
                         "objectid": OntologyResults.create_objectid(tag="blah", ontology_id="blah", service_name="Cuckoo")
                     }
@@ -274,7 +274,7 @@ class TestCuckooResult:
                         "command_line": "blah",
                         "ppid": 1,
                         "guid": "{12345678-1234-5678-1234-567812345678}",
-                        "start_time": "1970-01-01 00:00:01",
+                        "start_time": "1970-01-01 00:00:01.000",
                         "pguid": "{12345678-1234-5678-1234-567812345678}",
                         "objectid": OntologyResults.create_objectid(tag="blah", ontology_id="blah", service_name="Cuckoo")
                     }
@@ -681,14 +681,14 @@ class TestCuckooResult:
         al_result = ResultSection("blah")
         p = default_so.create_process(
             pid=1, ppid=1, guid="{12345678-1234-5678-1234-567812345679}", command_line="blah blah.com", image="blah",
-            start_time="1970-01-01 00:00:01", pguid="{12345678-1234-5678-1234-567812345679}",
+            start_time="1970-01-01 00:00:01.000", pguid="{12345678-1234-5678-1234-567812345679}",
             objectid=OntologyResults.create_objectid(tag="blah", ontology_id="blah", service_name="Cuckoo")
         )
         default_so.add_process(p)
         nc = default_so.create_network_connection(
             source_port=1, destination_ip="1.1.1.1", source_ip="2.2.2.2", destination_port=1,
             transport_layer_protocol="udp", direction="outbound", process=p,
-            objectid=OntologyResults.create_objectid(tag="blah", ontology_id="blah", service_name="Cuckoo", time_observed="1970-01-01 00:00:02")
+            objectid=OntologyResults.create_objectid(tag="blah", ontology_id="blah", service_name="Cuckoo", time_observed="1970-01-01 00:00:02.000")
         )
 
         default_so.add_network_connection(nc)
@@ -703,12 +703,12 @@ class TestCuckooResult:
         correct_result_section.add_row(
             TableRow(
                 **
-                {"time_observed": "1970-01-01 00:00:01", "process_name": "blah (1)",
+                {"time_observed": "1970-01-01 00:00:01.000", "process_name": "blah (1)",
                  "details": {"command_line": "blah blah.com"}}))
         correct_result_section.add_row(
             TableRow(
                 **
-                {"time_observed": "1970-01-01 00:00:02", "process_name": "blah (1)",
+                {"time_observed": "1970-01-01 00:00:02.000", "process_name": "blah (1)",
                  "details": {"protocol": "udp", "domain": "blah", "dest_ip": "1.1.1.1", "dest_port": 1}}))
 
         correct_ioc_table = ResultTableSection("Event Log IOCs")
