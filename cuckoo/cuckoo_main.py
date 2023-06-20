@@ -913,12 +913,12 @@ class Cuckoo(ServiceBase):
 
     def check_powershell(self, task_id: int, parent_section: ResultSection) -> None:
         """
-        This method adds powershell files as extracted.
+        This method adds powershell files as supplementary.
         :param task_id: An integer representing the Cuckoo Task ID
         :param parent_section: The overarching result section detailing what image this task is being sent to
         :return: None
         """
-        # If there is a Powershell Activity section, create an extracted file from it
+        # If there is a Powershell Activity section, create an supplementary file from it
         for section in parent_section.subsections:
             if section.title_text == "PowerShell Activity":
                 ps1_file_name = f"{task_id}_powershell_logging.ps1"
@@ -927,12 +927,12 @@ class Cuckoo(ServiceBase):
                     for item in loads(section.body):
                         fh.write(item["original"] + "\n")
                 fh.close()
-                self.log.debug(f"Adding extracted file for task {task_id}: {ps1_file_name}")
+                self.log.debug(f"Adding supplementary file for task {task_id}: {ps1_file_name}")
                 artifact = {
                     "name": ps1_file_name,
                     "path": ps1_path,
-                    "description": "Deobfuscated PowerShell script from Cuckoo analysis",
-                    "to_be_extracted": True
+                    "description": "Deobfuscated PowerShell log from Cuckoo analysis",
+                    "to_be_extracted": False
                 }
                 self.artifact_list.append(artifact)
                 break
