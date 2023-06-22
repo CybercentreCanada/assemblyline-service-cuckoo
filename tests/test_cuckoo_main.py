@@ -1068,8 +1068,8 @@ class TestCuckooMain:
 
         cuckoo_class_instance.check_powershell(task_id, parent_section)
         assert cuckoo_class_instance.artifact_list[0]["name"] == "1_powershell_logging.ps1"
-        assert cuckoo_class_instance.artifact_list[0]["description"] == 'Deobfuscated PowerShell script from Cuckoo analysis'
-        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == True
+        assert cuckoo_class_instance.artifact_list[0]["description"] == 'Deobfuscated PowerShell log from Cuckoo analysis'
+        assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == False
 
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
