@@ -121,17 +121,17 @@ class TestCuckooResult:
 
     @staticmethod
     @pytest.mark.parametrize(
-        "debug, correct_body",
+        "debug, correct_body, expected_result",
         [
-            ({"errors": [], "log": [], "cuckoo": []}, None),
-            ({"errors": ["BLAH"], "log": [], "cuckoo": []}, "BLAH"),
-            ({"errors": ["BLAH", "BLAH"], "log": [], "cuckoo": []}, "BLAH\nBLAH"),
-            ({"errors": [], "log": ["blah"], "cuckoo": []}, None),
-            ({"errors": [], "log": ["ERROR: blah"], "cuckoo": []}, "blah"),
-            ({"errors": [], "log": ["ERROR: blah", "ERROR: blah\n"], "cuckoo": []}, "blah\nblah"),
-            ({"errors": [], "log": [], "cuckoo": ["blah"]}, None),
-            ({"errors": [], "log": [], "cuckoo": ["blah", "\n"]}, "blah"),
-            ({"errors": [], "log": [], "cuckoo": ["blah", "\n", "ERROR: blah"]}, "blah\nblah"),
+            ({"errors": [], "log": [], "cuckoo": []}, None, False),
+            ({"errors": ["BLAH"], "log": [], "cuckoo": []}, "BLAH", False),
+            ({"errors": ["BLAH", "BLAH"], "log": [], "cuckoo": []}, "BLAH\nBLAH", False),
+            ({"errors": [], "log": ["blah"], "cuckoo": []}, None, False),
+            ({"errors": [], "log": ["ERROR: blah"], "cuckoo": []}, "blah", False),
+            ({"errors": [], "log": ["ERROR: blah", "ERROR: blah\n"], "cuckoo": []}, "blah\nblah", False),
+            ({"errors": [], "log": [], "cuckoo": ["blah"]}, None, False),
+            ({"errors": [], "log": [], "cuckoo": ["blah", "\n"]}, "blah", False),
+            ({"errors": [], "log": [], "cuckoo": ["blah", "\n", "ERROR: blah"]}, "blah\nblah", False),
             ({"errors": [], "log": [], "cuckoo": [
                 "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
                 "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
@@ -140,12 +140,13 @@ class TestCuckooResult:
                 "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
                 "Virtual Machine /status failed. This can indicate the guest losing network connectivity",
             ]},
-                'it appears that this Virtual Machine hasn\'t been configured properly as the Cuckoo Host wasn\'t able to connect to the Guest.'),
+                'it appears that this Virtual Machine hasn\'t been configured properly as the Cuckoo Host wasn\'t able to connect to the Guest.', False),
+            ({"errors": [], "log": [], "cuckoo": ["blah Unable to execute the initial process, analysis aborted. blah"]}, None, True),
         ]
     )
-    def test_process_debug(debug, correct_body):
+    def test_process_debug(debug, correct_body, expected_result):
         al_result = ResultSection("blah")
-        process_debug(debug, al_result)
+        assert process_debug(debug, al_result) == expected_result
 
         if correct_body is None:
             assert al_result.subsections == []
@@ -309,80 +310,81 @@ class TestCuckooResult:
 
     @staticmethod
     @pytest.mark.parametrize(
-        "name, marks, filename, filename_remainder, expected_result",
+        "name, marks, filename, filename_remainder, nolookup_comms, expected_result",
         [
-            ("blah", [], "blah.txt", "blah.txt", False),
-            ("creates_doc", [{"ioc": "blah.exe", "type": "blah"}], "blah.txt", "blah.txt", False),
-            ("creates_doc", [{"ioc": "blah.txt"}], "blah.txt", "blah.txt", True),
+            ("blah", [], "blah.txt", "blah.txt", True, False),
+            ("creates_doc", [{"ioc": "blah.exe", "type": "blah"}], "blah.txt", "blah.txt", True, False),
+            ("creates_doc", [{"ioc": "blah.txt"}], "blah.txt", "blah.txt", True, True),
             ("creates_doc", [{"ioc": "~blahblahblahblahblah"}],
-             "blahblahblahblahblah.txt", "blahblahblahblahblah", True),
+             "blahblahblahblahblah.txt", "blahblahblahblahblah", True, True),
             ("creates_doc", [{"ioc": "blah.exe", "type": "blah"}, {
-             "ioc": "blah.txt", "type": "blah"}], "blah.txt", "blah.txt", False),
-            ("creates_hidden_file", [{"call": {"arguments": {"filepath": "blah.exe"}}}], "blah.txt", "blah.txt", False),
-            ("creates_hidden_file", [{"call": {"arguments": {"filepath": "blah.txt"}}}], "blah.txt", "blah.txt", True),
+             "ioc": "blah.txt", "type": "blah"}], "blah.txt", "blah.txt", True, False),
+            ("creates_hidden_file", [{"call": {"arguments": {"filepath": "blah.exe"}}}], "blah.txt", "blah.txt", True, False),
+            ("creates_hidden_file", [{"call": {"arguments": {"filepath": "blah.txt"}}}], "blah.txt", "blah.txt", True, True),
             ("creates_hidden_file", [{"call": {"arguments": {"filepath": "desktop.ini"}}}],
-             "blah.txt", "blah.txt", True),
-            ("creates_exe", [{"ioc": "blah.lnk"}], "blah.txt", "blah.txt", True),
+             "blah.txt", "blah.txt", True, True),
+            ("creates_exe", [{"ioc": "blah.lnk"}], "blah.txt", "blah.txt", True, True),
             ("creates_exe", [{"ioc": "AppData\\Roaming\\Microsoft\\Office\\Recent\\Temp.LNK"}],
-             "blah.txt", "blah.txt", True),
+             "blah.txt", "blah.txt", True, True),
             ("network_cnc_http", [{"suspicious_request": "evil http://blah.com",
-             "type": "generic"}], "blah.txt", "blah.txt", False),
+             "type": "generic"}], "blah.txt", "blah.txt", True, False),
             ("network_cnc_http", [{"suspicious_request": "benign http://w3.org",
-             "type": "generic"}], "blah.txt", "blah.txt", True),
-            ("nolookup_communication", [{"host": "http://blah.com", "type": "generic"}], "blah.txt", "blah.txt", False),
-            ("nolookup_communication", [{"host": "http://w3.org", "type": "generic"}], "blah.txt", "blah.txt", True),
-            ("nolookup_communication", [{"host": "192.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", True),
-            ("nolookup_communication", [{"host": "193.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"suspicious_features": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"entropy": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"process": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"useragent": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"blah": "blah", "type": "generic"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"blah": "http://w3.org", "type": "generic"}], "blah.txt", "blah.txt", True),
-            ("blah", [{"blah": "193.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"blah": "192.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", True),
-            ("blah", [{"ioc": "blah", "type": "ioc"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"ioc": "blah", "type": "ioc", "category": "section"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"ioc": "http://w3.org", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+             "type": "generic"}], "blah.txt", "blah.txt", True, True),
+            ("nolookup_communication", [{"host": "http://blah.com", "type": "generic"}], "blah.txt", "blah.txt", True, False),
+            ("nolookup_communication", [{"host": "http://w3.org", "type": "generic"}], "blah.txt", "blah.txt", True, True),
+            ("nolookup_communication", [{"host": "192.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", True, True),
+            ("nolookup_communication", [{"host": "193.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"suspicious_features": "blah", "type": "generic"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"entropy": "blah", "type": "generic"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"process": "blah", "type": "generic"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"useragent": "blah", "type": "generic"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"blah": "blah", "type": "generic"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"blah": "http://w3.org", "type": "generic"}], "blah.txt", "blah.txt", True, True),
+            ("blah", [{"blah": "193.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"blah": "192.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", True, True),
+            ("blah", [{"ioc": "blah", "type": "ioc"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"ioc": "blah", "type": "ioc", "category": "section"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"ioc": "http://w3.org", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, True),
             ("network_http", [{"ioc": "benign http://w3.org/", "type": "ioc",
-             "category": "blah"}], "blah.txt", "blah.txt", True),
+             "category": "blah"}], "blah.txt", "blah.txt", True, True),
             ("network_http", [{"ioc": "super benign http://w3.org/",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, True),
             ("network_http", [{"ioc": "super http://w3.org/benign",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, True),
             ("network_http_post", [{"ioc": "benign http://w3.org/",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, True),
             ("network_http_post", [{"ioc": "super benign http://w3.org/",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, True),
             ("network_http_post", [{"ioc": "super http://w3.org/benign",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, True),
             ("network_http_post", [{"ioc": "super http://evil.com",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, False),
             ("persistence_autorun", [{"ioc": "super http://evil.com",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, False),
             ("network_icmp", [{"ioc": "192.0.2.123",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, False),
             ("creates_shortcut", [{"ioc": "super http://evil.com",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, False),
             ("ransomware_mass_file_delete", [{"ioc": "super http://evil.com",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, False),
             ("suspicious_process", [{"ioc": "super http://evil.com",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, False),
             ("uses_windows_utilities", [{"ioc": "super http://evil.com",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, False),
             ("creates_exe", [{"ioc": "super http://evil.com", "type": "ioc",
-             "category": "blah"}], "blah.txt", "blah.txt", False),
+             "category": "blah"}], "blah.txt", "blah.txt", True, False),
             ("deletes_executed_files", [{"ioc": "super http://evil.com",
-             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"ioc": "blah", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", False),
-            ("blah", [{"ioc": "192.0.2.123", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True),
+             "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"ioc": "blah", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, False),
+            ("blah", [{"ioc": "192.0.2.123", "type": "ioc", "category": "blah"}], "blah.txt", "blah.txt", True, True),
+            ("nolookup_communication", [{"host": "193.0.2.123", "type": "generic"}], "blah.txt", "blah.txt", False, True),
         ]
     )
-    def test_is_signature_a_false_positive(name, marks, filename, filename_remainder, expected_result):
+    def test_is_signature_a_false_positive(name, marks, filename, filename_remainder, nolookup_comms, expected_result):
         inetsim_network = ip_network("192.0.2.0/24")
         safelist = {"match": {"file.path": ["desktop.ini"]}, "regex": {"network.dynamic.domain": ["w3\.org"]}}
         assert _is_signature_a_false_positive(
-            name, marks, filename, filename_remainder, inetsim_network, safelist) == expected_result
+            name, marks, filename, filename_remainder, inetsim_network, safelist, nolookup_comms) == expected_result
 
     @staticmethod
     def test_write_console_output_to_file():
