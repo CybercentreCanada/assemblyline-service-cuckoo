@@ -283,49 +283,10 @@ regex:
   # Android
   - https?://schemas\.android\.com/apk/res(-auto|/android)
   - https?://android\.googlesource\.com/toolchain/llvm-project
-  # XML
-  - https?://xmlpull\.org/v1/doc/features\.html(?:$|.*)
-  - https?://schemas\.openxmlformats\.org(?:$|/.*)
-  # Microsoft
-  - https?://schemas\.microsoft\.com(?:$|/.*)
-  - https?://(www\.)?go\.microsoft\.com(?:$|/.*)
-  - https?://displaycatalog(\.md)?\.mp\.microsoft\.com(?:$|/.*)
-  - https?://officeclient\.microsoft\.com(?:$|/.*)
-  - https?://activation-v2\.sls\.microsoft\.com(?:$|/.*)
-  - https?://fe3(cr)?\.delivery\.mp\.microsoft\.com(?:$|/.*)
-  - https?://config\.messenger\.msn\.com(?:$|/.*)
-  # Windows
-  - https?://ctldl\.windowsupdate\.com(?:$|/.*)
-  # Ubuntu
-  - https?://ca\.archive\.ubuntu\.com(?:$|/.*)
-  # Office
-  - https?://config\.edge\.skype\.com(?:$|/.*)
-  - https?://schemas\.microsoft\.com(?:$|/.*)
-  # Verisign
-  - https?://(www|oscp|crl|logo|csc3-2010-(crl|aia))\.verisign\.com(?:$|/.*)
   # Azure
   - https?://wpad\..*/wpad\.dat
-  # Digicert
-  - https?://ocsp\.digicert\.com/.*
-  - https?://crl[0-9]\.digicert\.com/.*
-  # Symantec
-  - https?://s[a-z0-9]?\.symc[bd]\.com/.*
-  - https?://(evcs|ts)-(ocsp|crl)\.ws\.symantec\.com/.*
-  # Thawte
-  - https?://ocsp\.thawte\.com/.*
-  # Entrust
-  - https?://ocsp\.entrust\.net/.*
-  - https?://crl\.entrust\.net/.*
-  # GlobalSign
-  - https?://ocsp[0-9]?\.globalsign\.com/.*
-  - https?://crl\.globalsign\.(com|net)/.*
-  # W3
-  - https?://www\.w3\.org/.*
   # Google
   - https?://www\.google\.com
-  # Adobe
-  - (?:https?://)?files\.acrobat\.com(?:(?::443)|(?:/.*))
-  - https?://acroipm2?\.adobe\.com/.*
   network.dynamic.uri_path:
   # Adobe
   - \/11\/rdr\/enu\/win\/nooem\/none\/message\.zip
