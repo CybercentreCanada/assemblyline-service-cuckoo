@@ -15,6 +15,7 @@ from assemblyline.common.identify_defaults import type_to_extension
 from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.messages.task import Task as ServiceTask
 from assemblyline_service_utilities.common.dynamic_service_helper import OntologyResults
+from assemblyline_service_utilities.testing.helper import check_section_equality
 from assemblyline_v4_service.common.request import ServiceRequest
 from assemblyline_v4_service.common.result import BODY_FORMAT, ResultImageSection, ResultSection
 from assemblyline_v4_service.common.task import Task
@@ -222,116 +223,6 @@ def yield_sample_file_paths():
     paths = set([path.rstrip() for path in os.listdir(samples_path)])
     for sample in paths:
         yield os.path.join(samples_path, sample)
-
-
-def check_section_equality(this, that) -> bool:
-    # Recursive method to check equality of result section and nested sections
-
-    # Heuristics also need their own equality checks
-    if this.heuristic and that.heuristic:
-        result_heuristic_equality = this.heuristic.attack_ids == that.heuristic.attack_ids and \
-            this.heuristic.frequency == that.heuristic.frequency and \
-            this.heuristic.heur_id == that.heuristic.heur_id and \
-            this.heuristic.score == that.heuristic.score and \
-            this.heuristic.score_map == that.heuristic.score_map and \
-            this.heuristic.signatures == that.heuristic.signatures
-
-        if not result_heuristic_equality:
-            print("The heuristics are not equal:")
-            if this.heuristic.attack_ids != that.heuristic.attack_ids:
-                print("The attack_ids are different:")
-                print(f"{this.heuristic.attack_ids}")
-                print(f"{that.heuristic.attack_ids}")
-            if this.heuristic.frequency != that.heuristic.frequency:
-                print("The frequencies are different:")
-                print(f"{this.heuristic.frequency}")
-                print(f"{that.heuristic.frequency}")
-            if this.heuristic.heur_id != that.heuristic.heur_id:
-                print("The heur_ids are different:")
-                print(f"{this.heuristic.heur_id}")
-                print(f"{that.heuristic.heur_id}")
-            if this.heuristic.score != that.heuristic.score:
-                print("The scores are different:")
-                print(f"{this.heuristic.score}")
-                print(f"{that.heuristic.score}")
-            if this.heuristic.score_map != that.heuristic.score_map:
-                print("The score_maps are different:")
-                print(f"{this.heuristic.score_map}")
-                print(f"{that.heuristic.score_map}")
-            if this.heuristic.signatures != that.heuristic.signatures:
-                print("The signatures are different:")
-                print(f"{this.heuristic.signatures}")
-                print(f"{that.heuristic.signatures}")
-
-    elif not this.heuristic and not that.heuristic:
-        result_heuristic_equality = True
-    else:
-        print("The heuristics are not equal:")
-        if this.heuristic:
-            print(f"{this.heuristic.__dict__}")
-        else:
-            print("this.heuristic is None")
-        if that.heuristic:
-            print(f"{that.heuristic.__dict__}")
-        else:
-            print("that.heuristic is None")
-        result_heuristic_equality = False
-
-    # Assuming we are given the "root section" at all times, it is safe to say that we don't need to confirm parent
-    current_section_equality = result_heuristic_equality and \
-        this.body == that.body and \
-        this.body_format == that.body_format and \
-        this.classification == that.classification and \
-        this.depth == that.depth and \
-        len(this.subsections) == len(that.subsections) and \
-        this.title_text == that.title_text and \
-        this.tags == that.tags and \
-        this.auto_collapse == that.auto_collapse
-
-    if not current_section_equality:
-        print("The current sections are not equal:")
-        if not result_heuristic_equality:
-            print("The result heuristics are not equal")
-        if this.body != that.body:
-            print("The bodies are different:")
-            print(f"{this.body}")
-            print(f"{that.body}")
-        if this.body_format != that.body_format:
-            print("The body formats are different:")
-            print(f"{this.body_format}")
-            print(f"{that.body_format}")
-        if this.classification != that.classification:
-            print("The classifications are different:")
-            print(f"{this.classifications}")
-            print(f"{that.classifications}")
-        if this.depth != that.depth:
-            print("The depths are different:")
-            print(f"{this.depths}")
-            print(f"{that.depths}")
-        if len(this.subsections) != len(that.subsections):
-            print("The number of subsections are different:")
-            print(f"{len(this.subsections)}")
-            print(f"{len(that.subsections)}")
-        if this.title_text != that.title_text:
-            print("The title texts are different:")
-            print(f"{this.title_text}")
-            print(f"{that.title_text}")
-        if this.tags != that.tags:
-            print("The tags are different:")
-            print(f"{this.tags}")
-            print(f"{that.tags}")
-        if this.auto_collapse != that.auto_collapse:
-            print("The auto_collapse settings are different:")
-            print(f"{this.auto_collapse}")
-            print(f"{that.auto_collapse}")
-        return False
-
-    for index, subsection in enumerate(this.subsections):
-        subsection_equality = check_section_equality(subsection, that.subsections[index])
-        if not subsection_equality:
-            return False
-
-    return True
 
 
 class TestModule:
