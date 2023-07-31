@@ -651,10 +651,10 @@ class TestCuckooResult:
         test_parent_section = ResultSection("blah")
         correct_result_section = ResultTableSection("IOCs found in encrypted buffers used in network calls")
         correct_result_section.set_heuristic(1006)
-        correct_result_section.add_row(TableRow({"ioc_type": "domain", "ioc": "blah.com"}))
         correct_result_section.add_row(TableRow({"ioc_type": "domain", "ioc": "blah.ca"}))
-        correct_result_section.add_tag("network.dynamic.domain", "blah.com")
+        correct_result_section.add_row(TableRow({"ioc_type": "domain", "ioc": "blah.com"}))
         correct_result_section.add_tag("network.dynamic.domain", "blah.ca")
+        correct_result_section.add_tag("network.dynamic.domain", "blah.com")
         safelist = {}
         _extract_iocs_from_encrypted_buffers({1: {"network_calls": [{"send": {"buffer": "blah.com"}}]}, 2: {
                                          "network_calls": [{"send": {"buffer": "blah.ca"}}]}}, test_parent_section, safelist)
