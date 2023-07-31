@@ -65,6 +65,7 @@ The method for interpretting this structure is that files are divided between Li
 **NB** : this functionality relies on placing the package found in this repo at `analyzer/windows/modules/packages/dll_multi.py` in the Cuckoo nest at `$CWD/analyzer/windows/modules/packages/dll_multi.py`
 * **machinery_supports_memory_dumps** - [default: False] A boolean flag indicating if the Cuckoo machinery supports dumping memory.
 * **reboot_supported** - [default: False] A boolean flag indicating if the Cuckoo machinery supports reboot submissions.
+* **uses_https_proxy_in_sandbox** - [default: False] A boolean flag indicating if the sandbox architecture uses an HTTPS proxy to decrypt and forward traffic.
 
 #### Reporting Configurations
 * **recursion_limit** - [default: 10000] The recursion limit of the Python environment where the service is being run. This is used to traverse large JSONs generated from analysis.

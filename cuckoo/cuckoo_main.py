@@ -1559,7 +1559,7 @@ class Cuckoo(ServiceBase):
                 self.report_machine_info(machine_name, cuckoo_task, parent_section)
             self.log.debug(f"Generating AL Result from Cuckoo results for task {cuckoo_task.id}.")
             generate_al_result(cuckoo_task.report, parent_section, file_ext, self.config.get("random_ip_range"),
-                               self.routing, self.safelist, so)
+                               self.routing, self.config.get("uses_https_proxy_in_sandbox", False), self.safelist, so)
         except RecoverableError as e:
             self.log.error(f"Recoverable error. Error message: {repr(e)}")
             if cuckoo_task and cuckoo_task.id is not None:
