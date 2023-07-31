@@ -32,6 +32,7 @@ from assemblyline_service_utilities.common.dynamic_service_helper import (
     convert_sysmon_processes,
     extract_iocs_from_text_blob,
 )
+from assemblyline_service_utilities.common.network_helper import convert_url_to_https
 from assemblyline_service_utilities.common.safelist_helper import contains_safelisted_value, is_tag_safelisted
 from assemblyline_service_utilities.common.tag_helper import add_tag
 from assemblyline_v4_service.common.result import (
@@ -108,7 +109,7 @@ SYSTEM_PROCESS_ID = 4
 # TODO: break this into smaller methods
 def generate_al_result(
         api_report: Dict[str, Any],
-        al_result: ResultSection, file_ext: str, random_ip_range: str, routing: str,
+        al_result: ResultSection, file_ext: str, random_ip_range: str, routing: str, uses_https_proxy_in_sandbox: bool,
         safelist: Dict[str, Dict[str, List[str]]],
         so: OntologyResults) -> None:
     """
@@ -118,6 +119,8 @@ def generate_al_result(
     :param file_ext: The file extension of the file to be submitted
     :param random_ip_range: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
     :param routing: What method of routing is being used in the Cuckoo environment
+    :param uses_https_proxy_in_sandbox: A boolean indicating if a proxy is used in the sandbox architecture that
+    decrypts and forwards HTTPS traffic
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :param so: The sandbox ontology class object
     :return: None
@@ -171,7 +174,7 @@ def generate_al_result(
     nolookup_comms = True
     if network:
         process_network(network, al_result, validated_random_ip_range, routing, process_map,
-                        safelist, so)
+                        uses_https_proxy_in_sandbox, safelist, so)
         if al_result.subsections[-1].title_text != "Network Activity" and unable_to_execute_initial_process:
             nolookup_comms = False
 
@@ -570,7 +573,8 @@ def process_signatures(
 
 # TODO: break this up into methods
 def process_network(network: Dict[str, Any], parent_result_section: ResultSection, inetsim_network: IPv4Network,
-                    routing: str, process_map: Dict[int, Dict[str, Any]], safelist: Dict[str, Dict[str, List[str]]],
+                    routing: str, process_map: Dict[int, Dict[str, Any]],
+                    uses_https_proxy_in_sandbox: bool, safelist: Dict[str, Dict[str, List[str]]],
                     so: OntologyResults) -> None:
     """
     This method processes the network section of the Cuckoo report, adding anything noteworthy to the
@@ -581,6 +585,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
     :param routing: The method of routing used in the Cuckoo environment
     :param process_map: A map of process IDs to process names, network calls, and decrypted buffers
     :param task_id: The ID of the Cuckoo Task
+    :param uses_https_proxy_in_sandbox: A boolean indicating if a proxy is used in the sandbox architecture that
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :param so: The sandbox ontology class object
     :return: None
@@ -777,19 +782,24 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
         _ = add_tag(http_sec, "network.protocol", "http")
 
         for http_call in http_calls:
-            _ = add_tag(http_sec, "network.dynamic.uri", http_call.request_uri, safelist)
+            request_uri: str
+            if uses_https_proxy_in_sandbox:
+                request_uri = convert_url_to_https(method=http_call.request_method, url=http_call.request_uri)
+            else:
+                request_uri = http_call.request_uri
+            _ = add_tag(http_sec, "network.dynamic.uri", request_uri, safelist)
 
             # Now we're going to try to detect if a remote file is attempted to be downloaded over HTTP
             if http_call.request_method == "GET":
-                split_path = http_call.request_uri.rsplit("/", 1)
+                split_path = request_uri.rsplit("/", 1)
                 if len(split_path) > 1 and search(r'[^\\]*\.(\w+)$', split_path[-1]):
                     if not remote_file_access_sec.body:
-                        remote_file_access_sec.add_line(f"\t{http_call.request_uri}")
-                    elif f"\t{http_call.request_uri}" not in remote_file_access_sec.body:
-                        remote_file_access_sec.add_line(f"\t{http_call.request_uri}")
+                        remote_file_access_sec.add_line(f"\t{request_uri}")
+                    elif f"\t{request_uri}" not in remote_file_access_sec.body:
+                        remote_file_access_sec.add_line(f"\t{request_uri}")
                     if not remote_file_access_sec.heuristic:
                         remote_file_access_sec.set_heuristic(1003)
-                    _ = add_tag(remote_file_access_sec, "network.dynamic.uri", http_call.request_uri, safelist)
+                    _ = add_tag(remote_file_access_sec, "network.dynamic.uri", request_uri, safelist)
 
             user_agent = http_call.request_headers.get("UserAgent")
             if user_agent:
@@ -816,7 +826,7 @@ def process_network(network: Dict[str, Any], parent_result_section: ResultSectio
                     if process
                     else "None (None)",
                     request=http_call.request_headers,
-                    uri=http_call.request_uri,
+                    uri=request_uri,
                 )
             )
         if remote_file_access_sec.heuristic:
@@ -1870,7 +1880,8 @@ if __name__ == "__main__":
     file_ext = argv[2]
     random_ip_range = argv[3]
     routing = argv[4]
-    safelist_path = argv[5]
+    uses_https_proxy_in_sandbox = True if argv[5] == "True" else False
+    safelist_path = argv[6]
 
     with open(safelist_path, "r") as f:
         safelist = yaml.safe_load(f)
@@ -1887,7 +1898,7 @@ if __name__ == "__main__":
 
     generate_al_result(
         api_report,
-        al_result, file_ext, random_ip_range, routing,
+        al_result, file_ext, random_ip_range, routing, uses_https_proxy_in_sandbox,
         safelist,
         so)
 
