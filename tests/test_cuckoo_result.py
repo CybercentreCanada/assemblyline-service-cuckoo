@@ -81,7 +81,7 @@ class TestCuckooResult:
         al_result = ResultSection("blah")
         file_ext = "blah"
         safelist = {}
-        generate_al_result(api_report, al_result, file_ext, ip_network("192.0.2.0/24"), "blah", safelist, so)
+        generate_al_result(api_report, al_result, file_ext, ip_network("192.0.2.0/24"), "blah", False, safelist, so)
 
         if api_report == {}:
             assert al_result.subsections == []
