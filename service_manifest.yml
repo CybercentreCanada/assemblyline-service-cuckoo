@@ -47,6 +47,7 @@ config:
   max_dll_exports_exec: 5
   machinery_supports_memory_dumps: false
   reboot_supported: false
+  uses_https_proxy_in_sandbox: false
 
   # Cuckoo reporting configurations
   recursion_limit: 10000
