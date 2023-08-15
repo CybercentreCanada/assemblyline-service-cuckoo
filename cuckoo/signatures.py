@@ -726,7 +726,7 @@ CUCKOO_DROPPED_SIGNATURES = [
     "antiav_detectreg", "api_hammering", "raises_exception", "antivm_memory_available",
     "recon_fingerprint", "application_raises_exception", "modifies_certificates",
     "modifies_proxy_wpad", "stack_pivot_shellcode_apis", "infostealer_mail", "locates_browser",
-    "exploit_heapspray",
+    "exploit_heapspray", "network_irc",
 ]
 
 
