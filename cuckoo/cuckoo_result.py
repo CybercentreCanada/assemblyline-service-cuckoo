@@ -1805,6 +1805,8 @@ def _tag_and_describe_call_signature(signature_name: str, mark: Dict[str, Any], 
         url = mark["call"].get("arguments", {}).get("url")
         if download_path and url:
             sig_res.add_line(f'\tThe file at {safe_str(url)} was attempted to be downloaded to {download_path}')
+            _ = add_tag(sig_res, "network.dynamic.uri", url, safelist)
+            _ = add_tag(sig_res, "dynamic.process.file_name", download_path, safelist)
     elif signature_name == "network_wscript_downloader":
         if mark["call"]["api"] in ["InternetCrackUrlW"]:
             url = mark["call"].get("arguments", {}).get("url")
