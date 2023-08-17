@@ -891,7 +891,7 @@ class Cuckoo(ServiceBase):
                             # If the initial file is an HTML file and there is the possibility that Internet Explorer could
                             # have run, we should check if any of the extracted files are RecoveryStore files
                             if self.request.file_type == "code/html":
-                                file_type_details = self.identify.fileinfo(dropped_file_path)
+                                file_type_details = self.identify.fileinfo(dropped_file_path, generate_hashes=False)
                                 if file_type_details["type"] == "document/office/recoverystore":
                                     self.log.debug(
                                         f"We are not extracting {dropped_file_path} for task {cuckoo_task.id} "
@@ -1685,7 +1685,7 @@ class Cuckoo(ServiceBase):
                     continue
 
                 if key in ["buffer"]:
-                    file_type_details = self.identify.fileinfo(destination_file_path)
+                    file_type_details = self.identify.fileinfo(destination_file_path, generate_hashes=False)
                     if file_type_details["type"] == "unknown":
                         self.log.debug(
                             f"We are not extracting {destination_file_path} for task {task_id} "
