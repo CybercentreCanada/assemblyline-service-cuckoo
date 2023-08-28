@@ -184,7 +184,7 @@ def generate_al_result(
         target_filename = target_file.get("name", "missing_name")
         is_process_martian = process_signatures(
             sigs, al_result, validated_random_ip_range, target_filename, process_map, info["id"],
-            safelist, so, nolookup_comms)
+            safelist, so, nolookup_comms, uses_https_proxy_in_sandbox)
 
     build_process_tree(al_result, is_process_martian, so)
 
@@ -425,7 +425,7 @@ def process_signatures(
         parent_result_section: ResultSection, inetsim_network: IPv4Network, target_filename: str,
         process_map: Dict[int, Dict[str, Any]],
         task_id: int, safelist: Dict[str, Dict[str, List[str]]],
-        so: OntologyResults, nolookup_comms: bool) -> bool:
+        so: OntologyResults, nolookup_comms: bool, uses_https_proxy_in_sandbox: bool) -> bool:
     """
     This method processes the signatures section of the Cuckoo report, adding anything noteworthy to the
     Assemblyline report
@@ -438,6 +438,8 @@ def process_signatures(
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
     :param so: The sandbox ontology class object
     :param nolookup_comms: A boolean flag indicating if we should show the nolookup_communication signature
+    :param uses_https_proxy_in_sandbox: A boolean indicating if a proxy is used in the sandbox architecture that
+    decrypts and forwards HTTPS traffic
     :return: A boolean flag that indicates if the is_process_martian signature was raised
     """
     if len(sigs) <= 0:
@@ -520,7 +522,7 @@ def process_signatures(
 
             # Adding tags and descriptions to the signature section, based on the type of mark
             if mark["type"] == "generic":
-                _tag_and_describe_generic_signature(sig_name, mark, sig_res, inetsim_network, safelist)
+                _tag_and_describe_generic_signature(sig_name, mark, sig_res, inetsim_network, safelist, uses_https_proxy_in_sandbox)
             elif mark["type"] == "ioc" and mark.get("category") not in SKIPPED_CATEGORY_IOCS:
                 _tag_and_describe_ioc_signature(sig_name, mark, sig_res, inetsim_network,
                                                 process_map, safelist, so, so_sig)
@@ -1638,7 +1640,8 @@ def _extract_iocs_from_encrypted_buffers(process_map: Dict[int, Dict[str, Any]],
 
 def _tag_and_describe_generic_signature(
         signature_name: str, mark: Dict[str, Any],
-        sig_res: ResultTextSection, inetsim_network: IPv4Network, safelist: Dict[str, Dict[str, List[str]]]) -> None:
+        sig_res: ResultTextSection, inetsim_network: IPv4Network, safelist: Dict[str, Dict[str, List[str]]],
+        uses_https_proxy_in_sandbox: bool) -> None:
     """
     This method adds the appropriate tags and descriptions for "generic" signatures
     :param signature_name: The name of the signature
@@ -1646,15 +1649,22 @@ def _tag_and_describe_generic_signature(
     :param sig_res: A ResultTextSection containing details about the signature
     :param inetsim_network: The CIDR representation of the IP range that INetSim randomly returns for DNS lookups
     :param safelist: A dictionary containing matches and regexes for use in safelisting values
+    :param uses_https_proxy_in_sandbox: A boolean indicating if a proxy is used in the sandbox architecture that
+    decrypts and forwards HTTPS traffic
     :return: None
     """
     if signature_name == "network_cnc_http":
         http_string = mark["suspicious_request"].split()
-        if "/wpad.dat" not in http_string[1] and add_tag(sig_res, "network.dynamic.uri", http_string[1], safelist):
-            sig_res.add_line(
-                f'\t"{safe_str(mark["suspicious_request"])}" is suspicious because '
-                f'"{safe_str(mark["suspicious_features"])}"'
-            )
+        if "/wpad.dat" not in http_string[1]:
+            if uses_https_proxy_in_sandbox:
+                request_uri = convert_url_to_https(method=http_string[0], url=http_string[1])
+            else:
+                request_uri = http_string[1]
+            if add_tag(sig_res, "network.dynamic.uri", request_uri, safelist):
+                sig_res.add_line(
+                    f'\t"{safe_str(http_string[0])} {safe_str(request_uri)}" is suspicious because '
+                    f'"{safe_str(mark["suspicious_features"])}"'
+                )
     elif signature_name == "nolookup_communication":
         if (
             not is_ip_in_network(mark["host"], inetsim_network)
