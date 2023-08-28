@@ -184,7 +184,7 @@ def generate_al_result(
         target_filename = target_file.get("name", "missing_name")
         is_process_martian = process_signatures(
             sigs, al_result, validated_random_ip_range, target_filename, process_map, info["id"],
-            safelist, so, nolookup_comms)
+            safelist, so, nolookup_comms, uses_https_proxy_in_sandbox)
 
     build_process_tree(al_result, is_process_martian, so)
 
