@@ -28,12 +28,11 @@ from assemblyline_service_utilities.common.dynamic_service_helper import (
     Sandbox,
     Signature,
     attach_dynamic_ontology,
-    convert_sysmon_network,
-    convert_sysmon_processes,
     extract_iocs_from_text_blob,
 )
 from assemblyline_service_utilities.common.network_helper import convert_url_to_https
 from assemblyline_service_utilities.common.safelist_helper import contains_safelisted_value, is_tag_safelisted
+from assemblyline_service_utilities.common.sysmon_helper import convert_sysmon_network, convert_sysmon_processes
 from assemblyline_service_utilities.common.tag_helper import add_tag
 from assemblyline_v4_service.common.result import (
     ResultKeyValueSection,
