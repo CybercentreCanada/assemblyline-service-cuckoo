@@ -1084,6 +1084,9 @@ class Cuckoo(ServiceBase):
             self.log.debug(f"Renaming {self.file_name} because it contains one of {ILLEGAL_FILENAME_CHARS}")
             self.file_name = ''.join(ch for ch in self.file_name if ch not in ILLEGAL_FILENAME_CHARS)
 
+        if self.file_name.startswith(" "):
+            self.file_name = self.file_name.lstrip()
+
     def _assign_file_extension(self, kwargs: Dict[str, Any]) -> str:
         """
         This method determines the correct file extension to the file to be submitted
