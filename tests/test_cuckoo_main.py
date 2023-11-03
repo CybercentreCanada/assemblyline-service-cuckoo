@@ -36,26 +36,22 @@ samples = [
     dict(
         sid=1,
         metadata={},
-        service_name='cuckoo',
+        service_name="cuckoo",
         service_config={},
         fileinfo=dict(
-            magic='ASCII text, with no line terminators',
-            md5='fda4e701258ba56f465e3636e60d36ec',
-            mime='text/plain',
-            sha1='af2c2618032c679333bebf745e75f9088748d737',
-            sha256='dadc624d4454e10293dbd1b701b9ee9f99ef83b4cd07b695111d37eb95abcff8',
+            magic="ASCII text, with no line terminators",
+            md5="fda4e701258ba56f465e3636e60d36ec",
+            mime="text/plain",
+            sha1="af2c2618032c679333bebf745e75f9088748d737",
+            sha256="dadc624d4454e10293dbd1b701b9ee9f99ef83b4cd07b695111d37eb95abcff8",
             size=19,
-            type='unknown',
+            type="unknown",
         ),
-        filename='dadc624d4454e10293dbd1b701b9ee9f99ef83b4cd07b695111d37eb95abcff8',
-        min_classification='TLP:WHITE',
+        filename="dadc624d4454e10293dbd1b701b9ee9f99ef83b4cd07b695111d37eb95abcff8",
+        min_classification="TLP:WHITE",
         max_files=501,  # TODO: get the actual value
         ttl=3600,
-        safelist_config={
-            "enabled": False,
-            "hash_types": ['sha1', 'sha256'],
-            "enforce_safelist_service": False
-        }
+        safelist_config={"enabled": False, "hash_types": ["sha1", "sha256"], "enforce_safelist_service": False},
     ),
 ]
 
@@ -97,12 +93,12 @@ def dummy_task_class():
         def __init__(self):
             self.supplementary = []
             self.extracted = []
+
     yield DummyTask
 
 
 @pytest.fixture
 def dummy_request_class(dummy_task_class):
-
     class DummyRequest(dict):
         def __init__(self, **some_dict):
             super(DummyRequest, self).__init__()
@@ -129,7 +125,12 @@ def dummy_request_class(dummy_task_class):
         def add_image(path, name, description, classification=None, ocr_heuristic_id=None, ocr_io=None):
             return {
                 "img": {"path": path, "name": name, "description": description, "classification": classification},
-                "thumb": {"path": path, "name": f"{name}.thumb", "description": description, "classification": classification}
+                "thumb": {
+                    "path": path,
+                    "name": f"{name}.thumb",
+                    "description": description,
+                    "classification": classification,
+                },
             }
 
     yield DummyRequest
@@ -167,6 +168,7 @@ def dummy_tar_class():
 
         def close(self):
             pass
+
     yield DummyTar
 
 
@@ -182,6 +184,7 @@ def dummy_tar_member_class():
 
         def startswith(self, val):
             return val in self.name
+
     yield DummyTarMember
 
 
@@ -194,6 +197,7 @@ def dummy_json_doc_class_instance():
 
         def rfind(self, *args):
             return 0
+
     yield DummyJSONDoc()
 
 
@@ -205,6 +209,7 @@ def dummy_result_class_instance():
 
         def add_section(self, res_sec: ResultSection):
             self.sections.append(res_sec)
+
     return DummyResult()
 
 
@@ -214,6 +219,7 @@ def dummy_api_interface_class():
         @staticmethod
         def get_safelist():
             return []
+
     return DummyApiInterface
 
 
@@ -229,7 +235,10 @@ class TestModule:
     @staticmethod
     def test_hollowshunter_constants():
         assert HOLLOWSHUNTER_REPORT_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
-        assert HOLLOWSHUNTER_DUMP_REGEX == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
+        assert (
+            HOLLOWSHUNTER_DUMP_REGEX
+            == "hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
+        )
 
     @staticmethod
     def test_cuckoo_api_constants():
@@ -258,21 +267,70 @@ class TestModule:
         assert x64_IMAGE_SUFFIX == "x64"
         assert RELEVANT_IMAGE_TAG == "auto"
         assert ALL_IMAGES_TAG == "all"
-        assert MACHINE_NAME_REGEX == f"(?:{('|').join([LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX])})(.*)(?:{('|').join([x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX])})"
+        assert (
+            MACHINE_NAME_REGEX
+            == f"(?:{('|').join([LINUX_IMAGE_PREFIX, WINDOWS_IMAGE_PREFIX])})(.*)(?:{('|').join([x64_IMAGE_SUFFIX, x86_IMAGE_SUFFIX])})"
+        )
 
     @staticmethod
     def test_file_constants():
         assert set(LINUX_x86_FILES) == {"executable/linux/elf32", "executable/linux/so32", "executable/linux/coff32"}
-        assert set(LINUX_x64_FILES) == {"executable/linux/elf64", "executable/linux/so64",
-                                        "executable/linux/ia/coff64", "executable/linux/coff64", "code/shell"}
-        assert set(WINDOWS_x86_FILES) == {'executable/windows/pe32', 'executable/windows/dll32'}
+        assert set(LINUX_x64_FILES) == {
+            "executable/linux/elf64",
+            "executable/linux/so64",
+            "executable/linux/ia/coff64",
+            "executable/linux/coff64",
+            "code/shell",
+        }
+        assert set(WINDOWS_x86_FILES) == {"executable/windows/pe32", "executable/windows/dll32"}
 
     @staticmethod
     def test_supported_extensions_constant():
-        assert SUPPORTED_EXTENSIONS == ['bat', 'bin', 'cpl', 'dll', 'doc', 'docm', 'docx', 'dotm', 'elf', 'eml', 'exe',
-                                        'hta', 'htm', 'html', 'hwp', 'jar', 'js', 'lnk', 'mht', 'msg', 'msi', 'pdf',
-                                        'potm', 'potx', 'pps', 'ppsm', 'ppsx', 'ppt', 'pptm', 'pptx', 'ps1', 'pub',
-                                        'py', 'pyc', 'rar', 'rtf', 'sh', 'swf', 'vbs', 'wsf', 'xls', 'xlsm', 'xlsx']
+        assert SUPPORTED_EXTENSIONS == [
+            "bat",
+            "bin",
+            "cpl",
+            "dll",
+            "doc",
+            "docm",
+            "docx",
+            "dotm",
+            "elf",
+            "eml",
+            "exe",
+            "hta",
+            "htm",
+            "html",
+            "hwp",
+            "jar",
+            "js",
+            "lnk",
+            "mht",
+            "msg",
+            "msi",
+            "pdf",
+            "potm",
+            "potx",
+            "pps",
+            "ppsm",
+            "ppsx",
+            "ppt",
+            "pptm",
+            "pptx",
+            "ps1",
+            "pub",
+            "py",
+            "pyc",
+            "rar",
+            "rtf",
+            "sh",
+            "swf",
+            "vbs",
+            "wsf",
+            "xls",
+            "xlsm",
+            "xlsx",
+        ]
 
     @staticmethod
     def test_illegal_filename_chars_constant():
@@ -349,19 +407,20 @@ class TestCuckooMain:
         mocker.patch.object(cuckoo_class_instance, "get_api_interface", return_value=dummy_api_interface_class)
         cuckoo_class_instance.start()
         assert cuckoo_class_instance.ssdeep_match_pct == int(
-            cuckoo_class_instance.config.get('dedup_similar_percent', 40))
+            cuckoo_class_instance.config.get("dedup_similar_percent", 40)
+        )
         assert cuckoo_class_instance.connection_timeout_in_seconds == cuckoo_class_instance.config.get(
-            'connection_timeout_in_seconds',
-            30)
-        assert cuckoo_class_instance.connection_attempts == cuckoo_class_instance.config.get('connection_attempts', 3)
-        assert cuckoo_class_instance.timeout == cuckoo_class_instance.config.get('rest_timeout_in_seconds', 150)
-        assert cuckoo_class_instance.max_report_size == cuckoo_class_instance.config.get('max_report_size', 275000000)
-        assert cuckoo_class_instance.allowed_images == cuckoo_class_instance.config.get('allowed_images', [])
+            "connection_timeout_in_seconds", 30
+        )
+        assert cuckoo_class_instance.connection_attempts == cuckoo_class_instance.config.get("connection_attempts", 3)
+        assert cuckoo_class_instance.timeout == cuckoo_class_instance.config.get("rest_timeout_in_seconds", 150)
+        assert cuckoo_class_instance.max_report_size == cuckoo_class_instance.config.get("max_report_size", 275000000)
+        assert cuckoo_class_instance.allowed_images == cuckoo_class_instance.config.get("allowed_images", [])
 
     @staticmethod
     @pytest.mark.parametrize("sample", samples)
     def test_execute(sample, cuckoo_class_instance, mocker):
-        mocker.patch('cuckoo.cuckoo_main.generate_random_words', return_value="blah")
+        mocker.patch("cuckoo.cuckoo_main.generate_random_words", return_value="blah")
         mocker.patch.object(Cuckoo, "_decode_mime_encoded_file_name", return_value=None)
         mocker.patch.object(Cuckoo, "_remove_illegal_characters_from_file_name", return_value=None)
         mocker.patch.object(Cuckoo, "query_machines", return_value={})
@@ -406,7 +465,9 @@ class TestCuckooMain:
             # Cover that code!
             cuckoo_class_instance.execute(service_request)
 
-        with mocker.patch.object(Cuckoo, "_handle_specific_image", return_value=(True, {"blah": ["blah"], "blahblah": ["blah"]})):
+        with mocker.patch.object(
+            Cuckoo, "_handle_specific_image", return_value=(True, {"blah": ["blah"], "blahblah": ["blah"]})
+        ):
             # Cover that code!
             cuckoo_class_instance.execute(service_request)
 
@@ -445,8 +506,9 @@ class TestCuckooMain:
 
         # Reboot coverage
         cuckoo_class_instance.config["reboot_supported"] = True
-        cuckoo_class_instance._general_flow(kwargs, file_ext, parent_section, [
-                                            {"auth_header": "blah", "ip": "blah", "port": "blah"}], True, 1, so)
+        cuckoo_class_instance._general_flow(
+            kwargs, file_ext, parent_section, [{"auth_header": "blah", "ip": "blah", "port": "blah"}], True, 1, so
+        )
 
         with mocker.patch.object(Cuckoo, "submit", side_effect=Exception("blah")):
             with pytest.raises(Exception):
@@ -481,11 +543,20 @@ class TestCuckooMain:
             (1, "started", "missing_report"),
             (1, "started", "analysis_failed"),
             (1, "started", "reboot"),
-        ]
+        ],
     )
     def test_submit(task_id, poll_started_status, poll_report_status, cuckoo_class_instance, mocker):
-        all_statuses = [TASK_STARTED, TASK_MISSING, TASK_STOPPED, INVALID_JSON, REPORT_TOO_BIG,
-                        SERVICE_CONTAINER_DISCONNECTED, MISSING_REPORT, ANALYSIS_FAILED, ANALYSIS_EXCEEDED_TIMEOUT]
+        all_statuses = [
+            TASK_STARTED,
+            TASK_MISSING,
+            TASK_STOPPED,
+            INVALID_JSON,
+            REPORT_TOO_BIG,
+            SERVICE_CONTAINER_DISCONNECTED,
+            MISSING_REPORT,
+            ANALYSIS_FAILED,
+            ANALYSIS_EXCEEDED_TIMEOUT,
+        ]
         file_content = b"blah"
         host_to_use = {"auth_header": {"blah": "blah"}, "ip": "1.1.1.1", "port": 8000}
         cuckoo_task = CuckooTask("blah", host_to_use, blah="blah")
@@ -513,18 +584,24 @@ class TestCuckooMain:
         elif poll_started_status is None or (poll_started_status == TASK_STARTED and poll_report_status is None):
             with pytest.raises(AnalysisTimeoutExceeded):
                 cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
-            correct_sec = ResultSection("Assemblyline task timeout exceeded.",
-                                        body=f"The Cuckoo task {cuckoo_task.id} took longer than the "
-                                        f"Assemblyline's task timeout would allow.\nThis is usually due to "
-                                        f"an issue on Cuckoo's machinery end. Contact the Cuckoo "
-                                        f"administrator for details.")
+            correct_sec = ResultSection(
+                "Assemblyline task timeout exceeded.",
+                body=f"The Cuckoo task {cuckoo_task.id} took longer than the "
+                f"Assemblyline's task timeout would allow.\nThis is usually due to "
+                f"an issue on Cuckoo's machinery end. Contact the Cuckoo "
+                f"administrator for details.",
+            )
             check_section_equality(parent_section.subsections[0], correct_sec)
             assert cuckoo_task.id is None
-        elif (poll_started_status == TASK_MISSING and poll_report_status is None) or (poll_started_status == TASK_STARTED and poll_report_status == TASK_MISSING):
+        elif (poll_started_status == TASK_MISSING and poll_report_status is None) or (
+            poll_started_status == TASK_STARTED and poll_report_status == TASK_MISSING
+        ):
             with pytest.raises(RecoverableError):
                 cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
             assert cuckoo_task.id is None
-        elif (poll_started_status == ANALYSIS_FAILED and poll_report_status is None) or (poll_report_status == ANALYSIS_FAILED and poll_started_status == TASK_STARTED):
+        elif (poll_started_status == ANALYSIS_FAILED and poll_report_status is None) or (
+            poll_report_status == ANALYSIS_FAILED and poll_started_status == TASK_STARTED
+        ):
             with pytest.raises(AnalysisFailed):
                 cuckoo_class_instance.submit(file_content, cuckoo_task, parent_section)
         elif poll_report_status == "reboot":
@@ -557,8 +634,8 @@ class TestCuckooMain:
             {"id": 1, "guest": {"status": "starting"}},
             {"id": 1, "task": {"status": "missing"}},
             {"id": 1, "errors": ["error"]},
-            {"id": 1}
-        ]
+            {"id": 1},
+        ],
     )
     def test_poll_started(return_value, cuckoo_class_instance, mocker):
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
@@ -568,7 +645,7 @@ class TestCuckooMain:
         # Mocking the time.sleep method that Retry uses, since decorators are loaded and immutable following module import
         with mocker.patch("time.sleep", side_effect=lambda _: None):
             # Mocking the Cuckoo.query_task method results since we only care about the output
-            with mocker.patch.object(Cuckoo, 'query_task', return_value=return_value):
+            with mocker.patch.object(Cuckoo, "query_task", return_value=return_value):
                 if return_value is None:
                     test_result = cuckoo_class_instance.poll_started(cuckoo_task)
                     assert TASK_MISSING == test_result
@@ -600,8 +677,8 @@ class TestCuckooMain:
             {"id": 1, "status": "fail", "errors": []},
             {"id": 1, "status": "completed"},
             {"id": 1, "status": "reported"},
-            {"id": 1, "status": "still_trucking"}
-        ]
+            {"id": 1, "status": "still_trucking"},
+        ],
     )
     def test_poll_report(return_value, cuckoo_class_instance, mocker):
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
@@ -612,7 +689,7 @@ class TestCuckooMain:
         # Mocking the time.sleep method that Retry uses, since decorators are loaded and immutable following module import
         with mocker.patch("time.sleep", side_effect=lambda _: None):
             # Mocking the Cuckoo.query_task method results since we only care about the output
-            with mocker.patch.object(Cuckoo, 'query_task', return_value=return_value):
+            with mocker.patch.object(Cuckoo, "query_task", return_value=return_value):
                 if return_value is None or return_value == {}:
                     test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
                     assert TASK_MISSING == test_result
@@ -621,7 +698,7 @@ class TestCuckooMain:
                         cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
                 elif "fail" in return_value["status"]:
                     test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
-                    correct_result = ResultSection(ANALYSIS_ERRORS, body='')
+                    correct_result = ResultSection(ANALYSIS_ERRORS, body="")
                     assert check_section_equality(parent_section.subsections[0], correct_result)
                     assert ANALYSIS_FAILED == test_result
                 elif return_value["status"] == TASK_COMPLETED:
@@ -629,7 +706,7 @@ class TestCuckooMain:
                         cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
                 elif return_value["status"] == TASK_REPORTED:
                     # Mocking the Cuckoo.query_report method results since we only care about the output
-                    with mocker.patch.object(Cuckoo, 'query_report', return_value=return_value):
+                    with mocker.patch.object(Cuckoo, "query_report", return_value=return_value):
                         test_result = cuckoo_class_instance.poll_report(cuckoo_task, parent_section)
                         assert return_value["status"] == test_result
                 else:
@@ -639,17 +716,10 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "status_code, task_id, task_ids",
-        [
-            (200, 1, None),
-            (200, None, None),
-            (200, None, [1]),
-            (404, 1, None),
-            (500, 1, None),
-            (None, None, None)
-        ]
+        [(200, 1, None), (200, None, None), (200, None, [1]), (404, 1, None), (500, 1, None), (None, None, None)],
     )
     def test_submit_file(status_code, task_id, task_ids, cuckoo_class_instance, mocker):
-        mocker.patch('cuckoo.cuckoo_main.generate_random_words', return_value="blah")
+        mocker.patch("cuckoo.cuckoo_main.generate_random_words", return_value="blah")
 
         # Prerequisites before we can mock query_machines response
         cuckoo_class_instance.session = Session()
@@ -664,7 +734,7 @@ class TestCuckooMain:
             correct_rest_response["task_ids"] = task_ids
         with requests_mock.Mocker() as m:
             if status_code is None and task_id is None and task_ids is None:
-                with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
+                with mocker.patch.object(Cuckoo, "delete_task", return_value=True):
                     m.post(cuckoo_task.submit_url, exc=exceptions.Timeout)
                     with pytest.raises(CuckooTimeoutException):
                         cuckoo_task.id = 1
@@ -703,8 +773,8 @@ class TestCuckooMain:
             (1, "json", None, 500, {"Content-Length": "0"}, {}),
             (1, "anything", None, 200, {"Content-Length": "0"}, {}),
             (1, "anything", None, 200, {"Content-Length": "0"}, None),
-            (None, None, None, None, None, None)
-        ]
+            (None, None, None, None, None, None),
+        ],
     )
     def test_query_report(task_id, fmt, params, status_code, headers, report_data, cuckoo_class_instance, mocker):
         # Prerequisites before we can mock query_report response
@@ -716,17 +786,28 @@ class TestCuckooMain:
         cuckoo_task.id = task_id
 
         with requests_mock.Mocker() as m:
-            with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
-                if task_id is None and fmt is None and params is None and status_code is None and headers is None and report_data is None:
-                    m.get(cuckoo_task.query_report_url % task_id + '/json', exc=exceptions.Timeout)
+            with mocker.patch.object(Cuckoo, "delete_task", return_value=True):
+                if (
+                    task_id is None
+                    and fmt is None
+                    and params is None
+                    and status_code is None
+                    and headers is None
+                    and report_data is None
+                ):
+                    m.get(cuckoo_task.query_report_url % task_id + "/json", exc=exceptions.Timeout)
                     with pytest.raises(CuckooTimeoutException):
                         cuckoo_class_instance.query_report(cuckoo_task, "json", params)
-                    m.get(cuckoo_task.query_report_url % task_id + '/json', exc=ConnectionError)
+                    m.get(cuckoo_task.query_report_url % task_id + "/json", exc=ConnectionError)
                     with pytest.raises(Exception):
                         cuckoo_class_instance.query_report(cuckoo_task, "json", params)
                 else:
-                    m.get((cuckoo_task.query_report_url + '/' + fmt) % task_id, headers=headers,
-                          json=report_data, status_code=status_code)
+                    m.get(
+                        (cuckoo_task.query_report_url + "/" + fmt) % task_id,
+                        headers=headers,
+                        json=report_data,
+                        status_code=status_code,
+                    )
                     if int(headers["Content-Length"]) > cuckoo_class_instance.max_report_size:
                         with pytest.raises(ReportSizeExceeded):
                             cuckoo_class_instance.query_report(cuckoo_task, fmt, params)
@@ -747,15 +828,7 @@ class TestCuckooMain:
                                 assert correct_result == test_result
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "status_code,resp",
-        [
-            (200, b"blah"),
-            (404, None),
-            (500, None),
-            (None, None)
-        ]
-    )
+    @pytest.mark.parametrize("status_code,resp", [(200, b"blah"), (404, None), (500, None), (None, None)])
     def test_query_pcap(status_code, resp, cuckoo_class_instance, mocker):
         # Prerequisites before we can mock query_pcap response
         task_id = 1
@@ -768,7 +841,7 @@ class TestCuckooMain:
             if status_code is None and resp is None:
                 m.get(cuckoo_task.query_pcap_url % task_id, exc=exceptions.Timeout)
                 with pytest.raises(CuckooTimeoutException):
-                    with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
+                    with mocker.patch.object(Cuckoo, "delete_task", return_value=True):
                         cuckoo_class_instance.query_pcap(cuckoo_task)
                 m.get(cuckoo_task.query_pcap_url % task_id, exc=ConnectionError)
                 with pytest.raises(Exception):
@@ -785,16 +858,7 @@ class TestCuckooMain:
                         assert test_result is None
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "status_code,task_dict",
-        [
-            (200, None),
-            (200, 1),
-            (404, None),
-            (500, None),
-            (None, None)
-        ]
-    )
+    @pytest.mark.parametrize("status_code,task_dict", [(200, None), (200, 1), (404, None), (500, None), (None, None)])
     def test_query_task(status_code, task_dict, cuckoo_class_instance, mocker):
         # Prerequisites before we can mock query_machines response
         task_id = 1
@@ -808,14 +872,13 @@ class TestCuckooMain:
             if status_code is None and task_dict is None:
                 m.get(cuckoo_task.query_task_url % task_id, exc=exceptions.Timeout)
                 with pytest.raises(CuckooTimeoutException):
-                    with mocker.patch.object(Cuckoo, 'delete_task', return_value=True):
+                    with mocker.patch.object(Cuckoo, "delete_task", return_value=True):
                         cuckoo_class_instance.query_task(cuckoo_task)
                 m.get(cuckoo_task.query_task_url % task_id, exc=ConnectionError)
                 with pytest.raises(Exception):
                     cuckoo_class_instance.query_task(cuckoo_task)
             else:
-                m.get(cuckoo_task.query_task_url % task_id, json=correct_rest_response,
-                      status_code=status_code)
+                m.get(cuckoo_task.query_task_url % task_id, json=correct_rest_response, status_code=status_code)
                 test_result = cuckoo_class_instance.query_task(cuckoo_task)
                 if status_code == 200:
                     if task_dict is None:
@@ -833,10 +896,10 @@ class TestCuckooMain:
         [
             (200, ""),
             (500, "{}"),
-            (500, "{\"message\":\"The task is currently being processed, cannot delete\"}"),
+            (500, '{"message":"The task is currently being processed, cannot delete"}'),
             (404, ""),
-            (None, None)
-        ]
+            (None, None),
+        ],
     )
     def test_delete_task(status_code, text, cuckoo_class_instance, mocker):
         # Prerequisites before we can mock query_report response
@@ -861,8 +924,10 @@ class TestCuckooMain:
                         cuckoo_class_instance.delete_task(cuckoo_task)
                 else:
                     m.get(cuckoo_task.delete_task_url % task_id, text=text, status_code=status_code)
-                    if status_code == 500 and json.loads(text).get(
-                            "message") == "The task is currently being processed, cannot delete":
+                    if (
+                        status_code == 500
+                        and json.loads(text).get("message") == "The task is currently being processed, cannot delete"
+                    ):
                         with pytest.raises(Exception):
                             cuckoo_class_instance.delete_task(cuckoo_task)
                     elif status_code == 500:
@@ -938,7 +1003,7 @@ class TestCuckooMain:
         mocker.patch.object(Cuckoo, "query_report", return_value=s.getvalue())
         cuckoo_class_instance.check_dropped(cuckoo_task)
         assert cuckoo_class_instance.artifact_list[0]["name"] == "1_blah.txt"
-        assert cuckoo_class_instance.artifact_list[0]["description"] == 'Dropped file during Cuckoo analysis.'
+        assert cuckoo_class_instance.artifact_list[0]["description"] == "Dropped file during Cuckoo analysis."
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
     @staticmethod
@@ -959,7 +1024,9 @@ class TestCuckooMain:
 
         cuckoo_class_instance.check_powershell(task_id, parent_section)
         assert cuckoo_class_instance.artifact_list[0]["name"] == "1_powershell_logging.ps1"
-        assert cuckoo_class_instance.artifact_list[0]["description"] == 'Deobfuscated PowerShell log from Cuckoo analysis'
+        assert (
+            cuckoo_class_instance.artifact_list[0]["description"] == "Deobfuscated PowerShell log from Cuckoo analysis"
+        )
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == False
 
     @staticmethod
@@ -989,7 +1056,7 @@ class TestCuckooMain:
         with mocker.patch.object(Cuckoo, "query_pcap", return_value=b"blah"):
             cuckoo_class_instance.check_pcap(cuckoo_task, parent_section)
             assert cuckoo_class_instance.artifact_list[0]["name"] == f"{cuckoo_task.id}_cuckoo_traffic.pcap"
-            assert cuckoo_class_instance.artifact_list[0]["description"] == 'PCAP from Cuckoo analysis'
+            assert cuckoo_class_instance.artifact_list[0]["description"] == "PCAP from Cuckoo analysis"
             assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == True
 
     @staticmethod
@@ -999,7 +1066,7 @@ class TestCuckooMain:
             [],
             [{"name": "blah", "platform": "blah", "ip": "blah"}],
             [{"name": "blah", "platform": "blah", "ip": "blah", "tags": ["blah", "blah"]}],
-        ]
+        ],
     )
     def test_report_machine_info(machines, cuckoo_class_instance, mocker):
         machine_name = "blah"
@@ -1013,30 +1080,30 @@ class TestCuckooMain:
         machine_name_exists = False
         machine = None
         for machine in machines:
-            if machine['name'] == machine_name:
+            if machine["name"] == machine_name:
                 machine_name_exists = True
                 break
         if machine_name_exists:
             correct_result_section = ResultSection("Machine Information")
             body = {
-                'Name': str(machine['name']),
-                'Manager': cuckoo_task.report["info"]["machine"]["manager"],
-                'Platform': str(machine['platform']),
-                'IP': str(machine['ip']),
-                'Tags': []
+                "Name": str(machine["name"]),
+                "Manager": cuckoo_task.report["info"]["machine"]["manager"],
+                "Platform": str(machine["platform"]),
+                "IP": str(machine["ip"]),
+                "Tags": [],
             }
-            for tag in machine.get('tags', []):
-                body['Tags'].append(safe_str(tag).replace('_', ' '))
+            for tag in machine.get("tags", []):
+                body["Tags"].append(safe_str(tag).replace("_", " "))
             correct_result_section.set_body(json.dumps(body), BODY_FORMAT.KEY_VALUE)
-            correct_result_section.add_tag('dynamic.operating_system.platform', 'Blah')
+            correct_result_section.add_tag("dynamic.operating_system.platform", "Blah")
             output = cuckoo_class_instance.report_machine_info(machine_name, cuckoo_task, parent_section)
             assert check_section_equality(correct_result_section, parent_section.subsections[0])
             assert output == {
-                'IP': 'blah',
-                'Manager': 'blah',
-                'Name': 'blah',
-                'Platform': 'blah',
-                'Tags': [safe_str(tag).replace('_', ' ') for tag in machine.get('tags', [])]
+                "IP": "blah",
+                "Manager": "blah",
+                "Name": "blah",
+                "Platform": "blah",
+                "Tags": [safe_str(tag).replace("_", " ") for tag in machine.get("tags", [])],
             }
         else:
             body = cuckoo_class_instance.report_machine_info(machine_name, cuckoo_task, parent_section)
@@ -1044,18 +1111,28 @@ class TestCuckooMain:
             assert body is None
 
     @staticmethod
-    @pytest.mark.parametrize("machine_name, platform, expected_tags",
-                             [("", "", []),
-                              ("blah", "blah", [("dynamic.operating_system.platform", "Blah")]),
-                              ("vmss-udev-win10x64", "windows",
-                               [("dynamic.operating_system.platform", "Windows"),
-                                ("dynamic.operating_system.processor", "x64")]),
-                              ("vmss-udev-win7x86", "windows",
-                               [("dynamic.operating_system.platform", "Windows"),
-                                ("dynamic.operating_system.processor", "x86")]),
-                              ("vmss-udev-ub1804x64", "linux",
-                               [("dynamic.operating_system.platform", "Linux"),
-                                ("dynamic.operating_system.processor", "x64")])])
+    @pytest.mark.parametrize(
+        "machine_name, platform, expected_tags",
+        [
+            ("", "", []),
+            ("blah", "blah", [("dynamic.operating_system.platform", "Blah")]),
+            (
+                "vmss-udev-win10x64",
+                "windows",
+                [("dynamic.operating_system.platform", "Windows"), ("dynamic.operating_system.processor", "x64")],
+            ),
+            (
+                "vmss-udev-win7x86",
+                "windows",
+                [("dynamic.operating_system.platform", "Windows"), ("dynamic.operating_system.processor", "x86")],
+            ),
+            (
+                "vmss-udev-ub1804x64",
+                "linux",
+                [("dynamic.operating_system.platform", "Linux"), ("dynamic.operating_system.processor", "x64")],
+            ),
+        ],
+    )
     def test_add_operating_system_tags(machine_name, platform, expected_tags, cuckoo_class_instance):
         expected_section = ResultSection("blah")
         for tag_name, tag_value in expected_tags:
@@ -1068,21 +1145,17 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "test_file_name, correct_file_name",
-        [
-            ("blah", "blah"),
-            ("=?blah?=", "random_blah"),
-            ("=?iso-8859-1?q?blah?=", "blah")
-        ]
+        [("blah", "blah"), ("=?blah?=", "random_blah"), ("=?iso-8859-1?q?blah?=", "blah")],
     )
     def test_decode_mime_encoded_file_name(test_file_name, correct_file_name, cuckoo_class_instance, mocker):
-        mocker.patch('cuckoo.cuckoo_main.generate_random_words', return_value="random_blah")
+        mocker.patch("cuckoo.cuckoo_main.generate_random_words", return_value="random_blah")
         cuckoo_class_instance.file_name = test_file_name
         cuckoo_class_instance._decode_mime_encoded_file_name()
         assert cuckoo_class_instance.file_name == correct_file_name
 
     @staticmethod
     def test_remove_illegal_characters_from_file_name(cuckoo_class_instance):
-        test_file_name = " " + ''.join(ch for ch in ILLEGAL_FILENAME_CHARS) + "blah"
+        test_file_name = " " + "".join(ch for ch in ILLEGAL_FILENAME_CHARS) + "blah"
         correct_file_name = "blah"
 
         cuckoo_class_instance.file_name = test_file_name
@@ -1099,11 +1172,11 @@ class TestCuckooMain:
             ("unknown", "blah.bin", ".bin", "blah.bin"),
             ("code/html", "blah", ".html", "blah.html"),
             ("unknown", "blah.html", ".html", "blah.html"),
-        ]
+        ],
     )
     def test_assign_file_extension(
-            file_type, test_file_name, correct_file_extension, correct_file_name, cuckoo_class_instance,
-            dummy_request_class):
+        file_type, test_file_name, correct_file_extension, correct_file_name, cuckoo_class_instance, dummy_request_class
+    ):
         kwargs = dict()
         is_bin = False
 
@@ -1111,9 +1184,9 @@ class TestCuckooMain:
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance.request.file_type = file_type
 
-        original_ext = cuckoo_class_instance.file_name.rsplit('.', 1)
+        original_ext = cuckoo_class_instance.file_name.rsplit(".", 1)
         tag_extension = type_to_extension.get(file_type)
-        if tag_extension is not None and 'unknown' not in file_type:
+        if tag_extension is not None and "unknown" not in file_type:
             file_ext = tag_extension
         elif len(original_ext) == 2:
             submitted_ext = original_ext[1]
@@ -1124,7 +1197,7 @@ class TestCuckooMain:
             else:
                 if submitted_ext == "bin":
                     is_bin = True
-                file_ext = '.' + submitted_ext
+                file_ext = "." + submitted_ext
         else:
             assert cuckoo_class_instance._assign_file_extension(kwargs) == ""
             assert cuckoo_class_instance.file_name == correct_file_name
@@ -1147,7 +1220,7 @@ class TestCuckooMain:
             ("blah", [{"name": "blah"}], [], False),
             ("blah", [{"name": "blah"}], ["blah"], True),
             ("win7x86", [{"name": "ub1804x64"}], ["win7x86"], False),
-        ]
+        ],
     )
     def test_does_image_exist(guest_image, machines, allowed_images, correct_results, cuckoo_class_instance):
         cuckoo_class_instance.machines = {"machines": machines}
@@ -1191,11 +1264,11 @@ class TestCuckooMain:
                 "package": "doc",
                 "dump_memory": True,
                 "routing": "tor",
-            }
-        ]
+            },
+        ],
     )
     def test_set_task_parameters(params, cuckoo_class_instance, dummy_request_class, mocker):
-        mocker.patch.object(Cuckoo, '_prepare_dll_submission', return_value=None)
+        mocker.patch.object(Cuckoo, "_prepare_dll_submission", return_value=None)
         kwargs = dict()
         correct_task_options = []
         correct_kwargs = dict()
@@ -1215,11 +1288,11 @@ class TestCuckooMain:
         dump_memory = params["dump_memory"]
         route = params["routing"]
         if timeout:
-            correct_kwargs['enforce_timeout'] = True
-            correct_kwargs['timeout'] = timeout
+            correct_kwargs["enforce_timeout"] = True
+            correct_kwargs["timeout"] = timeout
         else:
-            correct_kwargs['enforce_timeout'] = False
-            correct_kwargs['timeout'] = ANALYSIS_TIMEOUT
+            correct_kwargs["enforce_timeout"] = False
+            correct_kwargs["timeout"] = ANALYSIS_TIMEOUT
         if not sysmon_enabled:
             correct_task_options.append("sysmon=0")
         if arguments:
@@ -1234,7 +1307,7 @@ class TestCuckooMain:
             correct_task_options.append("screenshots=0")
         else:
             correct_task_options.append("screenshots=1")
-        if simulate_user not in [True, 'True']:
+        if simulate_user not in [True, "True"]:
             correct_task_options.append("human=0")
 
         deep_scan = params.pop("deep_scan")
@@ -1243,9 +1316,9 @@ class TestCuckooMain:
         if route:
             correct_task_options.append(f"route={route}")
 
-        correct_kwargs['options'] = ','.join(correct_task_options)
+        correct_kwargs["options"] = ",".join(correct_task_options)
         if custom_options is not None:
-            correct_kwargs['options'] += f",{custom_options}"
+            correct_kwargs["options"] += f",{custom_options}"
         if package:
             correct_kwargs["package"] = package
 
@@ -1267,10 +1340,10 @@ class TestCuckooMain:
             ({"dll_function": "blah"}, "blah"),
             ({"dll_function": "blah|blah"}, "blah"),
             ({"dll_function": ""}, ".dll"),
-        ]
+        ],
     )
     def test_prepare_dll_submission(params, file_ext, cuckoo_class_instance, dummy_request_class, mocker):
-        mocker.patch.object(Cuckoo, '_parse_dll', return_value=None)
+        mocker.patch.object(Cuckoo, "_parse_dll", return_value=None)
         kwargs = dict()
         correct_kwargs = dict()
         task_options = []
@@ -1279,7 +1352,7 @@ class TestCuckooMain:
 
         dll_function = params["dll_function"]
         if dll_function:
-            correct_task_options.append(f'function={dll_function}')
+            correct_task_options.append(f"function={dll_function}")
             if "|" in dll_function:
                 correct_kwargs["package"] = "dll_multi"
 
@@ -1310,7 +1383,8 @@ class TestCuckooMain:
                     Symbol(b"blah"),
                     Symbol("blah2"),
                     Symbol("blah3"),
-                    Symbol("blah4")]
+                    Symbol("blah4"),
+                ]
 
         # Dummy PE class
         class FakePE(object):
@@ -1322,22 +1396,22 @@ class TestCuckooMain:
         if dll_parsed is None:
             PE = None
             correct_kwargs["package"] = "dll_multi"
-            correct_task_options = ['function=DllMain|DllRegisterServer']
+            correct_task_options = ["function=DllMain|DllRegisterServer"]
             correct_result_section = ResultSection(
                 title_text="Executed Multiple DLL Exports",
-                body=f"The following exports were executed: DllMain, DllRegisterServer"
+                body=f"The following exports were executed: DllMain, DllRegisterServer",
             )
         else:
             PE = FakePE()
             correct_kwargs["package"] = "dll_multi"
-            correct_task_options = ['function=DllMain|DllRegisterServer|#blah|blah4|blah2']
+            correct_task_options = ["function=DllMain|DllRegisterServer|#blah|blah4|blah2"]
             correct_result_section = ResultSection(
                 title_text="Executed Multiple DLL Exports",
-                body="The following exports were executed: DllMain, DllRegisterServer, #blah, blah4, blah2"
+                body="The following exports were executed: DllMain, DllRegisterServer, #blah, blah4, blah2",
             )
             correct_result_section.add_line("There were 2 other exports: blah, blah3")
 
-        mocker.patch.object(Cuckoo, '_create_pe_from_file_contents', return_value=PE)
+        mocker.patch.object(Cuckoo, "_create_pe_from_file_contents", return_value=PE)
         cuckoo_class_instance._parse_dll(kwargs, task_options, parent_section)
         assert kwargs == correct_kwargs
         assert task_options == correct_task_options
@@ -1346,12 +1420,12 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize("tar_report", [None, "blah"])
     def test_generate_report(tar_report, cuckoo_class_instance, mocker):
-        mocker.patch.object(Cuckoo, 'query_report', return_value=tar_report)
-        mocker.patch.object(Cuckoo, '_extract_console_output', return_value=None)
-        mocker.patch.object(Cuckoo, '_extract_injected_exes', return_value=None)
-        mocker.patch.object(Cuckoo, 'check_dropped', return_value=None)
-        mocker.patch.object(Cuckoo, 'check_powershell', return_value=None)
-        mocker.patch.object(Cuckoo, '_unpack_tar', return_value=None)
+        mocker.patch.object(Cuckoo, "query_report", return_value=tar_report)
+        mocker.patch.object(Cuckoo, "_extract_console_output", return_value=None)
+        mocker.patch.object(Cuckoo, "_extract_injected_exes", return_value=None)
+        mocker.patch.object(Cuckoo, "check_dropped", return_value=None)
+        mocker.patch.object(Cuckoo, "check_powershell", return_value=None)
+        mocker.patch.object(Cuckoo, "_unpack_tar", return_value=None)
 
         so = OntologyResults()
         host_to_use = {"auth_header": "blah", "ip": "blah", "port": "blah"}
@@ -1403,18 +1477,21 @@ class TestCuckooMain:
         cuckoo_task = CuckooTask("blah", host_to_use)
         cuckoo_task.id = 1
         cuckoo_class_instance._add_tar_ball_as_supplementary_file(
-            tar_file_name, tar_report_path, tar_report, cuckoo_task)
+            tar_file_name, tar_report_path, tar_report, cuckoo_task
+        )
         assert cuckoo_class_instance.artifact_list[0]["path"] == tar_report_path
         assert cuckoo_class_instance.artifact_list[0]["name"] == tar_file_name
-        assert cuckoo_class_instance.artifact_list[0][
-            "description"] == "Cuckoo Sandbox analysis report archive (tar.gz)"
+        assert (
+            cuckoo_class_instance.artifact_list[0]["description"] == "Cuckoo Sandbox analysis report archive (tar.gz)"
+        )
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"] == False
 
         cuckoo_class_instance.request.task.supplementary = []
 
-        mocker.patch('builtins.open', side_effect=Exception())
+        mocker.patch("builtins.open", side_effect=Exception())
         cuckoo_class_instance._add_tar_ball_as_supplementary_file(
-            tar_file_name, tar_report_path, tar_report, cuckoo_task)
+            tar_file_name, tar_report_path, tar_report, cuckoo_task
+        )
 
         # Cleanup
         os.remove(tar_report_path)
@@ -1438,23 +1515,17 @@ class TestCuckooMain:
 
         cuckoo_class_instance.artifact_list = []
 
-        with mocker.patch.object(dummy_tar_class, 'getnames', return_value=[]):
+        with mocker.patch.object(dummy_tar_class, "getnames", return_value=[]):
             with pytest.raises(MissingCuckooReportException):
                 cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
 
-        mocker.patch.object(dummy_tar_class, 'getnames', side_effect=Exception())
+        mocker.patch.object(dummy_tar_class, "getnames", side_effect=Exception())
         report_json_path = cuckoo_class_instance._add_json_as_supplementary_file(tar_obj, cuckoo_task)
         assert cuckoo_class_instance.artifact_list == []
         assert report_json_path == ""
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "report_info",
-        [
-            {},
-            {"info": {"machine": {"name": "blah"}}}
-        ]
-    )
+    @pytest.mark.parametrize("report_info", [{}, {"info": {"machine": {"name": "blah"}}}])
     def test_build_report(report_info, cuckoo_class_instance, dummy_json_doc_class_instance, mocker):
         so = OntologyResults()
         report_json_path = "blah"
@@ -1503,7 +1574,7 @@ class TestCuckooMain:
 
     @staticmethod
     def test_extract_console_output(cuckoo_class_instance, dummy_request_class, mocker):
-        mocker.patch('os.path.exists', return_value=True)
+        mocker.patch("os.path.exists", return_value=True)
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance.artifact_list = []
         task_id = 1
@@ -1515,15 +1586,17 @@ class TestCuckooMain:
 
     @staticmethod
     def test_extract_injected_exes(cuckoo_class_instance, dummy_request_class, mocker):
-        mocker.patch('os.listdir', return_value=["1_injected_memory_0.exe"])
-        mocker.patch('os.path.isfile', return_value=True)
+        mocker.patch("os.listdir", return_value=["1_injected_memory_0.exe"])
+        mocker.patch("os.path.isfile", return_value=True)
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance.artifact_list = []
         task_id = 1
         cuckoo_class_instance._extract_injected_exes(task_id)
         assert cuckoo_class_instance.artifact_list[0]["path"] == "/tmp/1_injected_memory_0.exe"
         assert cuckoo_class_instance.artifact_list[0]["name"] == "/tmp/1_injected_memory_0.exe"
-        assert cuckoo_class_instance.artifact_list[0]["description"] == "Injected executable was found written to memory"
+        assert (
+            cuckoo_class_instance.artifact_list[0]["description"] == "Injected executable was found written to memory"
+        )
         assert cuckoo_class_instance.artifact_list[0]["to_be_extracted"]
 
     @staticmethod
@@ -1536,7 +1609,7 @@ class TestCuckooMain:
             "shots": "Screenshots from Cuckoo analysis",
             "sum": "All traffic from TCPDUMP and PolarProxy",
             "sysmon/sysmon.evtx": "Sysmon Logging Captured",
-            "supplementary": "Supplementary File"
+            "supplementary": "Supplementary File",
         }
         parent_section = ResultSection("blah")
         correct_artifact_list = []
@@ -1563,11 +1636,13 @@ class TestCuckooMain:
                     correct_image_section.add_image(correct_path, f"{task_id}_{f}", val)
                 continue
             if key in ["supplementary"]:
-                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{f}",
-                                             "description": val, "to_be_extracted": False})
+                correct_artifact_list.append(
+                    {"path": correct_path, "name": f"{task_id}_{f}", "description": val, "to_be_extracted": False}
+                )
             else:
-                correct_artifact_list.append({"path": correct_path, "name": f"{task_id}_{f}",
-                                             "description": val, "to_be_extracted": True})
+                correct_artifact_list.append(
+                    {"path": correct_path, "name": f"{task_id}_{f}", "description": val, "to_be_extracted": True}
+                )
 
         cuckoo_class_instance.request = dummy_request_class()
         cuckoo_class_instance._extract_artifacts(tar_obj, task_id, parent_section, default_so)
@@ -1602,33 +1677,37 @@ class TestCuckooMain:
 
         assert cuckoo_class_instance.artifact_list[0] == {
             "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_dump_report.json",
-            'name': f'{task_id}_hollowshunter/hh_process_123_dump_report.json',
-            "description": 'HollowsHunter report (json)', "to_be_extracted": False}
+            "name": f"{task_id}_hollowshunter/hh_process_123_dump_report.json",
+            "description": "HollowsHunter report (json)",
+            "to_be_extracted": False,
+        }
         assert cuckoo_class_instance.artifact_list[1] == {
             "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_scan_report.json",
-            'name': f'{task_id}_hollowshunter/hh_process_123_scan_report.json',
-            "description": 'HollowsHunter report (json)', "to_be_extracted": False}
+            "name": f"{task_id}_hollowshunter/hh_process_123_scan_report.json",
+            "description": "HollowsHunter report (json)",
+            "to_be_extracted": False,
+        }
         assert cuckoo_class_instance.artifact_list[2] == {
             "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.exe",
-            'name': f'{task_id}_hollowshunter/hh_process_123_blah.exe', "description": 'HollowsHunter Dump',
-            "to_be_extracted": True}
+            "name": f"{task_id}_hollowshunter/hh_process_123_blah.exe",
+            "description": "HollowsHunter Dump",
+            "to_be_extracted": True,
+        }
         assert cuckoo_class_instance.artifact_list[3] == {
             "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.shc",
-            'name': f'{task_id}_hollowshunter/hh_process_123_blah.shc', "description": 'HollowsHunter Dump',
-            "to_be_extracted": True}
+            "name": f"{task_id}_hollowshunter/hh_process_123_blah.shc",
+            "description": "HollowsHunter Dump",
+            "to_be_extracted": True,
+        }
         assert cuckoo_class_instance.artifact_list[4] == {
             "path": f"{cuckoo_class_instance.working_directory}/{task_id}/hollowshunter/hh_process_123_blah.dll",
-            'name': f'{task_id}_hollowshunter/hh_process_123_blah.dll', "description": 'HollowsHunter Dump',
-            "to_be_extracted": True}
+            "name": f"{task_id}_hollowshunter/hh_process_123_blah.dll",
+            "description": "HollowsHunter Dump",
+            "to_be_extracted": True,
+        }
 
     @staticmethod
-    @pytest.mark.parametrize(
-        "param_exists, param, correct_value",
-        [
-            (True, "blah", "blah"),
-            (False, "blah", None)
-        ]
-    )
+    @pytest.mark.parametrize("param_exists, param, correct_value", [(True, "blah", "blah"), (False, "blah", None)])
     def test_safely_get_param(param_exists, param, correct_value, cuckoo_class_instance, dummy_request_class):
         if param_exists:
             cuckoo_class_instance.request = dummy_request_class(**{param: "blah"})
@@ -1637,25 +1716,58 @@ class TestCuckooMain:
         assert cuckoo_class_instance._safely_get_param(param) == correct_value
 
     @staticmethod
-    @pytest.mark.parametrize("file_type, possible_images, auto_architecture, all_relevant, correct_result",
-                             [("blah", [], {}, False, []),
-                              ("blah", ["blah"], {}, False, []),
-                              ("blah", ["winblahx64"], {}, False, ["winblahx64"]),
-                              ("executable/linux/elf32", [], {}, False, []),
-                              ("executable/linux/elf32", ["ubblahx86"], {}, False, ["ubblahx86"]),
-                              ("executable/linux/elf32", ["ubblahx64"], {"ub": {"x86": ["ubblahx64"]}}, False, ["ubblahx64"]),
-                              ("executable/windows/pe32", ["winblahx86"], {}, False, ["winblahx86"]),
-                              ("executable/windows/pe32", ["winblahx86", "winblahblahx86"], {"win": {"x86": ["winblahblahx86"]}}, False, ["winblahblahx86"]),
-                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {"win": {"x64": ["winblahx64"]}}, False, ["winblahx64"]),
-                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {"win": {"x64": ["winblahx64"]}}, True, ["winblahx64", "winblahblahx64"]),
-                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {}, True, ["winblahx64", "winblahblahx64"]),
-                              ("executable/linux/elf64", ["winblahx64", "winblahblahx64"], {}, True, []),
-                              ("executable/linux/elf64", ["winblahx64", "winblahblahx64", "ub1804x64"], {}, True, ["ub1804x64"]),
-                              ("executable/windows/pe64", ["winblahx64", "winblahblahx64", "ub1804x64"], {}, True, ["winblahx64", "winblahblahx64"]), ])
+    @pytest.mark.parametrize(
+        "file_type, possible_images, auto_architecture, all_relevant, correct_result",
+        [
+            ("blah", [], {}, False, []),
+            ("blah", ["blah"], {}, False, []),
+            ("blah", ["winblahx64"], {}, False, ["winblahx64"]),
+            ("executable/linux/elf32", [], {}, False, []),
+            ("executable/linux/elf32", ["ubblahx86"], {}, False, ["ubblahx86"]),
+            ("executable/linux/elf32", ["ubblahx64"], {"ub": {"x86": ["ubblahx64"]}}, False, ["ubblahx64"]),
+            ("executable/windows/pe32", ["winblahx86"], {}, False, ["winblahx86"]),
+            (
+                "executable/windows/pe32",
+                ["winblahx86", "winblahblahx86"],
+                {"win": {"x86": ["winblahblahx86"]}},
+                False,
+                ["winblahblahx86"],
+            ),
+            (
+                "executable/windows/pe64",
+                ["winblahx64", "winblahblahx64"],
+                {"win": {"x64": ["winblahx64"]}},
+                False,
+                ["winblahx64"],
+            ),
+            (
+                "executable/windows/pe64",
+                ["winblahx64", "winblahblahx64"],
+                {"win": {"x64": ["winblahx64"]}},
+                True,
+                ["winblahx64", "winblahblahx64"],
+            ),
+            ("executable/windows/pe64", ["winblahx64", "winblahblahx64"], {}, True, ["winblahx64", "winblahblahx64"]),
+            ("executable/linux/elf64", ["winblahx64", "winblahblahx64"], {}, True, []),
+            ("executable/linux/elf64", ["winblahx64", "winblahblahx64", "ub1804x64"], {}, True, ["ub1804x64"]),
+            (
+                "executable/windows/pe64",
+                ["winblahx64", "winblahblahx64", "ub1804x64"],
+                {},
+                True,
+                ["winblahx64", "winblahblahx64"],
+            ),
+        ],
+    )
     def test_determine_relevant_images(
-            file_type, possible_images, correct_result, auto_architecture, all_relevant, cuckoo_class_instance):
-        assert cuckoo_class_instance._determine_relevant_images(
-            file_type, possible_images, auto_architecture, all_relevant) == correct_result
+        file_type, possible_images, correct_result, auto_architecture, all_relevant, cuckoo_class_instance
+    ):
+        assert (
+            cuckoo_class_instance._determine_relevant_images(
+                file_type, possible_images, auto_architecture, all_relevant
+            )
+            == correct_result
+        )
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -1667,7 +1779,7 @@ class TestCuckooMain:
             ([{"name": "blah"}], ["nope"], []),
             ([{"name": "blah"}], ["blah"], ["blah"]),
             ([{"name": "blah"}, {"name": "blah2"}, {"name": "blah"}], ["blah1", "blah2", "blah3"], ["blah2"]),
-        ]
+        ],
     )
     def test_get_available_images(machines, allowed_images, correct_result, cuckoo_class_instance):
         assert cuckoo_class_instance._get_available_images(machines, allowed_images) == correct_result
@@ -1675,32 +1787,40 @@ class TestCuckooMain:
     @staticmethod
     @pytest.mark.parametrize(
         "machine_requested, hosts, correct_result, correct_body",
-        [("", [{"machines": []}],
-          (False, False),
-          None),
-         ("", [{"machines": []}],
-          (False, False),
-          None),
-         ("True", [{"machines": []}],
-          (True, False),
-          'The requested machine \'True\' is currently unavailable.\nGeneral Information:\nAt the moment, the current machine options for this Cuckoo deployment include [].'),
-         ("True", [{"machines": [{"name": "True"}]}],
-          (True, True),
-          None),
-         ("True:True", [{"machines": [{"name": "True"}]}],
-          (True, True),
-          None),
-         ("True:True", [{"ip": "True", "machines": [{"name": "True"}]},
-                        {"ip": "True", "machines": []}],
-          (True, True),
-          None),
-         ("flag", [{"ip": "True", "machines": [{"name": "True"}]},
-                   {"ip": "True", "machines": []}],
-          (True, True),
-          None), ])
+        [
+            ("", [{"machines": []}], (False, False), None),
+            ("", [{"machines": []}], (False, False), None),
+            (
+                "True",
+                [{"machines": []}],
+                (True, False),
+                "The requested machine 'True' is currently unavailable.\nGeneral Information:\nAt the moment, the current machine options for this Cuckoo deployment include [].",
+            ),
+            ("True", [{"machines": [{"name": "True"}]}], (True, True), None),
+            ("True:True", [{"machines": [{"name": "True"}]}], (True, True), None),
+            (
+                "True:True",
+                [{"ip": "True", "machines": [{"name": "True"}]}, {"ip": "True", "machines": []}],
+                (True, True),
+                None,
+            ),
+            (
+                "flag",
+                [{"ip": "True", "machines": [{"name": "True"}]}, {"ip": "True", "machines": []}],
+                (True, True),
+                None,
+            ),
+        ],
+    )
     def test_handle_specific_machine(
-            machine_requested, hosts, correct_result, correct_body, cuckoo_class_instance, dummy_result_class_instance,
-            mocker):
+        machine_requested,
+        hosts,
+        correct_result,
+        correct_body,
+        cuckoo_class_instance,
+        dummy_result_class_instance,
+        mocker,
+    ):
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=machine_requested)
         kwargs = dict()
         cuckoo_class_instance.hosts = hosts
@@ -1712,76 +1832,97 @@ class TestCuckooMain:
 
         assert cuckoo_class_instance._handle_specific_machine(kwargs) == correct_result
         if correct_body:
-            correct_result_section = ResultSection(title_text='Requested Machine Does Not Exist')
+            correct_result_section = ResultSection(title_text="Requested Machine Does Not Exist")
             correct_result_section.set_body(correct_body)
             assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
 
     @staticmethod
     @pytest.mark.parametrize(
         "platform_requested, expected_return, expected_result_section",
-        [("blah", (True, {"blah": []}),
-          'The requested platform \'blah\' is currently unavailable.\nGeneral Information:\nAt the moment, the current platform options for this Cuckoo deployment include [\'linux\', \'windows\'].'),
-         ("none", (False, {}),
-          None),
-         ("windows", (True, {'windows': ['blah']}),
-          None),
-         ("linux", (True, {'linux': ['blah']}),
-          None), ])
+        [
+            (
+                "blah",
+                (True, {"blah": []}),
+                "The requested platform 'blah' is currently unavailable.\nGeneral Information:\nAt the moment, the current platform options for this Cuckoo deployment include ['linux', 'windows'].",
+            ),
+            ("none", (False, {}), None),
+            ("windows", (True, {"windows": ["blah"]}), None),
+            ("linux", (True, {"linux": ["blah"]}), None),
+        ],
+    )
     def test_handle_specific_platform(
-            platform_requested, expected_return, expected_result_section, cuckoo_class_instance,
-            dummy_result_class_instance, mocker):
+        platform_requested,
+        expected_return,
+        expected_result_section,
+        cuckoo_class_instance,
+        dummy_result_class_instance,
+        mocker,
+    ):
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=platform_requested)
         kwargs = dict()
         cuckoo_class_instance.hosts = [{"ip": "blah", "machines": [{"platform": "windows"}, {"platform": "linux"}]}]
         cuckoo_class_instance.file_res = dummy_result_class_instance
         assert cuckoo_class_instance._handle_specific_platform(kwargs) == expected_return
         if expected_result_section:
-            correct_result_section = ResultSection(title_text='Requested Platform Does Not Exist')
+            correct_result_section = ResultSection(title_text="Requested Platform Does Not Exist")
             correct_result_section.set_body(expected_result_section)
             assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
 
     @staticmethod
     @pytest.mark.parametrize(
         "image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body",
-        [(False, False, [],
-          [],
-          (False, {}),
-          None),
-         (False, True, [],
-          [],
-          (False, {}),
-          None),
-         ("blah", False, [],
-          [],
-          (True, {}),
-          'The requested image \'blah\' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-         ("blah", True, [],
-          [],
-          (True, {"blah": ["blah"]}),
-          None),
-         ("auto", False, [],
-          [],
-          (True, {}),
-          'The requested image \'auto\' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-         ("auto", False, ["blah"],
-          [],
-          (True, {}),
-          'The requested image \'auto\' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'),
-         ("auto", True, ["blah"],
-          [],
-          (True, {"blah": ["blah"]}),
-          None),
-         ("all", True, [],
-          ["blah"],
-          (True, {"blah": ["blah"]}),
-          None),
-         ("all", False, [],
-          [],
-          (True, {}),
-          'The requested image \'all\' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].'), ])
+        [
+            (False, False, [], [], (False, {}), None),
+            (False, True, [], [], (False, {}), None),
+            (
+                "blah",
+                False,
+                [],
+                [],
+                (True, {}),
+                "The requested image 'blah' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].",
+            ),
+            ("blah", True, [], [], (True, {"blah": ["blah"]}), None),
+            (
+                "auto",
+                False,
+                [],
+                [],
+                (True, {}),
+                "The requested image 'auto' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].",
+            ),
+            (
+                "auto",
+                False,
+                ["blah"],
+                [],
+                (True, {}),
+                "The requested image 'auto' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].",
+            ),
+            ("auto", True, ["blah"], [], (True, {"blah": ["blah"]}), None),
+            ("all", True, [], ["blah"], (True, {"blah": ["blah"]}), None),
+            (
+                "all",
+                False,
+                [],
+                [],
+                (True, {}),
+                "The requested image 'all' is currently unavailable.\nGeneral Information:\nAt the moment, the current image options for this Cuckoo deployment include [].",
+            ),
+        ],
+    )
     def test_handle_specific_image(
-            image_requested, image_exists, relevant_images, allowed_images, correct_result, correct_body,
-            cuckoo_class_instance, dummy_request_class, dummy_result_class_instance, mocker):
+        image_requested,
+        image_exists,
+        relevant_images,
+        allowed_images,
+        correct_result,
+        correct_body,
+        cuckoo_class_instance,
+        dummy_request_class,
+        dummy_result_class_instance,
+        mocker,
+    ):
         mocker.patch.object(Cuckoo, "_safely_get_param", return_value=image_requested)
         mocker.patch.object(Cuckoo, "_does_image_exist", return_value=image_exists)
         mocker.patch.object(Cuckoo, "_determine_relevant_images", return_value=relevant_images)
@@ -1793,7 +1934,7 @@ class TestCuckooMain:
         cuckoo_class_instance.allowed_images = allowed_images
         assert cuckoo_class_instance._handle_specific_image() == correct_result
         if correct_body:
-            correct_result_section = ResultSection(title_text='Requested Image Does Not Exist')
+            correct_result_section = ResultSection(title_text="Requested Image Does Not Exist")
             correct_result_section.set_body(correct_body)
             assert check_section_equality(cuckoo_class_instance.file_res.sections[0], correct_result_section)
 
@@ -1803,7 +1944,7 @@ class TestCuckooMain:
         hosts = [
             {"ip": "1.1.1.1", "port": 1111, "auth_header": {"blah": "blah"}},
             {"ip": "2.2.2.2", "port": 2222, "auth_header": {"blah": "blah"}},
-            {"ip": "3.3.3.3", "port": 3333, "auth_header": {"blah": "blah"}}
+            {"ip": "3.3.3.3", "port": 3333, "auth_header": {"blah": "blah"}},
         ]
         with requests_mock.Mocker() as m:
             for host in hosts:
@@ -1828,10 +1969,12 @@ class TestCuckooMain:
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is False
 
         parent_section = ResultSection("blah")
-        correct_subsection = ResultSection("Invalid Analysis Timeout Requested",
-                                           body="The analysis timeout requested was 900, which exceeds the time that "
-                                           "Assemblyline will run the service (800). Choose an analysis timeout "
-                                           "value < 800 and submit the file again.")
+        correct_subsection = ResultSection(
+            "Invalid Analysis Timeout Requested",
+            body="The analysis timeout requested was 900, which exceeds the time that "
+            "Assemblyline will run the service (800). Choose an analysis timeout "
+            "value < 800 and submit the file again.",
+        )
         cuckoo_class_instance.request = dummy_request_class(analysis_timeout_in_seconds=900)
         assert cuckoo_class_instance._is_invalid_analysis_timeout(parent_section) is True
         assert check_section_equality(correct_subsection, parent_section.subsections[0])
@@ -1843,10 +1986,10 @@ class TestCuckooMain:
     @pytest.mark.parametrize(
         "title_heur_tuples, correct_section_heur_map",
         [
-            ([("blah1", 1), ("blah2", 2)], {'blah1': 1, 'blah2': 2}),
-            ([("blah1", 1), ("blah1", 2)], {'blah1': 1}),
-            ([("blah1", 1), ("blah2", 2), ("blah3", 3)], {'blah1': 1, 'blah2': 2, 'blah3': 3}),
-        ]
+            ([("blah1", 1), ("blah2", 2)], {"blah1": 1, "blah2": 2}),
+            ([("blah1", 1), ("blah1", 2)], {"blah1": 1}),
+            ([("blah1", 1), ("blah2", 2), ("blah3", 3)], {"blah1": 1, "blah2": 2, "blah3": 3}),
+        ],
     )
     def test_get_subsection_heuristic_map(title_heur_tuples, correct_section_heur_map, cuckoo_class_instance):
         subsections = []
@@ -1901,7 +2044,7 @@ class TestCuckooMain:
             ("blah", [{"machines": []}], None),
             ("blah", [{"machines": [{"name": "blah"}]}], {"name": "blah"}),
             ("blah", [{"machines": [{"name": "nah"}]}], None),
-        ]
+        ],
     )
     def test_get_machine_by_name(name, hosts, expected_result, cuckoo_class_instance):
         cuckoo_class_instance.hosts = hosts
