@@ -4,9 +4,9 @@ from json import dumps
 from os import remove
 
 import pytest
+from assemblyline.odm.models.result import BODY_FORMAT
 from assemblyline_service_utilities.common.dynamic_service_helper import OntologyResults
 from assemblyline_v4_service.common.result import (
-    BODY_FORMAT,
     ProcessItem,
     ResultProcessTreeSection,
     ResultSection,

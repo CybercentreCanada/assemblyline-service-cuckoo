@@ -14,10 +14,11 @@ from assemblyline.common.exceptions import ChainException, RecoverableError
 from assemblyline.common.identify_defaults import type_to_extension
 from assemblyline.common.str_utils import safe_str
 from assemblyline.odm.messages.task import Task as ServiceTask
+from assemblyline.odm.models.result import BODY_FORMAT
 from assemblyline_service_utilities.common.dynamic_service_helper import OntologyResults
 from assemblyline_service_utilities.testing.helper import check_section_equality
 from assemblyline_v4_service.common.request import ServiceRequest
-from assemblyline_v4_service.common.result import BODY_FORMAT, ResultImageSection, ResultSection
+from assemblyline_v4_service.common.result import ResultImageSection, ResultSection
 from assemblyline_v4_service.common.task import Task
 from cuckoo.cuckoo_main import *
 from cuckoo.cuckoo_main import _exclude_chain_ex, _retry_on_none
