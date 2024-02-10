@@ -262,9 +262,11 @@ class TestModule:
 
     @staticmethod
     def test_file_constants():
-        assert set(LINUX_x86_FILES) == {"executable/linux/elf32", "executable/linux/so32", "executable/linux/coff32"}
-        assert set(LINUX_x64_FILES) == {"executable/linux/elf64", "executable/linux/so64",
-                                        "executable/linux/ia/coff64", "executable/linux/coff64", "code/shell"}
+        assert set(LINUX_x86_FILES) == {"executable/linux/elf32", "executable/linux/so32",
+                                        "executable/linux/coff32", "executable/linux/pie32"}
+        assert set(LINUX_x64_FILES) == {
+            "executable/linux/elf64", "executable/linux/so64", "executable/linux/ia/coff64", "executable/linux/coff64",
+            "code/shell", "executable/linux/pie64"}
         assert set(WINDOWS_x86_FILES) == {'executable/windows/pe32', 'executable/windows/dll32'}
 
     @staticmethod
